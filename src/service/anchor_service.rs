@@ -101,7 +101,7 @@ impl<'a> AnchorService<'a> {
 
         let scoped_files = files
             .iter()
-            .map(|path| path_string(path.as_path()))
+            .map(|path| self.anchor_repo.list_ids_for_file(&path_string(path.as_path())).map(|_| path_string(path.as_path())).unwrap_or_else(|_| path_string(path.as_path())))
             .collect::<HashSet<_>>();
         let mut seen_by_anchor_id: HashMap<i64, String> = HashMap::new();
         let mut seen_materialized_ids = HashSet::new();
