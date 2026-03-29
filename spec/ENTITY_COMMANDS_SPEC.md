@@ -4,7 +4,7 @@ This document captures the current intended behavior of entity-related commands.
 
 ## Entity data model
 
-Early entity shape:
+Current entity shape:
 - `entity_id` integer
 - `name` unique
 - `ref` nullable
@@ -13,12 +13,11 @@ Early entity shape:
 
 ## Identity and lookup rules
 
-- entity IDs are currently integer-only
+- entity IDs are integer-only
 - entity commands may resolve entities by either:
   - integer id
   - unique name
 - hexadecimal input is not part of the current behavior
-- hexadecimal support may be added later without changing the underlying integer storage model
 
 ## Naming rules
 
@@ -26,8 +25,16 @@ Entity names should:
 - be unique
 - be human-readable
 - support dot-style names such as `student.permissions`
+- not be purely numeric
 
-This allows practical namespacing without enforcing a heavy schema.
+## Workspace requirement
+
+All entity commands except help/version behavior require a `tep` workspace.
+
+Current behavior:
+- `tep init` creates the workspace in the current directory
+- DB-requiring commands resolve the nearest ancestor workspace from cwd
+- commands outside any workspace fail clearly and suggest `tep init`
 
 ## Command set
 
@@ -40,7 +47,7 @@ tep entity create "student" --ref "./docs/student.md"
 Behavior:
 - create a new entity
 - fail if the name already exists
-- print the created entity, including its generated id
+- print the created entity
 
 ### Ensure
 ```bash
@@ -52,8 +59,6 @@ Behavior:
 - if entity exists, return it
 - if entity does not exist, create it
 - always print the resulting entity
-
-This is especially useful for automation and agents.
 
 ### Auto
 ```bash
@@ -77,8 +82,8 @@ Behavior:
   (#!#1#tep:Student)
   ```
 - do not overwrite an existing non-null `ref`
-- anchor reuse for already-versioned declarations should rely on durable identity and existing relations, not on `line`, `shift`, or `offset`
-- `line`, `shift`, and `offset` are refreshable metadata only
+- already-versioned declarations reuse the existing related anchor in the same file
+- `line`, `shift`, and `offset` are metadata only
 
 ### Show
 ```bash
@@ -99,7 +104,6 @@ tep entity edit 42 --name "student.profile" --ref "./docs/profile.md"
 
 Behavior:
 - accept either unique name or entity id
-- allow editing multiple fields in one command
 - update only provided fields
 - print the updated entity
 
@@ -109,15 +113,7 @@ tep entity list
 ```
 
 Behavior:
-- print entities in a CLI-friendly way
-- intended to feel somewhat similar to `git log` in usefulness, not in exact format
-- should be readable by both humans and agents
-
-Likely later additions:
-- filters
-- ordering controls
-- pagination or navigation
-- JSON output
+- print entities in a compact CLI-friendly way
 
 ## Output expectation
 
@@ -126,7 +122,7 @@ Compact entity format:
 <id> (<name>)
 ```
 
-When anchors are included, each anchor should use the shared compact anchor format:
+When anchors are included, each anchor uses the shared compact anchor format:
 ```txt
 <anchor_id>
 <file> (<line>:<shift>) [<offset>]
@@ -134,8 +130,6 @@ When anchors are included, each anchor should use the shared compact anchor form
 
 ## Storage direction
 
-Current recommended storage model:
+Current storage model:
 - SQLite integer primary key for `entity_id`
-- unique index or unique constraint on `name`
-
-This keeps the database simple and efficient while leaving room for richer CLI representations later if needed.
+- unique constraint on `name`

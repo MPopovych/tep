@@ -2,61 +2,69 @@
 
 `tep` is a local-first CLI for **text entity pointers**.
 
-It is a simple, domain-agnostic tool for connecting logical entities to anchor points in text, linking entities together, and retrieving related context across files.
+It connects logical entities to anchor points in text and keeps the graph in a local SQLite workspace.
 
-## Core idea
+## What `tep` does today
 
-A lot of useful context is fragmented across:
-- docs,
-- backend code,
-- frontend code,
-- notes,
-- manuscripts,
-- and planning files.
+Current implemented areas:
+- initialize a local workspace
+- create and manage entities
+- auto-declare entities from files
+- materialize anchors in files
+- attach entities to anchors
+- show entities with related anchors
+- show anchors with related entities
 
-`tep` gives you a minimal system to connect those pieces explicitly.
+## Workspace model
 
-## Current vision
+A `tep` workspace is created with:
 
-At a high level:
-- `tep` stores **entities**,
-- users place **anchor tags** and **entity declaration tags** in files,
-- anchor tags contain their own **anchor ID**,
-- entities can connect to multiple anchors,
-- anchors can connect to multiple entities,
-- entities can also link to other entities.
+```bash
+tep init
+```
 
-This makes it possible for a human or an agent to:
-- read an anchor ID from a file,
-- resolve which entities are attached to it,
-- discover entities declared in files,
-- follow entity links,
-- collect related anchors,
-- and assemble context from connected files.
+That creates:
+- `.tep/`
+- `.tep/tep.db`
+- `.tep_ignore`
 
-## Example syntax
+For commands that require the database, `tep` resolves the **nearest ancestor workspace** from the current working directory.
 
-### Anchor tag
-In Java, for example:
+That means:
+- inside a workspace tree, commands work from nested directories
+- outside any workspace, DB-requiring commands fail and tell you to run `tep init`
+- the location of the `tep` binary does not define the workspace
+- the current terminal cwd does
 
-```java
-// [#!#1#tep:123763636473]
+## Core syntax
+
+### Anchor tags
+Anchor tags use square brackets.
+
+Incomplete anchor:
+```txt
+[#!#tep:](student)
+```
+
+Materialized anchor:
+```txt
+[#!#1#tep:123](student)
 ```
 
 Meaning:
-- `#1#` is the tep version marker for future compatibility
-- `123763636473` is the **anchor ID**
 - square brackets identify an anchor tag
+- the value after `tep:` is the durable anchor ID once materialized
+- the optional `( ... )` suffix is an entity reference instruction list
 
-### Entity declaration tag
-An entity declaration uses parentheses:
+### Entity declaration tags
+Entity declaration tags use parentheses.
 
+Incomplete declaration:
 ```txt
 (#!#tep:Student)
 ```
 
-After `tep entity auto <file>`, it becomes:
-
+Materialized declaration:
 ```txt
 (#!#1#tep:Student)
 ```
@@ -64,34 +72,82 @@ After `tep entity auto <file>`, it becomes:
 Meaning:
 - parentheses identify an entity declaration marker
 - `Student` is the entity name
-- `entity auto` ensures the entity exists
+- `tep entity auto` ensures the entity exists
 - if the entity has no `ref`, the declaring file path is stored in `ref`
 - a backing anchor relation is created for that declaration location
 
-## Design principles
+## Current command surface
 
-- **simple first** — avoid unnecessary abstraction
-- **domain-agnostic** — works for code, docs, writing, research, and more
-- **local-first** — no server required
-- **CLI-driven** — scriptable and easy to automate
-- **explicit graph** — relationships are user-defined
-- **future-compatible markers** — versioned syntax
+### Workspace
+```bash
+tep init
+tep version
+tep -V
+tep --version
+```
 
-## Tech direction
+### Entities
+```bash
+tep entity create <name> [--ref <value>]
+tep entity ensure <name> [--ref <value>]
+tep entity auto <pathspec...>
+tep entity show <name-or-id>
+tep entity edit <name-or-id> [--name <value>] [--ref <value>]
+tep entity list
+```
 
-Current preferred implementation direction:
-- **Rust** for the CLI
-- **SQLite** for internal storage
+Shorthand:
+```bash
+tep e ...
+```
 
-Why:
-- small portable binary,
-- good performance and reliability,
-- clean CLI ecosystem,
-- straightforward local database integration.
+### Anchors
+```bash
+tep anchor auto <pathspec...>
+tep anchor show <anchor-id>
+```
+
+Shorthand:
+```bash
+tep a ...
+```
+
+### Manual relations
+```bash
+tep attach <entity-id-or-name> <anchor-id>
+tep detach <entity-id-or-name> <anchor-id>
+```
+
+## Output style
+
+Default output is intentionally compact.
+
+Entity:
+```txt
+<id> (<name>)
+```
+
+Anchor:
+```txt
+<anchor_id>
+<file> (<line>:<shift>) [<offset>]
+```
+
+Location fields are metadata, not identity.
+Anchor identity is the anchor ID.
+
+## Notes
+
+- entity IDs are integer-only
+- entity names are unique and cannot be purely numeric
+- entity metadata uses `ref`
+- `.tep_ignore` is respected
+- `.gitignore` is not
+- `line`, `shift`, and `offset` are refreshable metadata only
+- `shift` and `offset` are byte-oriented in practice
 
 ## Documentation map
 
-### Project context docs
 - [Concept](./CONCEPT.md)
 - [Data Model](./DATA_MODEL.md)
 - [CLI Design](./CLI_DESIGN.md)
@@ -99,28 +155,4 @@ Why:
 - [Roadmap](./ROADMAP.md)
 - [Open Questions](./OPEN_QUESTIONS.md)
 - [Development Notes](./DEV_NOTES.md)
-
-### Internal self-managed docs
-- [Internal Docs Index](./doc/README.md)
-  - product vision
-  - feature tracking
-  - entity catalog
-  - core modules
-  - architecture notes
-  - implementation backlog
-
-### Formal / evolving specs
 - [Spec Index](./spec/README.md)
-  - protocol and behavior drafts
-  - implementation-oriented specs
-  - workspace features such as `.tep_ignore`
-
-## Important note on future tooling
-
-Editor integrations such as a VS Code plugin should be treated as a separate future layer.
-The core product is the CLI and its local graph model.
-
-## Forward note
-
-After this documentation stage, the next logical step is a small proof of concept.
-That POC can later become one of the first real projects tracked using `tep` itself.

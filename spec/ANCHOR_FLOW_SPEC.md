@@ -1,12 +1,12 @@
 # Anchor Flow Spec
 
-This document captures the planned anchor workflow for `tep`.
+This document captures the current anchor workflow for `tep`.
 
 ## Core idea
 
-Users should be able to place **incomplete anchors** directly into files, then ask `tep` to materialize and synchronize them.
+Users place incomplete anchors into files, then ask `tep` to materialize and synchronize them.
 
-The user-facing command shape is:
+Current command shape:
 
 ```bash
 tep anchor auto <pathspec...>
@@ -19,98 +19,90 @@ tep anchor auto .
 tep anchor auto ./docs ./src
 ```
 
-The command should work on targeted files and directories in a pathspec-oriented way similar in spirit to `git add`.
+Shorthand:
+```bash
+tep a auto <pathspec...>
+```
+
+## Workspace requirement
+
+Anchor commands require a `tep` workspace.
+
+Current behavior:
+- `tep init` creates the workspace in the current directory
+- DB-requiring commands resolve the nearest ancestor workspace from cwd
+- commands outside any workspace fail clearly and suggest `tep init`
 
 ## Incomplete anchor syntax
 
-Incomplete anchor examples:
-
-```txt
-[#!#tep:](student)
-[#!#tep:](student,basic-user)
-```
-
-Important:
-- the `( ... )` part is optional
-- an incomplete anchor may exist without any entity reference instruction
-- the `:` is the anchor ID slot
-- in incomplete form, the ID slot is empty
-- when multiple entity references are present, they are comma-separated inside `( ... )`
-- square brackets identify anchor tags
-
 Examples:
+
 ```txt
 [#!#tep:](student)
-[#!#tep:](student.permissions)
-[#!#tep:](42)
 [#!#tep:](student,basic-user)
 [#!#tep:]
 ```
 
-## Materialized anchor syntax
+Rules:
+- square brackets identify anchor tags
+- the `( ... )` part is optional
+- the `:` is the anchor ID slot
+- in incomplete form, the ID slot is empty
+- multiple entity references are comma-separated inside `( ... )`
 
-After processing, an incomplete anchor becomes a materialized anchor.
+## Materialized anchor syntax
 
 Examples:
 
 ```txt
-[#!#1#tep:123456](student)
-[#!#1#tep:123457](student,basic-user)
+[#!#1#tep:123](student)
+[#!#1#tep:124](student,basic-user)
+[#!#1#tep:125]
 ```
 
 Meaning:
 - `1` = anchor format version
-- `123456` = anchor ID
-- `:` is the anchor ID slot separator
-- `( ... )` remains as an optional entity reference instruction list
-
-If no entity reference instruction was present, a materialized anchor may look like:
-
-```txt
-[#!#1#tep:123458]
-```
+- the value after `tep:` is the anchor ID
+- `( ... )` remains an optional entity reference instruction list
 
 ## Behavior of `tep anchor auto <pathspec...>`
 
-For the targeted files, the command should:
+For targeted files, the command:
 
-1. scan files for incomplete and existing anchors
-2. create new anchor records for incomplete anchors
-3. rewrite incomplete anchors into materialized anchors
-4. refresh current file-path and position metadata for existing anchors
-5. if an entity reference instruction exists, try to bind the anchor to entities
-6. detect dropped anchors in those files
-7. remove stale file-local anchor state that no longer exists in the file
+1. scans files for incomplete and existing anchors
+2. creates new anchor records for incomplete anchors
+3. rewrites incomplete anchors into materialized anchors
+4. refreshes file-path and location metadata for existing anchors
+5. synchronizes anchor-entity relations when `( ... )` is present
+6. detects dropped anchors in those files
+7. removes stale anchor state that no longer exists in the file
 
 ## Entity reference instruction behavior
 
 The payload in `( ... )` is optional.
 
-When present, it is treated as an **entity reference instruction list**.
+When present, it is treated as an entity reference instruction list.
 
 Behavior:
 - entries are comma-separated
 - each entry may be an entity ID or entity name
-- if an entry looks like an entity ID, try resolving by ID
-- otherwise treat it as an entity name and likely use `ensure`
+- numeric values resolve by ID
+- non-numeric values resolve by name and may be ensured
 
-Important assumption:
-- entity names are expected to be relatively stable
-- the entity reference instruction list is not the durable identity of the anchor
-- it is an instruction for synchronizing anchor-entity relations
+Important:
+- the entity instruction list is not anchor identity
+- anchor identity is the anchor ID
 
 ## Entity declarations are separate
 
 `tep anchor auto` does **not** process entity declaration tags.
 Those belong to `tep entity auto`.
 
-Entity declaration syntax uses parentheses, for example:
+Entity declarations use parentheses, for example:
 
 ```txt
 (#!#tep:Student)
 ```
-
-That is intentionally separate from anchor tags.
 
 ## Anchor show
 
@@ -119,9 +111,14 @@ Command:
 tep anchor show <anchor-id>
 ```
 
+Shorthand:
+```bash
+tep a show <anchor-id>
+```
+
 Behavior:
 - print the anchor in compact form
-- print related entities concisely beneath it
+- print related entities beneath it
 
 Shared anchor format:
 ```txt
@@ -131,7 +128,7 @@ Shared anchor format:
 
 ## Repeated incomplete anchors
 
-If the same entity reference instruction appears multiple times, those are still **separate anchors**.
+If the same entity reference instruction appears multiple times, those are still separate anchors.
 
 Example:
 ```txt
@@ -140,7 +137,7 @@ Example:
 [#!#tep:](student)
 ```
 
-After materialization, these should become something like:
+After materialization:
 ```txt
 [#!#1#tep:101](student)
 ...
@@ -149,45 +146,36 @@ After materialization, these should become something like:
 
 Each physical occurrence gets its own anchor ID.
 
-## Pathspec behavior
+## Path selection behavior
 
-Planned input forms:
+Supported input forms:
 - direct file path
 - directory path
 - current directory (`.`)
-- future pathspec or glob-like expansion in the style of local file-targeting commands
 
-The command should respect `.tep_ignore` when selecting and scanning files.
+Selection respects `.tep_ignore`.
+It does not use `.gitignore`.
 
-## Separate schemas
+## Storage model
 
-The storage model keeps these concerns separate:
+Current storage keeps these concerns separate:
 
-### Anchors schema
-Stores the anchor itself.
-
-Concerns:
+### Anchors table
+Stores:
 - anchor identity
 - version
 - current file path
 - current location metadata (`line`, `shift`, `offset`)
 - timestamps
 
-### Anchor-entity relation schema
-Stores associations between anchors and entities.
+### Anchor-entity relation table
+Stores:
+- associations between anchors and entities
 
-This relation remains separate from both:
-- the anchor record
-- the entity record
+This keeps the many-to-many model explicit.
 
-This keeps the many-to-many model explicit and flexible.
+## Notes on metadata
 
-## Non-goals for this stage
-
-This spec does not yet freeze:
-- exact regex or parser grammar
-- exact pathspec semantics
-- exact stale-anchor deletion strategy
-- exact rewrite safety guarantees
-
-Those should be tightened as implementation evolves.
+`line`, `shift`, and `offset` are refreshable metadata.
+They are useful for display, but not durable identity.
+The durable identity is the anchor ID.
