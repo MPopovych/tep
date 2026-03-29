@@ -1,3 +1,6 @@
+// (#!#1#tep:module.anchor)
+// [#!#tep:anchor.parser](anchor.parser)
+// [#!#1#tep:57](module.anchor,anchor.parser)
 use crate::utils::parse::{line_contains_marker, parse_scan_limit};
 
 pub const TEPIGNORE_MARKER: &str = "#tepignore";

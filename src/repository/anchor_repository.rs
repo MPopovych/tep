@@ -1,3 +1,6 @@
+// (#!#1#tep:repo.anchor)
+// [#!#tep:repo.anchor.path-normalization](path.normalization,repo.anchor.path-normalization)
+// [#!#1#tep:59](repo.anchor,repo.anchor.path-normalization)
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
