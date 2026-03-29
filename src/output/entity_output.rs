@@ -1,4 +1,3 @@
-use crate::anchor::Anchor;
 use crate::entity::Entity;
 use crate::output::anchor_format::{format_anchor_compact, format_anchor_location};
 use crate::output::styles::{ANSI_CYAN, ANSI_YELLOW, paint};
@@ -46,13 +45,16 @@ pub fn format_entity_context(result: &EntityContextResult) -> String {
         out.push('\n');
     }
 
-    if !result.files.is_empty() {
-        out.push_str("files:\n");
-        for file in &result.files {
-            out.push_str(&format!("- {}\n", paint(ANSI_CYAN, file)));
-        }
-    }
+    append_files_block(&mut out, &result.files);
+    out
+}
 
+pub fn format_entity_context_files_only(result: &EntityContextResult) -> String {
+    let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
+    if let Some(entity_ref) = &result.entity.r#ref {
+        out.push_str(&format!("{}\n", paint(ANSI_YELLOW, format!("ref: {}", paint(ANSI_CYAN, entity_ref)))));
+    }
+    append_files_block(&mut out, &result.files);
     out
 }
 
@@ -68,10 +70,19 @@ pub fn format_entity_list(entities: &[Entity]) -> String {
     out
 }
 
+fn append_files_block(out: &mut String, files: &[String]) {
+    if !files.is_empty() {
+        out.push_str("files:\n");
+        for file in files {
+            out.push_str(&format!("- {}\n", paint(ANSI_CYAN, file)));
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::anchor::Anchor;
     use crate::service::entity_service::EntityContextAnchor;
 
     fn sample_entity() -> Entity {
@@ -151,6 +162,24 @@ mod tests {
         assert!(rendered.contains("hello context"));
         assert!(rendered.contains("files:"));
         assert!(rendered.contains("- \x1b[36m./file.md\x1b[0m"));
+    }
+
+    #[test]
+    fn formats_entity_context_files_only() {
+        let rendered = format_entity_context_files_only(&EntityContextResult {
+            entity: sample_entity(),
+            anchors: vec![EntityContextAnchor {
+                anchor: sample_anchor(),
+                snippet: Some("hello context".into()),
+            }],
+            files: vec!["./file.md".into()],
+        });
+        assert!(rendered.contains("42 (student)"));
+        assert!(rendered.contains("ref:"));
+        assert!(rendered.contains("files:"));
+        assert!(rendered.contains("./file.md"));
+        assert!(!rendered.contains("anchor 7"));
+        assert!(!rendered.contains("snippet:"));
     }
 
     #[test]

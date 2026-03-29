@@ -72,7 +72,7 @@ pub enum EntityCommands {
     #[command(about = "Show one entity and its related anchors")]
     Show { target: String },
     #[command(about = "Show one entity with snippets and related files")]
-    Context { target: String },
+    Context(EntityContextArgs),
     #[command(about = "Edit an existing entity")]
     Edit(EditEntityArgs),
     #[command(about = "List entities")]
@@ -90,6 +90,13 @@ pub struct UpsertEntityArgs {
 pub struct EntityAutoArgs {
     #[arg(required = true)]
     pub paths: Vec<String>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct EntityContextArgs {
+    pub target: String,
+    #[arg(long)]
+    pub files_only: bool,
 }
 
 #[derive(Debug, Args, Clone)]

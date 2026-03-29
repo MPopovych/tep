@@ -1,6 +1,6 @@
-use crate::cli::{EditEntityArgs, EntityAutoArgs, EntityCommands, UpsertEntityArgs};
+use crate::cli::{EditEntityArgs, EntityAutoArgs, EntityCommands, EntityContextArgs, UpsertEntityArgs};
 use crate::commands::support::open_ready_workspace_db;
-use crate::output::entity_output::{format_entity_auto_result, format_entity_context, format_entity_created, format_entity_list, format_entity_show};
+use crate::output::entity_output::{format_entity_auto_result, format_entity_context, format_entity_context_files_only, format_entity_created, format_entity_list, format_entity_show};
 use crate::service::entity_service::EntityService;
 
 pub fn run(command: EntityCommands) -> anyhow::Result<()> {
@@ -13,7 +13,7 @@ pub fn run(command: EntityCommands) -> anyhow::Result<()> {
         EntityCommands::Ensure(args) => ensure(&service, args),
         EntityCommands::Auto(args) => auto(&service, args),
         EntityCommands::Show { target } => show(&service, &target),
-        EntityCommands::Context { target } => context(&service, &target),
+        EntityCommands::Context(args) => context(&service, args),
         EntityCommands::Edit(args) => edit(&service, args),
         EntityCommands::List => list(&service),
     }
@@ -43,9 +43,13 @@ fn show(service: &EntityService<'_>, target: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn context(service: &EntityService<'_>, target: &str) -> anyhow::Result<()> {
-    let result = service.context(target)?;
-    print!("{}", format_entity_context(&result));
+fn context(service: &EntityService<'_>, args: EntityContextArgs) -> anyhow::Result<()> {
+    let result = service.context(&args.target)?;
+    if args.files_only {
+        print!("{}", format_entity_context_files_only(&result));
+    } else {
+        print!("{}", format_entity_context(&result));
+    }
     Ok(())
 }
 

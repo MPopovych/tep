@@ -45,6 +45,21 @@ For a target entity, the command should return:
 4. a small text snippet around each anchor when possible
 5. a deduplicated file list at the end
 
+## Files-only mode
+
+A lightweight retrieval mode should also be available:
+
+```bash
+tep entity context <name-or-id> --files-only
+```
+
+In this mode, the command should return only:
+- entity header
+- `ref` if present
+- deduplicated related file list
+
+This is useful when the caller wants a file shortlist without being tied to any specific document format or snippet strategy.
+
 ## Proposed text output
 
 Example shape:
@@ -65,6 +80,16 @@ snippet:
 ## Workspace behavior
 ### Initialize a workspace
 
+files:
+- ./README.md
+- ./CLI_DESIGN.md
+```
+
+Files-only example:
+
+```txt
+1 (tep)
+ref: ./README.md
 files:
 - ./README.md
 - ./CLI_DESIGN.md
@@ -149,8 +174,6 @@ tep entity context <target> --files-only
 tep entity context <target> --json
 ```
 
-But the first version can ship without flags if needed.
-
 ## Why this matters for agents
 
 Current `entity show` is good for graph inspection.
@@ -162,6 +185,11 @@ It is less good for choosing what to read next.
 - gives a short file shortlist
 - reduces manual file hopping
 - makes prompt/context assembly more repeatable
+
+`--files-only` is useful when:
+- the caller only wants the next files to read
+- the caller does not want snippet formatting assumptions
+- the repository mixes different content styles
 
 ## Non-goals for first version
 
@@ -183,5 +211,6 @@ Smallest useful implementation:
 3. print `ref` if present
 4. extract a short bounded snippet around each anchor when possible
 5. print a deduplicated file list
+6. add `--files-only` to skip anchors and snippets when only file routing is needed
 
 That would already make `tep` significantly more useful for agent workflows.
