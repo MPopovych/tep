@@ -1,4 +1,5 @@
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
+pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
@@ -71,8 +72,9 @@ pub fn validate_name(name: &str) -> Result<(), &'static str> {
 pub fn parse_entity_declarations(input: &str) -> Vec<ParsedEntityDeclaration> {
     let mut out = Vec::new();
     let mut i = 0usize;
+    let ignore_after = input.find(TEPIGNORE_AFTER_MARKER).unwrap_or(input.len());
 
-    while i < input.len() {
+    while i < input.len() && i < ignore_after {
         let rest = &input[i..];
         if rest.starts_with("(#!#tep:") || rest.starts_with("(#!#") {
             if let Some(parsed) = try_parse_entity_declaration(input, i) {
@@ -202,5 +204,12 @@ mod tests {
     fn ignores_entity_declaration_when_line_contains_tepignore() {
         let parsed = parse_entity_declarations("example (#!#tep:Student) #tepignore");
         assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn ignores_entity_declarations_after_tepignoreafter_marker() {
+        let parsed = parse_entity_declarations("(#!#tep:Student)\n#tepignoreafter\n(#!#tep:Teacher)");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].name, "Student");
     }
 }

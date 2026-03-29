@@ -48,6 +48,31 @@ Parts of a materialized anchor:
 - `123763636473` — anchor ID filling the slot
 - optional `( ... )` — entity reference instruction list
 
+## Ignore controls
+
+### Line-local ignore
+If a line contains:
+
+```txt
+#tepignore
+```
+
+anchors on that line are ignored.
+
+### File-tail ignore
+If a file contains:
+
+```txt
+#tepignoreafter
+```
+
+then everything after the first occurrence of that marker is ignored by anchor parsing and auto-indexing.
+
+This is useful for:
+- fixture files
+- intentionally broken examples
+- unit-test data stored below a cutoff marker
+
 ## Core rules
 
 1. The materialized marker contains the **anchor ID**.
@@ -68,6 +93,7 @@ A scanner or anchor-sync routine should:
 - parse optional entity reference instruction list when present
 - associate the discovered anchor with the current file path
 - optionally record current location metadata (`line`, `shift`, `offset`)
+- stop parsing the remainder of a file after `#tepignoreafter`
 
 ## Durability rule
 

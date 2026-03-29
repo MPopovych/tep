@@ -1,4 +1,5 @@
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
+pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Anchor {
@@ -42,8 +43,9 @@ impl ParsedAnchor {
 pub fn parse_anchors(input: &str) -> Vec<ParsedAnchor> {
     let mut out = Vec::new();
     let mut i = 0usize;
+    let ignore_after = input.find(TEPIGNORE_AFTER_MARKER).unwrap_or(input.len());
 
-    while i < input.len() {
+    while i < input.len() && i < ignore_after {
         let rest = &input[i..];
         if rest.starts_with("[#!#tep:]") || rest.starts_with("[#!#") {
             if let Some(parsed) = try_parse_anchor(input, i) {
@@ -232,5 +234,12 @@ mod tests {
     fn ignores_anchor_when_line_contains_tepignore() {
         let parsed = parse_anchors("example [#!#tep:](student) #tepignore");
         assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn ignores_anchors_after_tepignoreafter_marker() {
+        let parsed = parse_anchors("[#!#tep:](student)\n#tepignoreafter\n[#!#tep:](teacher)");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].entity_refs, vec!["student"]);
     }
 }

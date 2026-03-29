@@ -87,6 +87,7 @@ Behavior:
 - do not overwrite an existing non-null `ref`
 - already-versioned declarations reuse the existing related anchor in the same file
 - if a line contains the literal marker `#tepignore`, declarations on that line are ignored
+- if a file contains `#tepignoreafter`, declarations after the first occurrence are ignored
 - `line`, `shift`, and `offset` are metadata only
 
 ### Show
