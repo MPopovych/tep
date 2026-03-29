@@ -14,6 +14,9 @@ SQLite is a good fit for storing them.
 
 ## 1. Entity
 
+[#!#1#tep:15](entity)
+
+
 An entity is a logical thing.
 
 Examples:
@@ -69,15 +72,18 @@ Important:
 
 ## 2. Anchor
 
+[#!#1#tep:16](anchor,anchor.tag)
+
+
 An anchor is a physical tagged occurrence in text with its own durable anchor ID once materialized.
 
 Planned examples:
 ```txt
-[#!#tep:](student)
-[#!#tep:](student,basic-user)
-[#!#1#tep:123763636473](student)
-[#!#1#tep:123763636474](student,basic-user)
-[#!#1#tep:123763636475]
+[#!#tep:](student) #tepignore
+[#!#tep:](student,basic-user) #tepignore
+[#!#1#tep:123763636473](student) #tepignore
+[#!#1#tep:123763636474](student,basic-user) #tepignore
+[#!#1#tep:123763636475] #tepignore
 ```
 
 Important:
@@ -110,6 +116,9 @@ These fields are helpful for navigation and diagnostics, but they are not durabl
 
 ## 3. Anchor-entity relation
 
+[#!#1#tep:17](anchor_entity_relation,entity,anchor)
+
+
 This is the many-to-many relation layer between anchors and entities.
 
 That means:
@@ -133,6 +142,9 @@ Possible later additions:
 But those are not required for the core model.
 
 ## 4. Link
+
+[#!#1#tep:18](link,entity)
+
 
 A link is a directional relationship between two entities.
 

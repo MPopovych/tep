@@ -27,6 +27,9 @@ The similarity to git is mostly ergonomic:
 
 ## Workspace behavior
 
+[#!#1#tep:10](cli,workspace,workspace.discovery)
+
+
 ### Initialize a workspace
 ```bash
 tep init
@@ -90,16 +93,19 @@ tep detach <entity-id-or-name> <anchor-id>
 
 ## Marker syntax
 
+[#!#1#tep:11](anchor.tag,entity.declaration,cli)
+
+
 ### Anchor tag
 ```txt
-[#!#tep:](student)
-[#!#1#tep:123](student)
+[#!#tep:](student) #tepignore
+[#!#1#tep:123](student) #tepignore
 ```
 
 ### Entity declaration tag
 ```txt
-(#!#tep:Student)
-(#!#1#tep:Student)
+(#!#tep:Student) #tepignore
+(#!#1#tep:Student) #tepignore
 ```
 
 Bracket type decides the role:

@@ -12,6 +12,9 @@ It does that through three main building blocks:
 ## The mental model
 
 ### Entity
+
+[#!#1#tep:12](entity)
+
 An **entity** is the logical thing itself.
 
 It is not the file tag.
@@ -33,11 +36,14 @@ Think of the entity as:
 An entity can exist even if it appears in many places.
 
 ### Anchor
+
+[#!#1#tep:13](anchor,anchor.tag)
+
 An **anchor** is a stable anchor identity represented by a tag placed in a file.
 
 Example:
 ```java
-//[#@#1#tep:123763636473]
+// [#!#1#tep:123763636473] #tepignore
 ```
 
 Important:
@@ -52,6 +58,9 @@ Think of the anchor as:
 The anchor is how tep connects a real location in a file to one or more entities.
 
 ### Link
+
+[#!#1#tep:14](link,entity)
+
 A **link** is a directional relationship between two entities.
 
 Examples:

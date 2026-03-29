@@ -17,6 +17,9 @@ Current implemented areas:
 
 ## Workspace model
 
+[#!#1#tep:19](workspace,workspace.discovery)
+
+
 A `tep` workspace is created with:
 
 ```bash
@@ -39,16 +42,19 @@ That means:
 ## Core syntax
 
 ### Anchor tags
+
+[#!#1#tep:20](anchor,anchor.tag)
+
 Anchor tags use square brackets.
 
 Incomplete anchor:
 ```txt
-[#!#tep:](student)
+[#!#tep:](student) #tepignore
 ```
 
 Materialized anchor:
 ```txt
-[#!#1#tep:123](student)
+[#!#1#tep:123](student) #tepignore
 ```
 
 Meaning:
@@ -57,16 +63,19 @@ Meaning:
 - the optional `( ... )` suffix is an entity reference instruction list
 
 ### Entity declaration tags
+
+[#!#1#tep:21](entity,entity.declaration)
+
 Entity declaration tags use parentheses.
 
 Incomplete declaration:
 ```txt
-(#!#tep:Student)
+(#!#tep:Student) #tepignore
 ```
 
 Materialized declaration:
 ```txt
-(#!#1#tep:Student)
+(#!#1#tep:Student) #tepignore
 ```
 
 Meaning:
