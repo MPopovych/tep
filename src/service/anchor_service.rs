@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    fn collect_workspace_files_returns_workspace_relative_display_path() {
+    fn collect_workspace_files_resolves_absolute_paths() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         std::fs::write(temp.path().join("note.txt"), "[#!#tep:]").unwrap();
         let service = setup_service(temp.path());

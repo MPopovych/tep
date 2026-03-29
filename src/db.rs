@@ -16,6 +16,7 @@ pub struct WorkspacePaths {
     pub ignore_file: PathBuf,
 }
 
+#[cfg(test)]
 pub fn open_in_memory() -> rusqlite::Result<Connection> {
     Connection::open_in_memory()
 }
@@ -88,6 +89,7 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
 pub fn schema_sql() -> &'static str {
     base_schema_sql()
 }

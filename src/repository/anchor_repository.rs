@@ -13,11 +13,6 @@ pub struct AnchorRepository<'a> {
 }
 
 impl<'a> AnchorRepository<'a> {
-    pub fn new(conn: &'a Connection) -> Self {
-        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        Self::with_workspace_root(conn, workspace_root)
-    }
-
     pub fn with_workspace_root(conn: &'a Connection, workspace_root: impl Into<PathBuf>) -> Self {
         Self {
             conn,

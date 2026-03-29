@@ -2,7 +2,7 @@
 
 ## 1. Entity
 
-[#!#tep:](entity)
+[#!#1#tep:22](entity)
 
 Current shape:
 - `entity_id` (integer)
@@ -20,7 +20,7 @@ Notes:
 
 ## 2. Anchor
 
-[#!#tep:](anchor,anchor.tag)
+[#!#1#tep:23](anchor,anchor.tag)
 
 Current shape:
 - `anchor_id` (integer)
@@ -39,7 +39,7 @@ Notes:
 
 ## 3. Anchor-entity relation
 
-[#!#tep:](anchor_entity_relation,entity,anchor)
+[#!#1#tep:24](anchor_entity_relation,entity,anchor)
 
 This is a many-to-many relation.
 
@@ -53,7 +53,7 @@ This relation should stay separate from both:
 
 ## 4. Entity link
 
-[#!#tep:](link,entity)
+[#!#1#tep:25](link,entity)
 
 Current shape:
 - `from_entity_id`

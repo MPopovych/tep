@@ -3,7 +3,6 @@ mod cli;
 mod commands;
 mod db;
 mod entity;
-mod errors;
 mod filter;
 mod output;
 mod repository;

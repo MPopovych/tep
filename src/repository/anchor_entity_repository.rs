@@ -45,15 +45,6 @@ impl<'a> AnchorEntityRepository<'a> {
         Ok(())
     }
 
-    pub fn list_entity_ids_for_anchor(&self, anchor_id: i64) -> Result<Vec<i64>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT entity_id FROM anchor_entities WHERE anchor_id = ?1 ORDER BY entity_id ASC",
-        )?;
-        let rows = stmt.query_map(params![anchor_id], |row| row.get::<_, i64>(0))?;
-        let ids = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(ids)
-    }
-
     pub fn list_entities_for_anchor(&self, anchor_id: i64) -> Result<Vec<Entity>> {
         let mut stmt = self.conn.prepare(
             "SELECT e.entity_id, e.name, e.ref, e.description, e.created_at, e.updated_at
@@ -101,7 +92,7 @@ mod tests {
         conn.execute_batch(db::schema_sql())
             .expect("schema should apply");
 
-        let anchor_repo = AnchorRepository::new(conn);
+        let anchor_repo = AnchorRepository::with_workspace_root(conn, "/tmp/project");
         let entity_repo = EntityRepository::new(conn);
         let relation_repo = AnchorEntityRepository::new(conn);
 
@@ -123,10 +114,10 @@ mod tests {
     fn attach_and_list_relations() {
         let (_conn, repo, anchor_id, entity_id) = setup();
         repo.attach(anchor_id, entity_id).expect("attach should succeed");
-        let ids = repo
-            .list_entity_ids_for_anchor(anchor_id)
+        let entities = repo
+            .list_entities_for_anchor(anchor_id)
             .expect("list should succeed");
-        assert_eq!(ids, vec![entity_id]);
+        assert_eq!(entities.iter().map(|entity| entity.entity_id).collect::<Vec<_>>(), vec![entity_id]);
     }
 
     #[test]
@@ -158,10 +149,10 @@ mod tests {
         repo.replace_for_anchor(anchor_id, &[other.entity_id])
             .expect("replace should succeed");
 
-        let ids = repo
-            .list_entity_ids_for_anchor(anchor_id)
+        let entities = repo
+            .list_entities_for_anchor(anchor_id)
             .expect("list should succeed");
-        assert_eq!(ids, vec![other.entity_id]);
+        assert_eq!(entities.iter().map(|entity| entity.entity_id).collect::<Vec<_>>(), vec![other.entity_id]);
     }
 
     #[test]
@@ -169,9 +160,9 @@ mod tests {
         let (_conn, repo, anchor_id, entity_id) = setup();
         repo.attach(anchor_id, entity_id).expect("attach should succeed");
         repo.detach(anchor_id, entity_id).expect("detach should succeed");
-        let ids = repo
-            .list_entity_ids_for_anchor(anchor_id)
+        let entities = repo
+            .list_entities_for_anchor(anchor_id)
             .expect("list should succeed");
-        assert!(ids.is_empty());
+        assert!(entities.is_empty());
     }
 }

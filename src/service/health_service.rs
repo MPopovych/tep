@@ -331,7 +331,7 @@ mod tests {
         rel.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
         std::fs::create_dir_all("/tmp/project/docs").ok();
-        std::fs::write("/tmp/project/docs/student.md", "[#!#1#tep:1](student)").ok();
+        std::fs::write("/tmp/project/docs/student.md", "[#!#1#tep:1](student)").ok(); // #tepignore
 
         let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.anchors_healthy, 1);
