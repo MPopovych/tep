@@ -16,6 +16,7 @@ For now, this directory is for practical internal project documentation such as:
 - architecture notes
 - roadmap-oriented thinking
 - implementation backlog and project notes
+- workflow guidance and project-local skills
 
 ## Suggested reading order
 
@@ -25,6 +26,7 @@ For now, this directory is for practical internal project documentation such as:
 4. [Core Modules](./CORE_MODULES.md)
 5. [Architecture Notes](./ARCHITECTURE_NOTES.md)
 6. [Implementation Backlog](./IMPLEMENTATION_BACKLOG.md)
+7. [tep Workflow Skill](./skills/tep-workflow/SKILL.md)
 
 ## Relationship to root docs
 
@@ -39,6 +41,7 @@ Use `doc/` for:
 - architecture thinking
 - module-level planning
 - backlog material that may change more freely
+- project-local workflow guidance/skills
 
 ## Working style
 
