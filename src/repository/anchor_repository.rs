@@ -108,6 +108,21 @@ impl<'a> AnchorRepository<'a> {
         Ok(anchor)
     }
 
+    pub fn find_latest_for_entity_in_file(&self, entity_id: i64, file_path: &str) -> Result<Option<Anchor>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT a.anchor_id, a.version, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
+             FROM anchor_entities ae
+             JOIN anchors a ON a.anchor_id = ae.anchor_id
+             WHERE ae.entity_id = ?1 AND a.file_path = ?2
+             ORDER BY a.anchor_id DESC
+             LIMIT 1",
+        )?;
+        let anchor = stmt
+            .query_row(params![entity_id, file_path], map_anchor_row)
+            .optional()?;
+        Ok(anchor)
+    }
+
     pub fn delete(&self, anchor_id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM anchors WHERE anchor_id = ?1", params![anchor_id])
@@ -240,5 +255,26 @@ mod tests {
         let created = repo.create(1, "./file.txt", Some(3), Some(4), Some(22)).unwrap();
         let found = repo.find_by_file_and_offset("./file.txt", 22).unwrap().unwrap();
         assert_eq!(found.anchor_id, created.anchor_id);
+    }
+
+    #[test]
+    fn find_latest_for_entity_in_file_returns_related_anchor() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let anchor_repo = AnchorRepository::new(conn);
+        let entity_repo = EntityRepository::new(conn);
+        let rel_repo = AnchorEntityRepository::new(conn);
+
+        let entity = entity_repo.create(&NewEntity { name: "student".into(), r#ref: None }).unwrap();
+        let old_anchor = anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
+        let new_anchor = anchor_repo.create(1, "./file.txt", Some(2), Some(0), Some(5)).unwrap();
+        rel_repo.attach(old_anchor.anchor_id, entity.entity_id).unwrap();
+        rel_repo.attach(new_anchor.anchor_id, entity.entity_id).unwrap();
+
+        let found = anchor_repo
+            .find_latest_for_entity_in_file(entity.entity_id, "./file.txt")
+            .unwrap()
+            .unwrap();
+        assert_eq!(found.anchor_id, new_anchor.anchor_id);
     }
 }

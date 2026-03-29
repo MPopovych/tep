@@ -184,6 +184,36 @@ fn entity_auto_rescan_does_not_duplicate_backing_anchor() {
 }
 
 #[test]
+fn entity_auto_rescan_after_materialization_shift_stays_stable() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "header\n(#!#tep:Student)\n")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 1"));
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 0"));
+}
+
+#[test]
 fn entity_show_and_edit_work_by_name() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
 

@@ -173,6 +173,7 @@ impl<'a> EntityService<'a> {
             if let Some(existing) = self
                 .anchor_repo
                 .find_by_file_and_offset(file_path, declaration.start_offset as i64)?
+                .or(self.anchor_repo.find_latest_for_entity_in_file(entity.entity_id, file_path)?)
             {
                 self.anchor_repo.update_location(
                     existing.anchor_id,
@@ -332,5 +333,23 @@ mod tests {
         let second_anchors = service.show("Student").unwrap().anchors;
         assert_eq!(second_anchors.len(), 1);
         assert_eq!(second_anchors[0].anchor_id, first_anchor_id);
+    }
+
+    #[test]
+    fn auto_reuses_anchor_after_materialization_shift() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "header\n(#!#tep:Student)\n").unwrap();
+
+        let first = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(first.anchors_created, 1);
+
+        let second = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(second.anchors_created, 0);
+        let anchors = service.show("Student").unwrap().anchors;
+        assert_eq!(anchors.len(), 1);
     }
 }
