@@ -81,6 +81,19 @@ impl<'a> AnchorRepository<'a> {
         Ok(ids)
     }
 
+    pub fn list_for_entity(&self, entity_id: i64) -> Result<Vec<Anchor>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT a.anchor_id, a.version, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
+             FROM anchor_entities ae
+             JOIN anchors a ON a.anchor_id = ae.anchor_id
+             WHERE ae.entity_id = ?1
+             ORDER BY a.anchor_id ASC",
+        )?;
+        let rows = stmt.query_map(params![entity_id], map_anchor_row)?;
+        let anchors = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(anchors)
+    }
+
     pub fn delete(&self, anchor_id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM anchors WHERE anchor_id = ?1", params![anchor_id])
@@ -117,6 +130,9 @@ fn now_utc() -> String {
 mod tests {
     use super::*;
     use crate::db;
+    use crate::repository::anchor_entity_repository::AnchorEntityRepository;
+    use crate::repository::entity_repository::EntityRepository;
+    use crate::entity::NewEntity;
 
     fn setup_repo() -> AnchorRepository<'static> {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
@@ -185,5 +201,22 @@ mod tests {
         repo.delete(a.anchor_id).unwrap();
         let ids = repo.list_ids_for_file("./file.txt").unwrap();
         assert_eq!(ids, vec![b.anchor_id]);
+    }
+
+    #[test]
+    fn list_for_entity_returns_related_anchors() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let anchor_repo = AnchorRepository::new(conn);
+        let entity_repo = EntityRepository::new(conn);
+        let rel_repo = AnchorEntityRepository::new(conn);
+
+        let anchor = anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
+        let entity = entity_repo.create(&NewEntity { name: "student".into(), r#ref: None }).unwrap();
+        rel_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
+
+        let anchors = anchor_repo.list_for_entity(entity.entity_id).unwrap();
+        assert_eq!(anchors.len(), 1);
+        assert_eq!(anchors[0].anchor_id, anchor.anchor_id);
     }
 }

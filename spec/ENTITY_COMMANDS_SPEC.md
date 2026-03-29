@@ -55,16 +55,16 @@ Behavior:
 
 This is especially useful for automation and agents.
 
-### Read
+### Show
 ```bash
-tep entity read "student"
-tep entity read 42
+tep entity show "student"
+tep entity show 42
 ```
 
 Behavior:
 - accept either unique name or entity id
-- print basic entity data
-- later may expand to include more connected context
+- print compact entity data
+- include related anchors
 
 ### Edit
 ```bash
@@ -96,13 +96,16 @@ Likely later additions:
 
 ## Output expectation
 
-Even in early versions, commands should print enough structured output to make automation practical.
+Compact entity format:
+```txt
+<id> (<name>)
+```
 
-At minimum, output should include:
-- entity id
-- name
-- ref if present
-- timestamps when relevant
+When anchors are included, each anchor should use the shared compact anchor format:
+```txt
+<anchor_id> (<optional_name>)
+<file> (<line>:<shift>) [<offset>]
+```
 
 ## Storage direction
 

@@ -1,18 +1,27 @@
 use anyhow::Context;
 
-use crate::cli::AnchorArgs;
+use crate::cli::{AnchorAutoArgs, AnchorCommands};
 use crate::db;
-use crate::output::anchor_output::{format_anchor_relation_result, format_anchor_sync_result};
+use crate::output::anchor_output::{format_anchor_relation_result, format_anchor_show, format_anchor_sync_result};
 use crate::service::anchor_service::AnchorService;
 
-pub fn run(args: AnchorArgs) -> anyhow::Result<()> {
+pub fn run(command: AnchorCommands) -> anyhow::Result<()> {
     let conn = db::open_workspace_db()?;
     conn.execute_batch(db::schema_sql())
         .context("failed to apply database schema")?;
 
     let service = AnchorService::new(&conn);
-    let result = service.sync_paths(&args.paths)?;
-    print!("{}", format_anchor_sync_result(&result));
+
+    match command {
+        AnchorCommands::Auto(args) => {
+            let result = service.sync_paths(&args.paths)?;
+            print!("{}", format_anchor_sync_result(&result));
+        }
+        AnchorCommands::Show { anchor_id } => {
+            let result = service.show(anchor_id)?;
+            print!("{}", format_anchor_show(&result));
+        }
+    }
     Ok(())
 }
 

@@ -1,17 +1,26 @@
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
+use crate::anchor::Anchor;
 use crate::entity::{Entity, NewEntity, UpdateEntity, parse_lookup};
+use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
+
+pub struct EntityShowResult {
+    pub entity: Entity,
+    pub anchors: Vec<Anchor>,
+}
 
 pub struct EntityService<'a> {
     repo: EntityRepository<'a>,
+    anchor_repo: AnchorRepository<'a>,
 }
 
 impl<'a> EntityService<'a> {
     pub fn new(conn: &'a Connection) -> Self {
         Self {
             repo: EntityRepository::new(conn),
+            anchor_repo: AnchorRepository::new(conn),
         }
     }
 
@@ -29,11 +38,14 @@ impl<'a> EntityService<'a> {
         })
     }
 
-    pub fn read(&self, target: &str) -> Result<Entity> {
+    pub fn show(&self, target: &str) -> Result<EntityShowResult> {
         let lookup = parse_lookup(target);
-        self.repo
+        let entity = self
+            .repo
             .find(&lookup)?
-            .with_context(|| format!("entity not found: {target}"))
+            .with_context(|| format!("entity not found: {target}"))?;
+        let anchors = self.anchor_repo.list_for_entity(entity.entity_id)?;
+        Ok(EntityShowResult { entity, anchors })
     }
 
     pub fn edit(
@@ -64,6 +76,7 @@ impl<'a> EntityService<'a> {
 mod tests {
     use super::*;
     use crate::db;
+    use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 
     fn setup_service() -> EntityService<'static> {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
@@ -84,13 +97,30 @@ mod tests {
     }
 
     #[test]
-    fn read_supports_name_lookup() {
+    fn show_supports_name_lookup() {
         let service = setup_service();
         service
             .create("student.permissions".into(), None)
             .expect("create should succeed");
 
-        let entity = service.read("student.permissions").expect("read should succeed");
-        assert_eq!(entity.name, "student.permissions");
+        let result = service.show("student.permissions").expect("show should succeed");
+        assert_eq!(result.entity.name, "student.permissions");
+    }
+
+    #[test]
+    fn show_includes_related_anchors() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let anchor_repo = AnchorRepository::new(conn);
+        let rel_repo = AnchorEntityRepository::new(conn);
+
+        let entity = service.create("student".into(), None).unwrap();
+        let anchor = anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
+        rel_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
+
+        let result = service.show("student").unwrap();
+        assert_eq!(result.anchors.len(), 1);
+        assert_eq!(result.anchors[0].anchor_id, anchor.anchor_id);
     }
 }

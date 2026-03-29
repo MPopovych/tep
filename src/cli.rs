@@ -23,7 +23,10 @@ pub enum Commands {
         #[command(subcommand)]
         command: EntityCommands,
     },
-    Anchor(AnchorArgs),
+    Anchor {
+        #[command(subcommand)]
+        command: AnchorCommands,
+    },
     Attach {
         entity_id: String,
         anchor_id: String,
@@ -50,8 +53,14 @@ pub enum Commands {
     },
 }
 
+#[derive(Debug, Subcommand)]
+pub enum AnchorCommands {
+    Auto(AnchorAutoArgs),
+    Show { anchor_id: i64 },
+}
+
 #[derive(Debug, Args, Clone)]
-pub struct AnchorArgs {
+pub struct AnchorAutoArgs {
     #[arg(required = true)]
     pub paths: Vec<String>,
 }
@@ -60,7 +69,7 @@ pub struct AnchorArgs {
 pub enum EntityCommands {
     Create(UpsertEntityArgs),
     Ensure(UpsertEntityArgs),
-    Read { target: String },
+    Show { target: String },
     Edit(EditEntityArgs),
     List,
 }

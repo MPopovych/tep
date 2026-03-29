@@ -1,14 +1,17 @@
+use crate::anchor::Anchor;
 use crate::entity::Entity;
+use crate::service::entity_service::EntityShowResult;
 
-pub fn format_entity(prefix: &str, entity: &Entity) -> String {
-    format!(
-        "{prefix}\nid: {}\nname: {}\nref: {}\ncreated_at: {}\nupdated_at: {}\n",
-        entity.entity_id,
-        entity.name,
-        entity.r#ref.as_deref().unwrap_or("-"),
-        entity.created_at,
-        entity.updated_at
-    )
+pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
+    format!("{prefix}\n{} ({})\n", entity.entity_id, entity.name)
+}
+
+pub fn format_entity_show(result: &EntityShowResult) -> String {
+    let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
+    for anchor in &result.anchors {
+        out.push_str(&format_anchor_compact(anchor));
+    }
+    out
 }
 
 pub fn format_entity_list(entities: &[Entity]) -> String {
@@ -18,14 +21,20 @@ pub fn format_entity_list(entities: &[Entity]) -> String {
 
     let mut out = String::new();
     for entity in entities {
-        out.push_str(&format!(
-            "{}\t{}\t{}\n",
-            entity.entity_id,
-            entity.name,
-            entity.r#ref.as_deref().unwrap_or("-")
-        ));
+        out.push_str(&format!("{} ({})\n", entity.entity_id, entity.name));
     }
     out
+}
+
+pub fn format_anchor_compact(anchor: &Anchor) -> String {
+    format!(
+        "{}\n{} ({}:{}) [{}]\n",
+        anchor.anchor_id,
+        anchor.file_path,
+        anchor.line.unwrap_or(0),
+        anchor.shift.unwrap_or(0),
+        anchor.offset.unwrap_or(0)
+    )
 }
 
 #[cfg(test)]
@@ -42,18 +51,40 @@ mod tests {
         }
     }
 
+    fn sample_anchor() -> Anchor {
+        Anchor {
+            anchor_id: 7,
+            version: 1,
+            file_path: "./file.md".into(),
+            line: Some(3),
+            shift: Some(4),
+            offset: Some(22),
+            created_at: "1".into(),
+            updated_at: "2".into(),
+        }
+    }
+
     #[test]
-    fn formats_single_entity() {
-        let rendered = format_entity("entity", &sample_entity());
-        assert!(rendered.contains("entity"));
-        assert!(rendered.contains("id: 42"));
-        assert!(rendered.contains("name: student"));
-        assert!(rendered.contains("ref: ./docs/student.md"));
+    fn formats_created_entity() {
+        let rendered = format_entity_created("created", &sample_entity());
+        assert!(rendered.contains("created"));
+        assert!(rendered.contains("42 (student)"));
+    }
+
+    #[test]
+    fn formats_entity_show_with_anchor() {
+        let rendered = format_entity_show(&EntityShowResult {
+            entity: sample_entity(),
+            anchors: vec![sample_anchor()],
+        });
+        assert!(rendered.contains("42 (student)"));
+        assert!(rendered.contains("7"));
+        assert!(rendered.contains("./file.md (3:4) [22]"));
     }
 
     #[test]
     fn formats_entity_list() {
         let rendered = format_entity_list(&[sample_entity()]);
-        assert!(rendered.contains("42\tstudent\t./docs/student.md"));
+        assert!(rendered.contains("42 (student)"));
     }
 }

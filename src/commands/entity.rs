@@ -1,6 +1,8 @@
+use anyhow::Context;
+
 use crate::cli::{EditEntityArgs, EntityCommands, UpsertEntityArgs};
 use crate::db;
-use crate::output::entity_output::{format_entity, format_entity_list};
+use crate::output::entity_output::{format_entity_created, format_entity_list, format_entity_show};
 use crate::service::entity_service::EntityService;
 
 pub fn run(command: EntityCommands) -> anyhow::Result<()> {
@@ -13,35 +15,33 @@ pub fn run(command: EntityCommands) -> anyhow::Result<()> {
     match command {
         EntityCommands::Create(args) => create(&service, args),
         EntityCommands::Ensure(args) => ensure(&service, args),
-        EntityCommands::Read { target } => read(&service, &target),
+        EntityCommands::Show { target } => show(&service, &target),
         EntityCommands::Edit(args) => edit(&service, args),
         EntityCommands::List => list(&service),
     }
 }
 
-use anyhow::Context;
-
 fn create(service: &EntityService<'_>, args: UpsertEntityArgs) -> anyhow::Result<()> {
     let entity = service.create(args.name, args.r#ref)?;
-    print!("{}", format_entity("created", &entity));
+    print!("{}", format_entity_created("created", &entity));
     Ok(())
 }
 
 fn ensure(service: &EntityService<'_>, args: UpsertEntityArgs) -> anyhow::Result<()> {
     let entity = service.ensure(args.name, args.r#ref)?;
-    print!("{}", format_entity("ensured", &entity));
+    print!("{}", format_entity_created("ensured", &entity));
     Ok(())
 }
 
-fn read(service: &EntityService<'_>, target: &str) -> anyhow::Result<()> {
-    let entity = service.read(target)?;
-    print!("{}", format_entity("entity", &entity));
+fn show(service: &EntityService<'_>, target: &str) -> anyhow::Result<()> {
+    let result = service.show(target)?;
+    print!("{}", format_entity_show(&result));
     Ok(())
 }
 
 fn edit(service: &EntityService<'_>, args: EditEntityArgs) -> anyhow::Result<()> {
     let entity = service.edit(&args.target, args.name, args.r#ref)?;
-    print!("{}", format_entity("updated", &entity));
+    print!("{}", format_entity_created("updated", &entity));
     Ok(())
 }
 

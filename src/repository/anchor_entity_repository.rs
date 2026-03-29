@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
 
+use crate::entity::Entity;
+
 pub struct AnchorEntityRepository<'a> {
     conn: &'a Connection,
 }
@@ -50,6 +52,27 @@ impl<'a> AnchorEntityRepository<'a> {
         let rows = stmt.query_map(params![anchor_id], |row| row.get::<_, i64>(0))?;
         let ids = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(ids)
+    }
+
+    pub fn list_entities_for_anchor(&self, anchor_id: i64) -> Result<Vec<Entity>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.entity_id, e.name, e.ref, e.created_at, e.updated_at
+             FROM anchor_entities ae
+             JOIN entities e ON e.entity_id = ae.entity_id
+             WHERE ae.anchor_id = ?1
+             ORDER BY e.entity_id ASC",
+        )?;
+        let rows = stmt.query_map(params![anchor_id], |row| {
+            Ok(Entity {
+                entity_id: row.get(0)?,
+                name: row.get(1)?,
+                r#ref: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        })?;
+        let entities = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(entities)
     }
 }
 
@@ -102,6 +125,18 @@ mod tests {
             .list_entity_ids_for_anchor(anchor_id)
             .expect("list should succeed");
         assert_eq!(ids, vec![entity_id]);
+    }
+
+    #[test]
+    fn list_entities_for_anchor_returns_full_rows() {
+        let (_conn, repo, anchor_id, entity_id) = setup();
+        repo.attach(anchor_id, entity_id).expect("attach should succeed");
+        let entities = repo
+            .list_entities_for_anchor(anchor_id)
+            .expect("list should succeed");
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].entity_id, entity_id);
+        assert_eq!(entities[0].name, "student");
     }
 
     #[test]

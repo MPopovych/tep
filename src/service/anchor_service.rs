@@ -5,8 +5,8 @@ use std::path::Path;
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
-use crate::anchor::{AnchorKind, ParsedAnchor, materialize_anchor, parse_anchors};
-use crate::entity::parse_lookup;
+use crate::anchor::{Anchor, AnchorKind, ParsedAnchor, materialize_anchor, parse_anchors};
+use crate::entity::{Entity, parse_lookup};
 use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
@@ -19,6 +19,11 @@ pub struct AnchorSyncResult {
     pub anchors_seen: usize,
     pub anchors_dropped: usize,
     pub relations_synced: usize,
+}
+
+pub struct AnchorShowResult {
+    pub anchor: Anchor,
+    pub entities: Vec<Entity>,
 }
 
 pub struct AnchorService<'a> {
@@ -57,6 +62,15 @@ impl<'a> AnchorService<'a> {
         }
 
         Ok(result)
+    }
+
+    pub fn show(&self, anchor_id: i64) -> Result<AnchorShowResult> {
+        let anchor = self
+            .anchor_repo
+            .find_by_id(anchor_id)?
+            .with_context(|| format!("anchor not found: {anchor_id}"))?;
+        let entities = self.anchor_entity_repo.list_entities_for_anchor(anchor_id)?;
+        Ok(AnchorShowResult { anchor, entities })
     }
 
     pub fn attach_entity(&self, anchor_id: i64, entity_target: &str) -> Result<()> {
@@ -228,13 +242,13 @@ mod tests {
         let service = setup_service();
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let file = temp.path().join("note.txt");
-        fs::write(&file, "hello [#!#tep:](student)").expect("should write file");
+        std::fs::write(&file, "hello [#!#tep:](student)").expect("should write file");
 
         let result = service
             .sync_paths(&[file.to_string_lossy().to_string()])
             .expect("sync should succeed");
 
-        let updated = fs::read_to_string(&file).expect("should read file");
+        let updated = std::fs::read_to_string(&file).expect("should read file");
         assert!(updated.contains("[#!#1#tep:"));
         assert_eq!(result.anchors_created, 1);
         assert_eq!(result.anchors_seen, 1);
@@ -243,12 +257,25 @@ mod tests {
     }
 
     #[test]
+    fn show_returns_related_entities() {
+        let service = setup_service();
+        let anchor = service.anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
+        let entity = service.entity_repo.ensure(&crate::entity::NewEntity { name: "student".into(), r#ref: None }).unwrap();
+        service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
+
+        let result = service.show(anchor.anchor_id).unwrap();
+        assert_eq!(result.anchor.anchor_id, anchor.anchor_id);
+        assert_eq!(result.entities.len(), 1);
+        assert_eq!(result.entities[0].name, "student");
+    }
+
+    #[test]
     fn sync_directory_processes_dot_style_path() {
         let service = setup_service();
         let previous = env::current_dir().expect("current dir should exist");
         let temp = tempfile::tempdir().expect("temp dir should be created");
         env::set_current_dir(temp.path()).expect("should set current dir");
-        fs::write("a.txt", "[#!#tep:]").expect("should write file");
+        std::fs::write("a.txt", "[#!#tep:]").expect("should write file");
 
         let result = service.sync_paths(&[".".into()]).expect("sync should succeed");
         assert_eq!(result.anchors_created, 1);
@@ -261,7 +288,7 @@ mod tests {
         let service = setup_service();
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let file = temp.path().join("note.txt");
-        fs::write(&file, "[#!#tep:](student,basic-user)").expect("should write file");
+        std::fs::write(&file, "[#!#tep:](student,basic-user)").expect("should write file");
 
         let result = service
             .sync_paths(&[file.to_string_lossy().to_string()])
@@ -275,16 +302,16 @@ mod tests {
         let service = setup_service();
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let file = temp.path().join("note.txt");
-        fs::write(&file, "[#!#tep:]").expect("should write file");
+        std::fs::write(&file, "[#!#tep:]").expect("should write file");
         let first = service
             .sync_paths(&[file.to_string_lossy().to_string()])
             .expect("first sync should succeed");
         assert_eq!(first.anchors_created, 1);
 
-        let updated = fs::read_to_string(&file).expect("should read file");
+        let updated = std::fs::read_to_string(&file).expect("should read file");
         assert!(updated.contains("[#!#1#tep:"));
 
-        fs::write(&file, "no anchors now\n").expect("should rewrite file");
+        std::fs::write(&file, "no anchors now\n").expect("should rewrite file");
         let second = service
             .sync_paths(&[file.to_string_lossy().to_string()])
             .expect("second sync should succeed");
@@ -296,7 +323,7 @@ mod tests {
         let service = setup_service();
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let file = temp.path().join("bad.txt");
-        fs::write(&file, "[#!#1#tep:5]\n[#!#1#tep:5]\n").expect("should write file");
+        std::fs::write(&file, "[#!#1#tep:5]\n[#!#1#tep:5]\n").expect("should write file");
 
         let result = service.sync_paths(&[file.to_string_lossy().to_string()]);
         assert!(result.is_err());

@@ -21,8 +21,7 @@ fn entity_create_prints_created_entity() {
         .assert()
         .success()
         .stdout(predicate::str::contains("created"))
-        .stdout(predicate::str::contains("name: student"))
-        .stdout(predicate::str::contains("ref: ./docs/student.md"));
+        .stdout(predicate::str::contains("(student)"));
 
     temp.child(".tep/tep.db")
         .assert(predicates::path::exists());
@@ -63,7 +62,7 @@ fn entity_ensure_is_idempotent() {
 }
 
 #[test]
-fn entity_read_and_edit_work_by_name() {
+fn entity_show_and_edit_work_by_name() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
 
     Command::cargo_bin("tep")
@@ -95,16 +94,45 @@ fn entity_read_and_edit_work_by_name() {
         .assert()
         .success()
         .stdout(predicate::str::contains("updated"))
-        .stdout(predicate::str::contains("name: student.profile"));
+        .stdout(predicate::str::contains("student.profile"));
 
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["entity", "read", "student.profile"])
+        .args(["entity", "show", "student.profile"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("entity"))
-        .stdout(predicate::str::contains("ref: ./docs/profile.md"));
+        .stdout(predicate::str::contains("student.profile"));
+}
+
+#[test]
+fn entity_show_includes_related_anchors() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "[#!#tep:](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "show", "student"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("student"))
+        .stdout(predicate::str::contains("./note.txt (1:"));
 }
 
 #[test]

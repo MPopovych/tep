@@ -2,7 +2,7 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 #[test]
-fn anchor_command_materializes_incomplete_anchor() {
+fn anchor_auto_materializes_incomplete_anchor() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("note.txt"), "hello [#!#tep:](student)")
         .expect("should write file");
@@ -17,7 +17,7 @@ fn anchor_command_materializes_incomplete_anchor() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./note.txt"])
+        .args(["anchor", "auto", "./note.txt"])
         .assert()
         .success()
         .stdout(predicate::str::contains("anchor sync complete"))
@@ -31,7 +31,43 @@ fn anchor_command_materializes_incomplete_anchor() {
 }
 
 #[test]
-fn anchor_command_handles_unicode_prefix_text() {
+fn anchor_show_returns_compact_format() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "[#!#tep:](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success();
+
+    let updated = std::fs::read_to_string(temp.path().join("note.txt"))
+        .expect("should read file");
+    let id_start = updated.find("tep:").expect("materialized anchor should exist") + 4;
+    let id_end = updated[id_start..].find(']').expect("anchor id should end") + id_start;
+    let anchor_id = &updated[id_start..id_end];
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "show", anchor_id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("./note.txt (1:"))
+        .stdout(predicate::str::contains("(student)"));
+}
+
+#[test]
+fn anchor_auto_handles_unicode_prefix_text() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("unicode.txt"), "żółw 🐢\n[#!#tep:](student)")
         .expect("should write file");
@@ -46,7 +82,7 @@ fn anchor_command_handles_unicode_prefix_text() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./unicode.txt"])
+        .args(["anchor", "auto", "./unicode.txt"])
         .assert()
         .success()
         .stdout(predicate::str::contains("anchors_created: 1"));
@@ -57,7 +93,7 @@ fn anchor_command_handles_unicode_prefix_text() {
 }
 
 #[test]
-fn anchor_command_ignores_malformed_anchor_like_text() {
+fn anchor_auto_ignores_malformed_anchor_like_text() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     let path = temp.path().join("malformed.txt");
     std::fs::write(&path, "[#!#1#tep:abc](student)\n[#!#tep:](student\n")
@@ -73,7 +109,7 @@ fn anchor_command_ignores_malformed_anchor_like_text() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./malformed.txt"])
+        .args(["anchor", "auto", "./malformed.txt"])
         .assert()
         .success()
         .stdout(predicate::str::contains("anchors_seen: 0"))
@@ -99,7 +135,7 @@ fn manual_attach_and_detach_work() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./note.txt"])
+        .args(["anchor", "auto", "./note.txt"])
         .assert()
         .success();
 
@@ -127,7 +163,7 @@ fn manual_attach_and_detach_work() {
 }
 
 #[test]
-fn anchor_command_fails_cleanly_for_unknown_materialized_anchor() {
+fn anchor_auto_fails_cleanly_for_unknown_materialized_anchor() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("broken.txt"), "[#!#1#tep:999](student)")
         .expect("should write file");
@@ -142,14 +178,14 @@ fn anchor_command_fails_cleanly_for_unknown_materialized_anchor() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./broken.txt"])
+        .args(["anchor", "auto", "./broken.txt"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("materialized anchor 999 was found in a file but does not exist in the database"));
 }
 
 #[test]
-fn anchor_command_drops_removed_anchor() {
+fn anchor_auto_drops_removed_anchor() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     let path = temp.path().join("drop.txt");
     std::fs::write(&path, "[#!#tep:]").expect("should write file");
@@ -164,7 +200,7 @@ fn anchor_command_drops_removed_anchor() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./drop.txt"])
+        .args(["anchor", "auto", "./drop.txt"])
         .assert()
         .success();
 
@@ -173,14 +209,14 @@ fn anchor_command_drops_removed_anchor() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./drop.txt"])
+        .args(["anchor", "auto", "./drop.txt"])
         .assert()
         .success()
         .stdout(predicate::str::contains("anchors_dropped: 1"));
 }
 
 #[test]
-fn anchor_command_fails_for_duplicate_materialized_anchor_ids_in_same_file() {
+fn anchor_auto_fails_for_duplicate_materialized_anchor_ids_in_same_file() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("dup.txt"), "[#!#1#tep:5]\n[#!#1#tep:5]\n")
         .expect("should write file");
@@ -195,14 +231,14 @@ fn anchor_command_fails_for_duplicate_materialized_anchor_ids_in_same_file() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./dup.txt"])
+        .args(["anchor", "auto", "./dup.txt"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("duplicate materialized anchor 5 found in the same file"));
 }
 
 #[test]
-fn anchor_command_fails_for_cross_file_anchor_id_conflict() {
+fn anchor_auto_fails_for_cross_file_anchor_id_conflict() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("one.txt"), "[#!#tep:]").expect("should write file");
 
@@ -216,7 +252,7 @@ fn anchor_command_fails_for_cross_file_anchor_id_conflict() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./one.txt"])
+        .args(["anchor", "auto", "./one.txt"])
         .assert()
         .success();
 
@@ -234,7 +270,7 @@ fn anchor_command_fails_for_cross_file_anchor_id_conflict() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "./two.txt"])
+        .args(["anchor", "auto", "./two.txt"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("cannot also be updated from"));

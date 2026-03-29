@@ -9,14 +9,14 @@ Users should be able to place **incomplete anchors** directly into files, then a
 The user-facing command shape is planned as:
 
 ```bash
-tep anchor <pathspec...>
+tep anchor auto <pathspec...>
 ```
 
 Examples:
 ```bash
-tep anchor ./file.md
-tep anchor .
-tep anchor ./docs ./src
+tep anchor auto ./file.md
+tep anchor auto .
+tep anchor auto ./docs ./src
 ```
 
 The command should work on targeted files and directories in a pathspec-oriented way similar in spirit to `git add`.
@@ -69,7 +69,7 @@ If no entity reference instruction was present, a materialized anchor may look l
 [#!#1#tep:123458]
 ```
 
-## Behavior of `tep anchor <pathspec...>`
+## Behavior of `tep anchor auto <pathspec...>`
 
 For the targeted files, the command should:
 
@@ -97,6 +97,23 @@ Important assumption:
 - entity names are expected to be relatively stable
 - the entity reference instruction list is not the durable identity of the anchor
 - it is an instruction for synchronizing anchor-entity relations
+
+## Anchor show
+
+Planned command:
+```bash
+tep anchor show <anchor-id>
+```
+
+Behavior:
+- print the anchor in compact form
+- print related entities concisely beneath it
+
+Shared anchor format:
+```txt
+<anchor_id> (<optional_name>)
+<file> (<line>:<shift>) [<offset>]
+```
 
 ## Repeated incomplete anchors
 

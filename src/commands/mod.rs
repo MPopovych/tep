@@ -9,7 +9,7 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Init => init::run(),
         Commands::Scan => not_implemented("scan"),
         Commands::Entity { command } | Commands::E { command } => entity::run(command),
-        Commands::Anchor(args) => anchor::run(args),
+        Commands::Anchor { command } => anchor::run(command),
         Commands::Attach { entity_id, anchor_id } => {
             let anchor_id = anchor_id.parse::<i64>()?;
             anchor::attach(anchor_id, &entity_id)

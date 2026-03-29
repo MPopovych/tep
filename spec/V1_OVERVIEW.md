@@ -85,7 +85,7 @@ Primary usage:
 Current intended commands:
 - `tep entity create <name> [--ref <value>]`
 - `tep entity ensure <name> [--ref <value>]`
-- `tep entity read <name-or-id>`
+- `tep entity show <name-or-id>`
 - `tep entity edit <name-or-id> [--name <value>] [--ref <value>]`
 - `tep entity list`
 
@@ -95,14 +95,30 @@ Possible shorthand alias:
 ## Anchor command direction
 
 Current intended command shape:
-- `tep anchor <pathspec...>`
+- `tep anchor auto <pathspec...>`
+- `tep anchor show <anchor-id>`
 
 Planned behavior:
-- process targeted files or directories
-- materialize incomplete anchors
-- refresh existing anchor metadata
-- bind anchors to entities when an entity reference instruction is present
-- remove stale anchor state for dropped anchors in the targeted files
+- `anchor auto` processes targeted files or directories
+- materializes incomplete anchors
+- refreshes existing anchor metadata
+- binds anchors to entities when an entity reference instruction is present
+- removes stale anchor state for dropped anchors in the targeted files
+- `anchor show` returns the anchor plus related entities
+
+## Output style
+
+The default human-readable output should stay concise.
+
+Anchor description format:
+```txt
+<id> (<optional_name>)
+<file> (<line>:<shift>) [<offset>]
+```
+
+This compact anchor format should be reused in both:
+- `tep anchor show`
+- `tep entity show`
 
 ## V1 implementation priorities
 
@@ -110,10 +126,11 @@ The first useful implementation slice should likely focus on:
 - workspace init
 - entity create
 - entity ensure
-- entity read
+- entity show
 - entity edit
 - entity list
-- later: anchor materialization and inspection
+- anchor auto
+- anchor show
 
 ## V1 non-goals
 
