@@ -1,6 +1,7 @@
 mod anchor;
 mod entity;
 mod init;
+mod support;
 
 use crate::cli::{Cli, Commands};
 

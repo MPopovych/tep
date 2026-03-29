@@ -1,14 +1,10 @@
-use anyhow::Context;
-
 use crate::cli::{EditEntityArgs, EntityAutoArgs, EntityCommands, UpsertEntityArgs};
-use crate::db;
+use crate::commands::support::open_ready_workspace_db;
 use crate::output::entity_output::{format_entity_auto_result, format_entity_context, format_entity_created, format_entity_list, format_entity_show};
 use crate::service::entity_service::EntityService;
 
 pub fn run(command: EntityCommands) -> anyhow::Result<()> {
-    let conn = db::open_workspace_db()?;
-    conn.execute_batch(db::schema_sql())
-        .context("failed to apply database schema")?;
+    let conn = open_ready_workspace_db()?;
 
     let service = EntityService::new(&conn);
 
