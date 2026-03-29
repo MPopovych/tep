@@ -3,7 +3,7 @@ use clap::{Args, Parser, Subcommand};
 #[derive(Debug, Parser)]
 #[command(name = "tep")]
 #[command(about = "text entity pointers")]
-#[command(version)]
+#[command(version, propagate_version = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,

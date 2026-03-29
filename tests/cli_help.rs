@@ -32,3 +32,21 @@ fn prints_version_subcommand() {
         .success()
         .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
 }
+
+#[test]
+fn prints_short_version_flag() {
+    let mut cmd = Command::cargo_bin("tep").expect("binary should build");
+    cmd.arg("-V");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn prints_long_version_flag() {
+    let mut cmd = Command::cargo_bin("tep").expect("binary should build");
+    cmd.arg("--version");
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains(env!("CARGO_PKG_VERSION")));
+}
