@@ -15,6 +15,7 @@ For now, this directory is for practical internal project documentation such as:
 - core module design
 - architecture notes
 - roadmap-oriented thinking
+- implementation backlog and project notes
 
 ## Suggested reading order
 
@@ -24,6 +25,20 @@ For now, this directory is for practical internal project documentation such as:
 4. [Core Modules](./CORE_MODULES.md)
 5. [Architecture Notes](./ARCHITECTURE_NOTES.md)
 6. [Implementation Backlog](./IMPLEMENTATION_BACKLOG.md)
+
+## Relationship to root docs
+
+Use the root-level docs for:
+- public/current project overview (`README.md`)
+- current command and behavior summaries (`CLI_DESIGN.md`, `DATA_MODEL.md`)
+- roadmap and open questions
+- formal behavior commitments in `spec/`
+
+Use `doc/` for:
+- evolving internal notes
+- architecture thinking
+- module-level planning
+- backlog material that may change more freely
 
 ## Working style
 

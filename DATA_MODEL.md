@@ -4,7 +4,7 @@
 
 [#!#tep:](entity)
 
-Early shape:
+Current shape:
 - `entity_id` (integer)
 - `name` (unique)
 - `ref` (nullable)
@@ -22,7 +22,7 @@ Notes:
 
 [#!#tep:](anchor,anchor.tag)
 
-Early shape:
+Current shape:
 - `anchor_id` (integer)
 - `version`
 - `file_path`
@@ -55,7 +55,7 @@ This relation should stay separate from both:
 
 [#!#tep:](link,entity)
 
-Planned early shape:
+Current shape:
 - `from_entity_id`
 - `to_entity_id`
 - `relation`
@@ -63,8 +63,21 @@ Planned early shape:
 - `updated_at`
 
 Notes:
-- links are directional
+- links are directional in storage
 - `Student -> Subject` is not the same as `Subject -> Student`
 - `relation` is free-text and may be long-form
-- first version should keep one link per ordered pair
+- current implementation keeps one link per ordered pair
 - link priorities are intentionally out of scope for now
+
+## 5. Workspace schema metadata
+
+`tep` tracks DB schema version using SQLite:
+
+```sql
+PRAGMA user_version
+```
+
+Notes:
+- schema version is part of workspace state
+- opening a workspace may trigger in-place migration
+- legacy DBs can be upgraded automatically when missing newer fields such as `entities.description`

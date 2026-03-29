@@ -8,17 +8,21 @@ It connects logical entities to anchor points in text and keeps the graph in a l
 
 Current implemented areas:
 - initialize a local workspace
+- auto-migrate older workspace databases on open
+- track DB schema version
 - create and manage entities
+- add entity descriptions
+- create directional entity-to-entity links
 - auto-declare entities from files
 - materialize anchors in files
 - attach entities to anchors
-- show entities with related anchors
+- show entities with related anchors and links
+- assemble retrieval-oriented entity context bundles
 - show anchors with related entities
 
 ## Workspace model
 
 [#!#1#tep:19](workspace,workspace.discovery)
-
 
 A `tep` workspace is created with:
 
@@ -38,6 +42,19 @@ That means:
 - outside any workspace, DB-requiring commands fail and tell you to run `tep init`
 - the location of the `tep` binary does not define the workspace
 - the current terminal cwd does
+
+## Schema and migration
+
+`tep` stores its graph in SQLite and tracks schema version with:
+
+```sql
+PRAGMA user_version
+```
+
+Current behavior:
+- `tep init` creates or upgrades the workspace DB
+- normal DB-opening commands also auto-migrate older workspaces
+- older DBs are upgraded in place when new columns/tables are required
 
 ## Core syntax
 
@@ -97,11 +114,14 @@ tep --version
 
 ### Entities
 ```bash
-tep entity create <name> [--ref <value>]
+tep entity create <name> [--ref <value>] [--description <value>]
 tep entity ensure <name> [--ref <value>]
 tep entity auto <pathspec...>
 tep entity show <name-or-id>
-tep entity edit <name-or-id> [--name <value>] [--ref <value>]
+tep entity context <name-or-id> [--files-only] [--link-depth <n>]
+tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]
+tep entity link <from> <to> --relation <text>
+tep entity unlink <from> <to>
 tep entity list
 ```
 
@@ -145,11 +165,23 @@ Anchor:
 Location fields are metadata, not identity.
 Anchor identity is the anchor ID.
 
+`entity context` is more retrieval-oriented and may include:
+- primary `ref`
+- description
+- anchor snippets
+- deduplicated files
+- linked entities with explicit edge notation like:
+  ```txt
+  edge: (1->2)[1] student has subjects
+  ```
+
 ## Notes
 
 - entity IDs are integer-only
 - entity names are unique and cannot be purely numeric
-- entity metadata uses `ref`
+- entity metadata includes `ref` and `description`
+- entity links are directional in storage
+- `entity context` always includes linked entities by default
 - `.tep_ignore` is respected
 - `.gitignore` is not
 - `line`, `shift`, and `offset` are refreshable metadata only
@@ -157,6 +189,7 @@ Anchor identity is the anchor ID.
 
 ## Documentation map
 
+### Product / overview
 - [Concept](./CONCEPT.md)
 - [Data Model](./DATA_MODEL.md)
 - [CLI Design](./CLI_DESIGN.md)
@@ -164,4 +197,12 @@ Anchor identity is the anchor ID.
 - [Roadmap](./ROADMAP.md)
 - [Open Questions](./OPEN_QUESTIONS.md)
 - [Development Notes](./DEV_NOTES.md)
+
+### Specs
 - [Spec Index](./spec/README.md)
+- [Entity Commands Spec](./spec/ENTITY_COMMANDS_SPEC.md)
+- [Entity Context Spec](./spec/ENTITY_CONTEXT_SPEC.md)
+- [Entity Links Spec](./spec/ENTITY_LINKS_SPEC.md)
+
+### Internal docs
+- [Internal Doc Index](./doc/README.md)

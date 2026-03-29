@@ -37,6 +37,8 @@ This creates:
 - `.tep/tep.db`
 - `.tep_ignore`
 
+`init` also ensures the DB schema is current.
+
 ### Resolve the active workspace
 For DB-requiring commands, `tep` starts from the current working directory and walks upward until it finds the nearest ancestor workspace.
 
@@ -45,6 +47,18 @@ Important:
 - the binary location does not
 - commands from nested directories inside a workspace should work
 - commands outside any workspace should fail clearly
+
+### Schema versioning and migration
+`tep` tracks schema version in SQLite via:
+
+```sql
+PRAGMA user_version
+```
+
+Current behavior:
+- `tep init` creates or upgrades the DB schema
+- normal DB-opening commands also auto-migrate legacy workspaces
+- users should not need a separate migrate command for routine upgrades
 
 ## Current command areas
 
@@ -62,7 +76,7 @@ tep entity create <name> [--ref <value>] [--description <value>]
 tep entity ensure <name> [--ref <value>]
 tep entity auto <pathspec...>
 tep entity show <name-or-id>
-tep entity context <name-or-id> [--files-only]
+tep entity context <name-or-id> [--files-only] [--link-depth <n>]
 tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]
 tep entity link <from> <to> --relation <text>
 tep entity unlink <from> <to>
@@ -127,6 +141,19 @@ Anchor block:
 Location metadata is useful, but not identity.
 The durable anchor identity is the anchor ID.
 
+`entity context` is intentionally more retrieval-oriented.
+It may include:
+- `ref`
+- `description`
+- anchor snippets
+- file shortlist
+- linked entities with explicit edge notation
+
+Example edge line:
+```txt
+edge: (1->2)[1] student has subjects
+```
+
 ## Non-goals for current scope
 
 Not part of the current implemented CLI surface:
@@ -137,5 +164,6 @@ Not part of the current implemented CLI surface:
 - `resolve`
 - `graph`
 - `context get`
+- a required explicit migrate command for routine schema upgrades
 
 Those can be revisited later, but the docs should not present them as current commands.

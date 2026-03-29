@@ -4,7 +4,7 @@ This document captures the current intended behavior of entity-related commands.
 
 ## Entity data model
 
-Current / planned entity shape:
+Current entity shape:
 - `entity_id` integer
 - `name` unique
 - `ref` nullable
@@ -33,8 +33,9 @@ Entity names should:
 All entity commands except help/version behavior require a `tep` workspace.
 
 Current behavior:
-- `tep init` creates the workspace in the current directory
+- `tep init` creates or upgrades the workspace in the current directory
 - DB-requiring commands resolve the nearest ancestor workspace from cwd
+- opening a legacy workspace may auto-migrate the DB schema
 - commands outside any workspace fail clearly and suggest `tep init`
 
 ## Command set
@@ -106,7 +107,7 @@ Behavior:
 ```bash
 tep entity context "student"
 tep entity context "student" --files-only
-tep entity context "student" --include-links
+tep entity context "student" --link-depth 2
 ```
 
 Behavior:
@@ -114,10 +115,11 @@ Behavior:
 - include `ref`
 - include related anchors and snippets by default
 - include deduplicated file list
-- `--files-only` returns only the entity header, `ref`, and file list by default
-- `--include-links` adds linked entities to the retrieval bundle
-- when links are included, include both outgoing and incoming linked entities
-- linked entity blocks should include enough identifying context to read next (`name`, optional `ref`, optional `description`, relation)
+- include linked entities by default
+- preserve link direction in rendered edge notation
+- `--files-only` returns the entity header, `ref`, file list, and linked entities, but skips anchors/snippets
+- `--link-depth` bounds traversal depth for linked entities
+- linked entity blocks should include enough identifying context to read next (`name`, optional `ref`, optional `description`, edge notation)
 
 ### Edit
 ```bash
@@ -157,6 +159,7 @@ tep entity list
 
 Behavior:
 - print entities in a compact CLI-friendly way
+- auto-migrate old workspace schemas before querying when needed
 
 ## Output expectation
 
@@ -171,10 +174,16 @@ When anchors are included, each anchor uses the shared compact anchor format:
 <file> (<line>:<shift>) [<offset>]
 ```
 
+For context output, linked entities are rendered with explicit edge notation:
+```txt
+edge: (<from_entity_id>-><to_entity_id>)[<depth>] <relation>
+```
+
 ## Storage direction
 
-Current / planned storage model:
+Current storage model:
 - SQLite integer primary key for `entity_id`
 - unique constraint on `name`
 - nullable `description` on entities
 - directional entity links with one link per ordered pair
+- schema version tracked via `PRAGMA user_version`

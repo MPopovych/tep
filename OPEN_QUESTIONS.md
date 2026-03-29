@@ -9,7 +9,7 @@
 - Should `tep entity context` become the main agent-facing retrieval command?
 - What should the default snippet size be?
 - Should `ref` always be shown first when present?
-- Should the first version include only direct anchors, or also linked entities later?
+- How should linked entities be ranked when many are reachable at the same depth?
 - What should the JSON shape for agent-facing retrieval look like?
 - How should token budgets affect traversal and sorting later?
 
@@ -18,10 +18,15 @@
 - How aggressively should stale anchors be pruned?
 - What should happen if the same anchor ID appears in multiple files unexpectedly?
 
+## Schema / migration questions
+- When should `tep` expose an explicit `migrate` command in addition to auto-migration?
+- Should schema version be surfaced in a dedicated status/doctor-style command later?
+- How should future migrations be logged or explained to users when they become more complex?
+
 ## AI questions
 - What is the smallest useful context bundle for an agent?
 - Should retrieval ranking be file-first, anchor-first, or link-aware?
-- Should relation type influence retrieval ranking later?
+- Should relation text influence retrieval ranking later?
 
 ## Strategic questions
 - Is the real product the pointer graph itself, or the retrieval workflows built on top?

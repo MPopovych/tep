@@ -14,16 +14,17 @@
 - show primary `ref` first when present
 - include anchor snippets for nearby text
 - emit a deduplicated related file list
-- add better query controls
+- include linked entities by default
+- support bounded traversal with `--link-depth`
 - add cleaner JSON output for agents and tooling
 
 ## Phase 3: better query controls and diagnostics
-- depth-limited graph traversal
+- link/result limits
 - relation filters
-- result limits
 - stale-anchor detection
 - duplicate-anchor warnings
 - validation and repair commands
+- schema/migration diagnostics if needed beyond auto-upgrade
 - better workspace ignore behavior
 
 ## Phase 4: scaling and ergonomics

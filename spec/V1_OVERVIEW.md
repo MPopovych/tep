@@ -60,23 +60,30 @@ That means:
 - one anchor may point to many entities
 
 ### Entities ↔ entities
-Links are planned to be:
-- directional
+Links are:
+- directional in storage
 - free-text described
 - simple in the first version
 
-First-version simplification:
+Current simplification:
 - one link per ordered pair
 - no link priorities
 
+## Workspace schema behavior
+
+Current behavior:
+- workspace DBs track schema version via `PRAGMA user_version`
+- opening a workspace may auto-migrate legacy schemas
+- `tep init` ensures the DB is at the current schema version
+
 ## Entity command direction
 
-Current / planned commands:
+Current commands:
 - `tep entity create <name> [--ref <value>] [--description <value>]`
 - `tep entity ensure <name> [--ref <value>]`
 - `tep entity auto <pathspec...>`
 - `tep entity show <name-or-id>`
-- `tep entity context <name-or-id> [--files-only]`
+- `tep entity context <name-or-id> [--files-only] [--link-depth <n>]`
 - `tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]`
 - `tep entity link <from> <to> --relation <text>`
 - `tep entity unlink <from> <to>`
@@ -111,7 +118,7 @@ Current behavior:
 
 ## Output style
 
-Default human-readable output should stay concise.
+Default human-readable output stays concise.
 
 Entity format:
 ```txt
@@ -124,10 +131,15 @@ Anchor format:
 <file> (<line>:<shift>) [<offset>]
 ```
 
+`entity context` is more retrieval-oriented and includes linked entities by default.
+Direction is preserved in edge notation rather than as separate query modes.
+
 ## V1 implementation priorities
 
 The first useful implementation slice focuses on:
 - workspace init
+- automatic workspace DB migration
+- schema version tracking
 - entity create
 - entity ensure
 - entity auto
