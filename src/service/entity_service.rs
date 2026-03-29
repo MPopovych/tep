@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
@@ -12,6 +12,7 @@ use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 use crate::service::entity_context::extract_anchor_snippet;
+use crate::utils::path::{display_path, resolve_from_workspace};
 
 pub struct EntityShowResult {
     pub entity: Entity,
@@ -53,7 +54,14 @@ pub struct EntityLinkResult {
     pub relation: String,
 }
 
+#[derive(Debug, Clone)]
+struct WorkspaceFile {
+    absolute_path: PathBuf,
+    display_path: String,
+}
+
 pub struct EntityService<'a> {
+    workspace_root: PathBuf,
     repo: EntityRepository<'a>,
     anchor_repo: AnchorRepository<'a>,
     anchor_entity_repo: AnchorEntityRepository<'a>,
@@ -61,9 +69,16 @@ pub struct EntityService<'a> {
 
 impl<'a> EntityService<'a> {
     pub fn new(conn: &'a Connection) -> Self {
+        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self::with_workspace_root(conn, workspace_root)
+    }
+
+    pub fn with_workspace_root(conn: &'a Connection, workspace_root: impl Into<PathBuf>) -> Self {
+        let workspace_root = workspace_root.into();
         Self {
+            workspace_root: workspace_root.clone(),
             repo: EntityRepository::new(conn),
-            anchor_repo: AnchorRepository::new(conn),
+            anchor_repo: AnchorRepository::with_workspace_root(conn, workspace_root),
             anchor_entity_repo: AnchorEntityRepository::new(conn),
         }
     }
@@ -85,9 +100,7 @@ impl<'a> EntityService<'a> {
     }
 
     pub fn auto(&self, paths: &[String]) -> Result<EntityAutoResult> {
-        let workspace_root = std::env::current_dir().context("failed to determine current directory")?;
-        let filter = TepIgnoreFilter::for_workspace_root(workspace_root);
-        let files = filter.collect_paths(paths)?;
+        let files = self.collect_workspace_files(paths)?;
 
         let mut result = EntityAutoResult {
             files_processed: 0,
@@ -123,22 +136,8 @@ impl<'a> EntityService<'a> {
     pub fn context(&self, target: &str, link_depth: usize) -> Result<EntityContextResult> {
         let shown = self.show(target)?;
         let root_entity = shown.entity.clone();
-        let mut files = Vec::new();
-        let mut anchors = Vec::new();
-
-        for anchor in shown.anchors {
-            if !files.contains(&anchor.file_path) {
-                files.push(anchor.file_path.clone());
-            }
-            let snippet = extract_anchor_snippet(&anchor).ok().flatten();
-            anchors.push(EntityContextAnchor { anchor, snippet });
-        }
-
-        let linked_entities = if link_depth > 0 {
-            self.collect_link_context(root_entity.entity_id, link_depth)?
-        } else {
-            Vec::new()
-        };
+        let (anchors, files) = self.build_anchor_context(&shown.anchors);
+        let linked_entities = self.build_link_context(root_entity.entity_id, link_depth)?;
 
         Ok(EntityContextResult {
             entity: root_entity,
@@ -195,6 +194,43 @@ impl<'a> EntityService<'a> {
         self.repo.list()
     }
 
+    fn collect_workspace_files(&self, paths: &[String]) -> Result<Vec<WorkspaceFile>> {
+        let filter = TepIgnoreFilter::for_workspace_root(&self.workspace_root);
+        let files = filter.collect_paths(paths)?;
+        Ok(files
+            .into_iter()
+            .map(|path| WorkspaceFile {
+                absolute_path: resolve_from_workspace(&path, &self.workspace_root),
+                display_path: display_path(&path),
+            })
+            .collect())
+    }
+
+    fn build_anchor_context(&self, anchors: &[Anchor]) -> (Vec<EntityContextAnchor>, Vec<String>) {
+        let mut files = Vec::new();
+        let mut context_anchors = Vec::new();
+
+        for anchor in anchors {
+            if !files.contains(&anchor.file_path) {
+                files.push(anchor.file_path.clone());
+            }
+            let snippet = extract_anchor_snippet(anchor).ok().flatten();
+            context_anchors.push(EntityContextAnchor {
+                anchor: anchor.clone(),
+                snippet,
+            });
+        }
+
+        (context_anchors, files)
+    }
+
+    fn build_link_context(&self, root_entity_id: i64, link_depth: usize) -> Result<Vec<LinkedEntityContext>> {
+        if link_depth == 0 {
+            return Ok(Vec::new());
+        }
+        self.collect_link_context(root_entity_id, link_depth)
+    }
+
     fn collect_link_context(&self, root_entity_id: i64, link_depth: usize) -> Result<Vec<LinkedEntityContext>> {
         let root_entity = self
             .repo
@@ -210,24 +246,38 @@ impl<'a> EntityService<'a> {
                 continue;
             }
 
-            for (link, entity) in self.repo.list_outgoing_links(entity_id)? {
-                self.record_link_context(&mut discovered, &root_entity, link, entity.clone(), depth + 1);
-                if queued.insert(entity.entity_id) {
-                    queue.push_back((entity.entity_id, depth + 1));
-                }
-            }
-
-            for (link, entity) in self.repo.list_incoming_links(entity_id)? {
-                self.record_link_context(&mut discovered, &root_entity, link, entity.clone(), depth + 1);
-                if queued.insert(entity.entity_id) {
-                    queue.push_back((entity.entity_id, depth + 1));
-                }
-            }
+            self.enqueue_neighbors(entity_id, depth + 1, &root_entity, &mut discovered, &mut queued, &mut queue)?;
         }
 
         let mut linked_entities = discovered.into_values().collect::<Vec<_>>();
         linked_entities.sort_by_key(|item| (item.depth, item.entity.entity_id));
         Ok(linked_entities)
+    }
+
+    fn enqueue_neighbors(
+        &self,
+        entity_id: i64,
+        depth: usize,
+        root_entity: &Entity,
+        discovered: &mut HashMap<i64, LinkedEntityContext>,
+        queued: &mut HashSet<i64>,
+        queue: &mut VecDeque<(i64, usize)>,
+    ) -> Result<()> {
+        for (link, entity) in self.repo.list_outgoing_links(entity_id)? {
+            self.record_link_context(discovered, root_entity, link, entity.clone(), depth);
+            if queued.insert(entity.entity_id) {
+                queue.push_back((entity.entity_id, depth));
+            }
+        }
+
+        for (link, entity) in self.repo.list_incoming_links(entity_id)? {
+            self.record_link_context(discovered, root_entity, link, entity.clone(), depth);
+            if queued.insert(entity.entity_id) {
+                queue.push_back((entity.entity_id, depth));
+            }
+        }
+
+        Ok(())
     }
 
     fn record_link_context(
@@ -265,13 +315,13 @@ impl<'a> EntityService<'a> {
         }
     }
 
-    fn auto_file(&self, path: &Path, result: &mut EntityAutoResult) -> Result<bool> {
-        if !path.is_file() {
+    fn auto_file(&self, file: &WorkspaceFile, result: &mut EntityAutoResult) -> Result<bool> {
+        if !file.absolute_path.is_file() {
             return Ok(false);
         }
 
-        let original = fs::read_to_string(path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
+        let original = fs::read_to_string(&file.absolute_path)
+            .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
         let declarations = parse_entity_declarations(&original);
         if declarations.is_empty() {
             return Ok(false);
@@ -281,11 +331,10 @@ impl<'a> EntityService<'a> {
 
         let mut rewritten = String::with_capacity(original.len() + 64);
         let mut cursor = 0usize;
-        let file_path = path.to_string_lossy().to_string();
 
         for declaration in declarations {
             rewritten.push_str(&original[cursor..declaration.start_offset]);
-            let replacement = self.sync_declaration(&file_path, &declaration, result)?;
+            let replacement = self.sync_declaration(&file.display_path, &declaration, result)?;
             rewritten.push_str(&replacement);
             cursor = declaration.start_offset + declaration.raw.len();
         }
@@ -293,8 +342,8 @@ impl<'a> EntityService<'a> {
         rewritten.push_str(&original[cursor..]);
 
         if rewritten != original {
-            fs::write(path, rewritten)
-                .with_context(|| format!("failed to write {}", path.display()))?;
+            fs::write(&file.absolute_path, rewritten)
+                .with_context(|| format!("failed to write {}", file.absolute_path.display()))?;
         }
 
         Ok(true)
@@ -306,6 +355,19 @@ impl<'a> EntityService<'a> {
         declaration: &ParsedEntityDeclaration,
         result: &mut EntityAutoResult,
     ) -> Result<String> {
+        let entity = self.ensure_entity_for_declaration(declaration, result)?;
+        let anchor = self.ensure_anchor_for_declaration(file_path, declaration, entity.entity_id, result)?;
+        self.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id)?;
+        result.relations_synced += 1;
+
+        Ok(materialize_entity_declaration(declaration, 1))
+    }
+
+    fn ensure_entity_for_declaration(
+        &self,
+        declaration: &ParsedEntityDeclaration,
+        result: &mut EntityAutoResult,
+    ) -> Result<Entity> {
         let mut entity = self.repo.ensure(&NewEntity {
             name: declaration.name.clone(),
             r#ref: None,
@@ -318,15 +380,24 @@ impl<'a> EntityService<'a> {
                 &parse_lookup(&entity.entity_id.to_string()),
                 &UpdateEntity {
                     name: None,
-                    r#ref: Some(file_path.to_string()),
+                    r#ref: Some(String::new()),
                     description: None,
                 },
             )?;
-            result.refs_filled += 1;
         }
 
+        Ok(entity)
+    }
+
+    fn ensure_anchor_for_declaration(
+        &self,
+        file_path: &str,
+        declaration: &ParsedEntityDeclaration,
+        entity_id: i64,
+        result: &mut EntityAutoResult,
+    ) -> Result<Anchor> {
         let anchor = if declaration.version.is_some() {
-            if let Some(existing) = self.anchor_repo.find_latest_for_entity_in_file(entity.entity_id, file_path)? {
+            if let Some(existing) = self.anchor_repo.find_latest_for_entity_in_file(entity_id, file_path)? {
                 self.anchor_repo.update_location(
                     existing.anchor_id,
                     file_path,
@@ -335,32 +406,30 @@ impl<'a> EntityService<'a> {
                     Some(declaration.start_offset as i64),
                 )?
             } else {
-                let created = self.anchor_repo.create(
-                    declaration.version.unwrap_or(1),
-                    file_path,
-                    Some(declaration.line),
-                    Some(declaration.shift),
-                    Some(declaration.start_offset as i64),
-                )?;
-                result.anchors_created += 1;
-                created
+                self.create_declaration_anchor(file_path, declaration, result)?
             }
         } else {
-            let created = self.anchor_repo.create(
-                1,
-                file_path,
-                Some(declaration.line),
-                Some(declaration.shift),
-                Some(declaration.start_offset as i64),
-            )?;
-            result.anchors_created += 1;
-            created
+            self.create_declaration_anchor(file_path, declaration, result)?
         };
 
-        self.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id)?;
-        result.relations_synced += 1;
+        Ok(anchor)
+    }
 
-        Ok(materialize_entity_declaration(declaration, 1))
+    fn create_declaration_anchor(
+        &self,
+        file_path: &str,
+        declaration: &ParsedEntityDeclaration,
+        result: &mut EntityAutoResult,
+    ) -> Result<Anchor> {
+        let created = self.anchor_repo.create(
+            declaration.version.unwrap_or(1),
+            file_path,
+            Some(declaration.line),
+            Some(declaration.shift),
+            Some(declaration.start_offset as i64),
+        )?;
+        result.anchors_created += 1;
+        Ok(created)
     }
 }
 
@@ -374,7 +443,32 @@ mod tests {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
         conn.execute_batch(db::schema_sql())
             .expect("schema should apply");
-        EntityService::new(conn)
+        EntityService::with_workspace_root(conn, "/tmp/project")
+    }
+
+    #[test]
+    fn build_anchor_context_collects_deduped_files() {
+        let service = setup_service();
+        let anchor = Anchor {
+            anchor_id: 1,
+            version: 1,
+            file_path: "./docs/a.md".into(),
+            line: Some(1),
+            shift: Some(0),
+            offset: Some(0),
+            created_at: "1".into(),
+            updated_at: "1".into(),
+        };
+        let (anchors, files) = service.build_anchor_context(&[anchor.clone(), anchor]);
+        assert_eq!(anchors.len(), 2);
+        assert_eq!(files, vec!["./docs/a.md".to_string()]);
+    }
+
+    #[test]
+    fn build_link_context_returns_empty_for_zero_depth() {
+        let service = setup_service();
+        let links = service.build_link_context(1, 0).unwrap();
+        assert!(links.is_empty());
     }
 
     #[test]
@@ -418,7 +512,7 @@ mod tests {
     fn context_merges_links_and_preserves_direction_in_edge() {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
         conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
+        let service = EntityService::with_workspace_root(conn, "/tmp/project");
         let entity_repo = EntityRepository::new(conn);
 
         entity_repo.create(&NewEntity { name: "student".into(), r#ref: Some("./docs/student.md".into()), description: Some("A learner".into()) }).unwrap();
@@ -437,7 +531,7 @@ mod tests {
     fn context_traverses_link_depth_and_dedupes_entities() {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
         conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
+        let service = EntityService::with_workspace_root(conn, "/tmp/project");
         let entity_repo = EntityRepository::new(conn);
 
         entity_repo.create(&NewEntity { name: "student".into(), r#ref: Some("./docs/student.md".into()), description: Some("A learner".into()) }).unwrap();
@@ -465,7 +559,7 @@ mod tests {
     fn context_includes_ref_files_snippet_and_links_by_default() {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
         conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
+        let service = EntityService::with_workspace_root(conn, "/tmp/project");
         let entity_repo = EntityRepository::new(conn);
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("note.txt");
