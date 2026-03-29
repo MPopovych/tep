@@ -120,8 +120,9 @@ The first version should stay simple.
 Suggested approach:
 - read the anchor file
 - use the last-known offset if available
-- extract a small byte window around the anchor
-- trim to line or paragraph boundaries when practical
+- extract a small surrounding byte window around the anchor
+- clamp safely to file boundaries
+- trim to valid UTF-8 character boundaries
 - keep snippet length small and predictable
 
 A snippet does not need to be perfect.
@@ -179,7 +180,7 @@ Smallest useful implementation:
 1. add `entity context <name-or-id>`
 2. resolve entity and related anchors
 3. print `ref` if present
-4. extract a short snippet around each anchor when possible
+4. extract a short bounded snippet around each anchor when possible
 5. print a deduplicated file list
 
 That would already make `tep` significantly more useful for agent workflows.

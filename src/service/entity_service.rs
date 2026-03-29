@@ -11,6 +11,8 @@ use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 
+const CONTEXT_WINDOW_BYTES: usize = 120;
+
 pub struct EntityShowResult {
     pub entity: Entity,
     pub anchors: Vec<Anchor>,
@@ -250,17 +252,37 @@ fn extract_anchor_snippet(anchor: &Anchor) -> Result<Option<String>> {
         return Ok(None);
     }
 
-    let start = text[..offset].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-    let end = text[offset..]
-        .find('\n')
-        .map(|idx| offset + idx)
-        .unwrap_or(text.len());
-    let line = text[start..end].trim();
-    if line.is_empty() {
+    let raw_start = offset.saturating_sub(CONTEXT_WINDOW_BYTES);
+    let raw_end = (offset + CONTEXT_WINDOW_BYTES).min(text.len());
+
+    let start = floor_char_boundary(&text, raw_start);
+    let end = ceil_char_boundary(&text, raw_end);
+    if start >= end {
         return Ok(None);
     }
 
-    Ok(Some(line.to_string()))
+    let snippet = text[start..end].trim();
+    if snippet.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(snippet.to_string()))
+}
+
+fn floor_char_boundary(text: &str, mut idx: usize) -> usize {
+    idx = idx.min(text.len());
+    while idx > 0 && !text.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
+}
+
+fn ceil_char_boundary(text: &str, mut idx: usize) -> usize {
+    idx = idx.min(text.len());
+    while idx < text.len() && !text.is_char_boundary(idx) {
+        idx += 1;
+    }
+    idx
 }
 
 #[cfg(test)]
@@ -323,12 +345,12 @@ mod tests {
         let entity_repo = EntityRepository::new(conn);
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("note.txt");
-        std::fs::write(&file, "hello\nanchor line\n").unwrap();
+        std::fs::write(&file, "before line\nanchor line\nafter line\n").unwrap();
         let entity = entity_repo.create(&NewEntity {
             name: "student".into(),
             r#ref: Some("./docs/student.md".into()),
         }).unwrap();
-        let anchor = service.anchor_repo.create(1, file.to_string_lossy().as_ref(), Some(2), Some(0), Some(6)).unwrap();
+        let anchor = service.anchor_repo.create(1, file.to_string_lossy().as_ref(), Some(2), Some(0), Some(12)).unwrap();
         service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
         let result = service.context("student").unwrap();
@@ -336,7 +358,49 @@ mod tests {
         assert_eq!(result.files.len(), 1);
         assert!(result.files[0].contains("note.txt"));
         assert_eq!(result.anchors.len(), 1);
-        assert_eq!(result.anchors[0].snippet.as_deref(), Some("anchor line"));
+        let snippet = result.anchors[0].snippet.as_deref().unwrap();
+        assert!(snippet.contains("before line"));
+        assert!(snippet.contains("anchor line"));
+        assert!(snippet.contains("after line"));
+    }
+
+    #[test]
+    fn snippet_respects_file_start_boundary() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("start.txt");
+        std::fs::write(&file, "anchor at start\nrest\n").unwrap();
+        let anchor = Anchor {
+            anchor_id: 1,
+            version: 1,
+            file_path: file.to_string_lossy().into(),
+            line: Some(1),
+            shift: Some(0),
+            offset: Some(0),
+            created_at: "1".into(),
+            updated_at: "1".into(),
+        };
+        let snippet = extract_anchor_snippet(&anchor).unwrap().unwrap();
+        assert!(snippet.starts_with("anchor at start"));
+    }
+
+    #[test]
+    fn snippet_respects_file_end_boundary() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("end.txt");
+        std::fs::write(&file, "before\nanchor at end").unwrap();
+        let offset = "before\n".len();
+        let anchor = Anchor {
+            anchor_id: 1,
+            version: 1,
+            file_path: file.to_string_lossy().into(),
+            line: Some(2),
+            shift: Some(0),
+            offset: Some(offset as i64),
+            created_at: "1".into(),
+            updated_at: "1".into(),
+        };
+        let snippet = extract_anchor_snippet(&anchor).unwrap().unwrap();
+        assert!(snippet.ends_with("anchor at end"));
     }
 
     #[test]
