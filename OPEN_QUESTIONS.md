@@ -5,28 +5,23 @@
 - Is the main value navigation, traceability, or AI context assembly?
 - Should entity labels be required, or can IDs stand alone at first?
 
-## Data model questions
-- Should `kind` be freeform or constrained?
-- Should relation types be fully user-defined in v1?
-- Should an entity be allowed to exist with zero anchors long-term?
-- Should entity-anchor associations stay minimal in v1, or carry extra metadata?
-
 ## Retrieval questions
-- What should `tep resolve` return by default?
-- How should traversal stop conditions work?
-- Should priority behave only as sorting, or also as a hard traversal filter?
-- How should cycles be surfaced in graph output?
+- Should `tep entity context` become the main agent-facing retrieval command?
+- What should the default snippet size be?
+- Should `ref` always be shown first when present?
+- Should the first version include only direct anchors, or also linked entities later?
+- What should the JSON shape for agent-facing retrieval look like?
+- How should token budgets affect traversal and sorting later?
 
 ## Scanning questions
-- Should scan cover the entire workspace by default?
 - Which files or directories should be ignored automatically?
 - How aggressively should stale anchors be pruned?
 - What should happen if the same anchor ID appears in multiple files unexpectedly?
 
 ## AI questions
-- What should a great agent-facing JSON output look like?
-- How should token budgets affect traversal and sorting?
-- Should relation type influence retrieval ranking?
+- What is the smallest useful context bundle for an agent?
+- Should retrieval ranking be file-first, anchor-first, or link-aware?
+- Should relation type influence retrieval ranking later?
 
 ## Strategic questions
 - Is the real product the pointer graph itself, or the retrieval workflows built on top?

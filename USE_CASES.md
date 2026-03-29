@@ -3,88 +3,89 @@
 ## 1. Product and engineering traceability
 
 You have:
-- a product spec,
-- backend code,
-- frontend code,
-- tests,
-- architecture notes.
+- a product spec
+- backend code
+- frontend code
+- tests
+- architecture notes
 
 You create entities for meaningful things such as:
-- endpoints,
-- features,
-- DTOs,
-- services,
-- UI flows.
+- endpoints
+- features
+- DTOs
+- services
+- UI flows
 
 You place anchor tags into relevant files, attach entities to anchors, and connect entities with links.
 
 Potential value:
-- easier onboarding,
-- better implementation traceability,
-- faster debugging,
-- cleaner AI context retrieval.
+- easier onboarding
+- better implementation traceability
+- faster debugging
+- cleaner AI context retrieval
 
 ## 2. Writing and worldbuilding
 
 You have:
-- a manuscript,
-- character notes,
-- location notes,
-- plot notes.
+- a manuscript
+- character notes
+- location notes
+- plot notes
 
 You create entities for:
-- characters,
-- places,
-- scenes,
-- plot threads.
+- characters
+- places
+- scenes
+- plot threads
 
 You anchor them in the manuscript and link them to supporting notes.
 
 Potential value:
-- consistency checking,
-- easier editing,
-- faster navigation of worldbuilding context.
+- consistency checking
+- easier editing
+- faster navigation of worldbuilding context
 
 ## 3. Research and note systems
 
 You have:
-- research notes,
-- source excerpts,
-- article drafts,
-- claims and references.
+- research notes
+- source excerpts
+- article drafts
+- claims and references
 
 You create entities for:
-- concepts,
-- claims,
-- sources,
-- themes.
+- concepts
+- claims
+- sources
+- themes
 
 Potential value:
-- clearer traceability,
-- better synthesis,
-- easier audit of claims and evidence.
+- clearer traceability
+- better synthesis
+- easier audit of claims and evidence
 
 ## 4. AI context aggregation
 
 You have:
-- tasks,
-- docs,
-- source files,
-- implementation notes,
-- prior decisions.
+- tasks
+- docs
+- source files
+- implementation notes
+- prior decisions
 
 An agent can:
-- read an anchor ID from text,
-- resolve the entities attached to that anchor,
-- follow entity links,
-- collect related anchors,
-- and assemble a more grounded context set.
+- resolve an entity
+- read the primary `ref`
+- inspect related anchors
+- extract local snippets around those anchors
+- collect a small file shortlist
+- assemble a more grounded context set
 
 Potential value:
-- better prompt composition,
-- less irrelevant context,
-- more repeatable context retrieval,
-- better grounded outputs.
+- better prompt composition
+- less irrelevant context
+- more repeatable context retrieval
+- better grounded outputs
 
 ## 5. Cross-repo or cross-folder linking
 
@@ -93,9 +94,9 @@ You have material split across multiple projects or folders.
 A shared entity graph can connect them even when the files live in different places.
 
 Potential value:
-- fewer silos,
-- easier navigation across boundaries,
-- stronger project-level understanding.
+- fewer silos
+- easier navigation across boundaries
+- stronger project-level understanding
 
 ## 6. Shared code locations
 

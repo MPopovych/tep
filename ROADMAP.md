@@ -3,22 +3,24 @@
 ## Phase 1: minimal useful CLI
 - initialize a local `tep` workspace
 - create entities
-- manually place versioned anchor tags in files
-- scan files for anchor tags
+- auto-declare entities from files
+- place and materialize anchor tags in files
 - store anchors in SQLite using the in-file anchor ID as identity
 - attach entities to anchors through a many-to-many association
-- create directional typed links between entities
-- support link prioritys for sorting and traversal
-- retrieve direct and nearby graph context
+- retrieve direct entity and anchor context
 
-## Phase 2: better query controls
+## Phase 2: agent-friendly retrieval
+- add `tep entity context <name-or-id>`
+- show primary `ref` first when present
+- include anchor snippets for nearby text
+- emit a deduplicated related file list
+- add better query controls
+- add cleaner JSON output for agents and tooling
+
+## Phase 3: better query controls and diagnostics
 - depth-limited graph traversal
 - relation filters
 - result limits
-- better sorting controls
-- cleaner JSON output for agents and tooling
-
-## Phase 3: richer diagnostics
 - stale-anchor detection
 - duplicate-anchor warnings
 - validation and repair commands
