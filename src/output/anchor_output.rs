@@ -1,5 +1,5 @@
 use crate::output::anchor_format::format_anchor_compact;
-use crate::service::anchor_service::{AnchorShowResult, AnchorSyncResult};
+use crate::service::anchor_service::{AnchorHealthResult, AnchorShowResult, AnchorSyncResult};
 
 pub fn format_anchor_sync_result(result: &AnchorSyncResult) -> String {
     format!(
@@ -10,6 +10,28 @@ pub fn format_anchor_sync_result(result: &AnchorSyncResult) -> String {
         result.anchors_dropped,
         result.relations_synced
     )
+}
+
+pub fn format_anchor_health_result(result: &AnchorHealthResult) -> String {
+    let mut out = format!(
+        "anchor health report\nfiles_scanned: {}\nanchors_seen: {}\nanchors_healthy: {}\nanchors_moved: {}\nanchors_missing: {}\nduplicate_anchor_ids: {}\nunknown_anchor_ids: {}\n",
+        result.files_scanned,
+        result.anchors_seen,
+        result.anchors_healthy,
+        result.anchors_moved,
+        result.anchors_missing,
+        result.duplicate_anchor_ids,
+        result.unknown_anchor_ids
+    );
+
+    if !result.issues.is_empty() {
+        out.push_str("issues:\n");
+        for issue in &result.issues {
+            out.push_str(&format!("- {}\n", issue));
+        }
+    }
+
+    out
 }
 
 pub fn format_anchor_relation_result(prefix: &str, anchor_id: i64, entity_target: &str) -> String {
@@ -47,6 +69,27 @@ mod tests {
         assert!(rendered.contains("anchors_created: 1"));
         assert!(rendered.contains("anchors_dropped: 1"));
         assert!(rendered.contains("relations_synced: 2"));
+    }
+
+    #[test]
+    fn formats_anchor_health_result() {
+        let rendered = format_anchor_health_result(&AnchorHealthResult {
+            files_scanned: 2,
+            anchors_seen: 3,
+            anchors_healthy: 1,
+            anchors_moved: 1,
+            anchors_missing: 1,
+            duplicate_anchor_ids: 1,
+            unknown_anchor_ids: 0,
+            issues: vec!["anchor 7 metadata drifted".into()],
+        });
+
+        assert!(rendered.contains("anchor health report"));
+        assert!(rendered.contains("files_scanned: 2"));
+        assert!(rendered.contains("anchors_moved: 1"));
+        assert!(rendered.contains("anchors_missing: 1"));
+        assert!(rendered.contains("duplicate_anchor_ids: 1"));
+        assert!(rendered.contains("issues:"));
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -19,6 +19,18 @@ pub struct AnchorSyncResult {
     pub anchors_seen: usize,
     pub anchors_dropped: usize,
     pub relations_synced: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct AnchorHealthResult {
+    pub files_scanned: usize,
+    pub anchors_seen: usize,
+    pub anchors_healthy: usize,
+    pub anchors_moved: usize,
+    pub anchors_missing: usize,
+    pub duplicate_anchor_ids: usize,
+    pub unknown_anchor_ids: usize,
+    pub issues: Vec<String>,
 }
 
 pub struct AnchorShowResult {
@@ -64,6 +76,44 @@ impl<'a> AnchorService<'a> {
         Ok(result)
     }
 
+    pub fn health_paths(&self, paths: &[String]) -> Result<AnchorHealthResult> {
+        let workspace_root = std::env::current_dir().context("failed to determine current directory")?;
+        let filter = TepIgnoreFilter::for_workspace_root(workspace_root);
+        let files = filter.collect_paths(paths)?;
+
+        let mut result = AnchorHealthResult {
+            files_scanned: 0,
+            anchors_seen: 0,
+            anchors_healthy: 0,
+            anchors_moved: 0,
+            anchors_missing: 0,
+            duplicate_anchor_ids: 0,
+            unknown_anchor_ids: 0,
+            issues: Vec::new(),
+        };
+
+        let mut seen_by_anchor_id: HashMap<i64, String> = HashMap::new();
+        let mut seen_materialized_ids = HashSet::new();
+
+        for file in files {
+            if self.inspect_file(&file, &mut result, &mut seen_by_anchor_id, &mut seen_materialized_ids)? {
+                result.files_scanned += 1;
+            }
+        }
+
+        for anchor in self.anchor_repo.list_all()? {
+            if !seen_materialized_ids.contains(&anchor.anchor_id) {
+                result.anchors_missing += 1;
+                result.issues.push(format!(
+                    "missing anchor {} recorded in db but not found in file {}",
+                    anchor.anchor_id, anchor.file_path
+                ));
+            }
+        }
+
+        Ok(result)
+    }
+
     pub fn show(&self, anchor_id: i64) -> Result<AnchorShowResult> {
         let anchor = self
             .anchor_repo
@@ -81,6 +131,103 @@ impl<'a> AnchorService<'a> {
     pub fn detach_entity(&self, anchor_id: i64, entity_target: &str) -> Result<()> {
         let entity = self.resolve_entity_reference(entity_target)?;
         self.anchor_entity_repo.detach(anchor_id, entity.entity_id)
+    }
+
+    fn inspect_file(
+        &self,
+        path: &Path,
+        result: &mut AnchorHealthResult,
+        seen_by_anchor_id: &mut HashMap<i64, String>,
+        seen_materialized_ids: &mut HashSet<i64>,
+    ) -> Result<bool> {
+        if !path.is_file() {
+            return Ok(false);
+        }
+
+        let original = fs::read_to_string(path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let parsed = parse_anchors(&original);
+        let file_path = path.to_string_lossy().to_string();
+
+        if parsed.is_empty() {
+            return Ok(false);
+        }
+
+        result.anchors_seen += parsed.len();
+
+        let mut local_ids = HashSet::new();
+        for anchor in parsed {
+            match anchor.kind() {
+                AnchorKind::Incomplete => {
+                    result.issues.push(format!(
+                        "incomplete anchor found in {} at line {}",
+                        file_path, anchor.line
+                    ));
+                }
+                AnchorKind::Materialized => {
+                    let anchor_id = anchor.anchor_id.expect("materialized anchor should have id");
+                    seen_materialized_ids.insert(anchor_id);
+
+                    if !local_ids.insert(anchor_id) {
+                        result.duplicate_anchor_ids += 1;
+                        result.issues.push(format!(
+                            "duplicate materialized anchor {} found in the same file {}",
+                            anchor_id, file_path
+                        ));
+                        continue;
+                    }
+
+                    if let Some(existing_file) = seen_by_anchor_id.get(&anchor_id) {
+                        if existing_file != &file_path {
+                            result.duplicate_anchor_ids += 1;
+                            result.issues.push(format!(
+                                "anchor {} appears in multiple files: {} and {}",
+                                anchor_id, existing_file, file_path
+                            ));
+                            continue;
+                        }
+                    } else {
+                        seen_by_anchor_id.insert(anchor_id, file_path.clone());
+                    }
+
+                    match self.anchor_repo.find_by_id(anchor_id)? {
+                        Some(stored) => {
+                            if stored.file_path != file_path
+                                || stored.line != Some(anchor.line)
+                                || stored.shift != Some(anchor.shift)
+                                || stored.offset != Some(anchor.start_offset as i64)
+                            {
+                                result.anchors_moved += 1;
+                                result.issues.push(format!(
+                                    "anchor {} metadata drifted in {} (db: {} {:?}:{:?} [{:?}], file: {} {}:{} [{}])",
+                                    anchor_id,
+                                    file_path,
+                                    stored.file_path,
+                                    stored.line,
+                                    stored.shift,
+                                    stored.offset,
+                                    file_path,
+                                    anchor.line,
+                                    anchor.shift,
+                                    anchor.start_offset
+                                ));
+                            } else {
+                                result.anchors_healthy += 1;
+                            }
+                        }
+                        None => {
+                            result.unknown_anchor_ids += 1;
+                            result.issues.push(format!(
+                                "materialized anchor {} was found in a file but does not exist in the database ({})",
+                                anchor_id, file_path
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(true)
     }
 
     fn sync_file(&self, path: &Path, result: &mut AnchorSyncResult) -> Result<bool> {
@@ -233,8 +380,7 @@ mod tests {
 
     fn setup_service() -> AnchorService<'static> {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql())
-            .expect("schema should apply");
+        db::ensure_schema(conn).expect("schema should apply");
         AnchorService::new(conn)
     }
 
@@ -255,6 +401,26 @@ mod tests {
         assert_eq!(result.anchors_seen, 1);
         assert_eq!(result.anchors_dropped, 0);
         assert_eq!(result.relations_synced, 1);
+    }
+
+    #[test]
+    fn health_reports_moved_and_missing_anchors() {
+        let service = setup_service();
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "hello [#!#tep:](student)").expect("should write file");
+        service.sync_paths(&[file.to_string_lossy().to_string()]).unwrap();
+
+        let updated = std::fs::read_to_string(&file).unwrap();
+        let moved = updated.replace("hello ", "hello world ");
+        std::fs::write(&file, moved).unwrap();
+
+        let health = service.health_paths(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(health.anchors_moved, 1);
+
+        std::fs::write(&file, "no anchors now\n").unwrap();
+        let health = service.health_paths(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(health.anchors_missing, 1);
     }
 
     #[test]

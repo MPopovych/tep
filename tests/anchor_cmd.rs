@@ -18,6 +18,49 @@ fn anchor_command_fails_cleanly_outside_workspace() {
 }
 
 #[test]
+fn health_command_reports_workspace_anchor_issues() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    let path = temp.path().join("note.txt");
+    std::fs::write(&path, "hello [#!#tep:](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["health"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchor health report"))
+        .stdout(predicate::str::contains("anchors_healthy: 1"));
+
+    let updated = std::fs::read_to_string(&path).expect("should read file");
+    std::fs::write(&path, updated.replace("hello ", "hello world "))
+        .expect("should rewrite file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["health"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_moved: 1"));
+}
+
+#[test]
 fn attach_command_fails_cleanly_outside_workspace() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
 

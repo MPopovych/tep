@@ -94,6 +94,17 @@ impl<'a> AnchorRepository<'a> {
         Ok(anchors)
     }
 
+    pub fn list_all(&self) -> Result<Vec<Anchor>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT anchor_id, version, file_path, line, shift, offset, created_at, updated_at
+             FROM anchors
+             ORDER BY anchor_id ASC",
+        )?;
+        let rows = stmt.query_map([], map_anchor_row)?;
+        let anchors = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(anchors)
+    }
+
     pub fn find_latest_for_entity_in_file(&self, entity_id: i64, file_path: &str) -> Result<Option<Anchor>> {
         let mut stmt = self.conn.prepare(
             "SELECT a.anchor_id, a.version, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at

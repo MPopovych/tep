@@ -15,6 +15,8 @@ pub enum Commands {
     Init,
     #[command(about = "Print the tep version")]
     Version,
+    #[command(about = "Audit workspace health")]
+    Health(HealthArgs),
     #[command(about = "Work with entities")]
     Entity {
         #[command(subcommand)]
@@ -45,6 +47,12 @@ pub enum Commands {
         entity_id: String,
         anchor_id: String,
     },
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct HealthArgs {
+    #[arg(default_value = ".")]
+    pub path: String,
 }
 
 #[derive(Debug, Subcommand)]
