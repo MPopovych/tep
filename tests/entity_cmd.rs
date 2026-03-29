@@ -51,11 +51,12 @@ fn entity_command_fails_cleanly_outside_workspace() {
 }
 
 #[test]
-fn entity_link_and_unlink_work() {
+fn entity_show_includes_incoming_and_outgoing_links() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
     Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "Student"]).assert().success();
     Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "Subject"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "Teacher"]).assert().success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -65,9 +66,17 @@ fn entity_link_and_unlink_work() {
             "student has subjects assigned to him each semester",
         ])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("linked"))
-        .stdout(predicate::str::contains("student has subjects assigned to him each semester"));
+        .success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args([
+            "entity", "link", "Teacher", "Student", "--relation",
+            "teacher mentors student",
+        ])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -75,20 +84,16 @@ fn entity_link_and_unlink_work() {
         .args(["entity", "show", "Student"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("links:"))
-        .stdout(predicate::str::contains("Subject"));
-
-    Command::cargo_bin("tep")
-        .unwrap()
-        .current_dir(temp.path())
-        .args(["entity", "unlink", "Student", "Subject"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("unlinked"));
+        .stdout(predicate::str::contains("outgoing links:"))
+        .stdout(predicate::str::contains("incoming links:"))
+        .stdout(predicate::str::contains("Subject"))
+        .stdout(predicate::str::contains("Teacher"))
+        .stdout(predicate::str::contains("student has subjects assigned to him each semester"))
+        .stdout(predicate::str::contains("teacher mentors student"));
 }
 
 #[test]
-fn entity_context_shows_ref_snippet_and_files() {
+fn entity_context_can_include_linked_entities() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("note.txt"), "hello\n[#!#tep:](student)\n")
         .expect("should write file");
@@ -118,22 +123,66 @@ fn entity_context_shows_ref_snippet_and_files() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["anchor", "auto", "./note.txt"])
+        .args([
+            "entity",
+            "create",
+            "subject",
+            "--ref",
+            "./docs/subject.md",
+            "--description",
+            "A course",
+        ])
         .assert()
         .success();
 
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["entity", "context", "student"])
+        .args([
+            "entity",
+            "create",
+            "teacher",
+            "--ref",
+            "./docs/teacher.md",
+            "--description",
+            "An instructor",
+        ])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "link", "student", "subject", "--relation", "student has subjects"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "link", "teacher", "student", "--relation", "teacher mentors student"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "context", "student", "--include-links"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("ref:"))
-        .stdout(predicate::str::contains("./docs/student.md"))
-        .stdout(predicate::str::contains("description: A learner"))
-        .stdout(predicate::str::contains("anchor "))
-        .stdout(predicate::str::contains("snippet:"))
-        .stdout(predicate::str::contains("[#!#1#tep:"))
-        .stdout(predicate::str::contains("files:"))
-        .stdout(predicate::str::contains("note.txt"));
+        .stdout(predicate::str::contains("outgoing linked entities:"))
+        .stdout(predicate::str::contains("incoming linked entities:"))
+        .stdout(predicate::str::contains("subject"))
+        .stdout(predicate::str::contains("teacher"))
+        .stdout(predicate::str::contains("./docs/subject.md"))
+        .stdout(predicate::str::contains("./docs/teacher.md"))
+        .stdout(predicate::str::contains("student has subjects"))
+        .stdout(predicate::str::contains("teacher mentors student"));
 }

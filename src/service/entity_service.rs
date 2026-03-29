@@ -16,6 +16,7 @@ pub struct EntityShowResult {
     pub entity: Entity,
     pub anchors: Vec<Anchor>,
     pub outgoing_links: Vec<(EntityLink, Entity)>,
+    pub incoming_links: Vec<(EntityLink, Entity)>,
 }
 
 pub struct EntityContextAnchor {
@@ -23,10 +24,17 @@ pub struct EntityContextAnchor {
     pub snippet: Option<String>,
 }
 
+pub struct LinkedEntityContext {
+    pub link: EntityLink,
+    pub entity: Entity,
+}
+
 pub struct EntityContextResult {
     pub entity: Entity,
     pub anchors: Vec<EntityContextAnchor>,
     pub files: Vec<String>,
+    pub outgoing_links: Vec<LinkedEntityContext>,
+    pub incoming_links: Vec<LinkedEntityContext>,
 }
 
 pub struct EntityAutoResult {
@@ -107,10 +115,11 @@ impl<'a> EntityService<'a> {
             .with_context(|| format!("entity not found: {target}"))?;
         let anchors = self.anchor_repo.list_for_entity(entity.entity_id)?;
         let outgoing_links = self.repo.list_outgoing_links(entity.entity_id)?;
-        Ok(EntityShowResult { entity, anchors, outgoing_links })
+        let incoming_links = self.repo.list_incoming_links(entity.entity_id)?;
+        Ok(EntityShowResult { entity, anchors, outgoing_links, incoming_links })
     }
 
-    pub fn context(&self, target: &str) -> Result<EntityContextResult> {
+    pub fn context(&self, target: &str, include_links: bool) -> Result<EntityContextResult> {
         let shown = self.show(target)?;
         let mut files = Vec::new();
         let mut anchors = Vec::new();
@@ -123,10 +132,32 @@ impl<'a> EntityService<'a> {
             anchors.push(EntityContextAnchor { anchor, snippet });
         }
 
+        let outgoing_links = if include_links {
+            shown
+                .outgoing_links
+                .into_iter()
+                .map(|(link, entity)| LinkedEntityContext { link, entity })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let incoming_links = if include_links {
+            shown
+                .incoming_links
+                .into_iter()
+                .map(|(link, entity)| LinkedEntityContext { link, entity })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         Ok(EntityContextResult {
             entity: shown.entity,
             anchors,
             files,
+            outgoing_links,
+            incoming_links,
         })
     }
 
@@ -312,14 +343,46 @@ mod tests {
     }
 
     #[test]
-    fn show_includes_outgoing_links() {
+    fn show_includes_incoming_and_outgoing_links() {
         let service = setup_service();
         service.create("Student".into(), None, None).unwrap();
         service.create("Subject".into(), None, None).unwrap();
+        service.create("Teacher".into(), None, None).unwrap();
         service.link("Student", "Subject", "student has subjects").unwrap();
+        service.link("Teacher", "Student", "teacher mentors student").unwrap();
         let result = service.show("Student").unwrap();
         assert_eq!(result.outgoing_links.len(), 1);
         assert_eq!(result.outgoing_links[0].1.name, "Subject");
+        assert_eq!(result.incoming_links.len(), 1);
+        assert_eq!(result.incoming_links[0].1.name, "Teacher");
+    }
+
+    #[test]
+    fn context_includes_linked_entities_when_requested() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let entity_repo = EntityRepository::new(conn);
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "before line\nanchor line\nafter line\n").unwrap();
+        let student = entity_repo.create(&NewEntity {
+            name: "student".into(),
+            r#ref: Some("./docs/student.md".into()),
+            description: Some("A learner".into()),
+        }).unwrap();
+        entity_repo.create(&NewEntity { name: "subject".into(), r#ref: Some("./docs/subject.md".into()), description: Some("A course".into()) }).unwrap();
+        entity_repo.create(&NewEntity { name: "teacher".into(), r#ref: Some("./docs/teacher.md".into()), description: Some("An instructor".into()) }).unwrap();
+        entity_repo.link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects").unwrap();
+        entity_repo.link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student").unwrap();
+        let anchor = service.anchor_repo.create(1, file.to_string_lossy().as_ref(), Some(2), Some(0), Some(12)).unwrap();
+        service.anchor_entity_repo.attach(anchor.anchor_id, student.entity_id).unwrap();
+
+        let result = service.context("student", true).unwrap();
+        assert_eq!(result.outgoing_links.len(), 1);
+        assert_eq!(result.outgoing_links[0].entity.name, "subject");
+        assert_eq!(result.incoming_links.len(), 1);
+        assert_eq!(result.incoming_links[0].entity.name, "teacher");
     }
 
     #[test]
@@ -339,11 +402,13 @@ mod tests {
         let anchor = service.anchor_repo.create(1, file.to_string_lossy().as_ref(), Some(2), Some(0), Some(12)).unwrap();
         service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
-        let result = service.context("student").unwrap();
+        let result = service.context("student", false).unwrap();
         assert_eq!(result.entity.r#ref.as_deref(), Some("./docs/student.md"));
         assert_eq!(result.files.len(), 1);
         assert!(result.files[0].contains("note.txt"));
         assert_eq!(result.anchors.len(), 1);
+        assert!(result.outgoing_links.is_empty());
+        assert!(result.incoming_links.is_empty());
         let snippet = result.anchors[0].snippet.as_deref().unwrap();
         assert!(snippet.contains("before line"));
         assert!(snippet.contains("anchor line"));

@@ -115,14 +115,31 @@ impl<'a> EntityRepository<'a> {
     }
 
     pub fn list_outgoing_links(&self, entity_id: i64) -> Result<Vec<(EntityLink, Entity)>> {
-        let mut stmt = self.conn.prepare(
+        self.list_joined_links(
             "SELECT l.from_entity_id, l.to_entity_id, l.relation, l.created_at, l.updated_at,
                     e.entity_id, e.name, e.ref, e.description, e.created_at, e.updated_at
              FROM entity_links l
              JOIN entities e ON e.entity_id = l.to_entity_id
              WHERE l.from_entity_id = ?1
              ORDER BY e.entity_id ASC",
-        )?;
+            entity_id,
+        )
+    }
+
+    pub fn list_incoming_links(&self, entity_id: i64) -> Result<Vec<(EntityLink, Entity)>> {
+        self.list_joined_links(
+            "SELECT l.from_entity_id, l.to_entity_id, l.relation, l.created_at, l.updated_at,
+                    e.entity_id, e.name, e.ref, e.description, e.created_at, e.updated_at
+             FROM entity_links l
+             JOIN entities e ON e.entity_id = l.from_entity_id
+             WHERE l.to_entity_id = ?1
+             ORDER BY e.entity_id ASC",
+            entity_id,
+        )
+    }
+
+    fn list_joined_links(&self, sql: &str, entity_id: i64) -> Result<Vec<(EntityLink, Entity)>> {
+        let mut stmt = self.conn.prepare(sql)?;
         let rows = stmt.query_map(params![entity_id], |row| {
             let link = EntityLink {
                 from_entity_id: row.get(0)?,
@@ -265,6 +282,22 @@ mod tests {
         let outgoing = repo.list_outgoing_links(student.entity_id).unwrap();
         assert_eq!(outgoing.len(), 1);
         assert_eq!(outgoing[0].1.name, "Subject");
+    }
+
+    #[test]
+    fn list_incoming_links_returns_sources() {
+        let repo = setup_repo();
+        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
+        repo.create(&NewEntity { name: "Subject".into(), r#ref: None, description: None }).unwrap();
+        repo.link(
+            &EntityLookup::Name("Student".into()),
+            &EntityLookup::Name("Subject".into()),
+            "student has subjects assigned",
+        ).unwrap();
+        let subject = repo.find(&EntityLookup::Name("Subject".into())).unwrap().unwrap();
+        let incoming = repo.list_incoming_links(subject.entity_id).unwrap();
+        assert_eq!(incoming.len(), 1);
+        assert_eq!(incoming[0].1.name, "Student");
     }
 
     #[test]

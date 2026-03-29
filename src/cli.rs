@@ -111,6 +111,8 @@ pub struct EntityContextArgs {
     pub target: String,
     #[arg(long)]
     pub files_only: bool,
+    #[arg(long)]
+    pub include_links: bool,
 }
 
 #[derive(Debug, Args, Clone)]

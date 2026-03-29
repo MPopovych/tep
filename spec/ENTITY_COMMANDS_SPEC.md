@@ -98,12 +98,15 @@ Behavior:
 - accept either unique name or entity id
 - print compact entity data
 - include related anchors
-- later should include `description` and outgoing links when present
+- include `description` when present
+- include outgoing links when present
+- include incoming links when present
 
 ### Context
 ```bash
 tep entity context "student"
 tep entity context "student" --files-only
+tep entity context "student" --include-links
 ```
 
 Behavior:
@@ -111,7 +114,10 @@ Behavior:
 - include `ref`
 - include related anchors and snippets by default
 - include deduplicated file list
-- `--files-only` returns only the entity header, `ref`, and file list
+- `--files-only` returns only the entity header, `ref`, and file list by default
+- `--include-links` adds linked entities to the retrieval bundle
+- when links are included, include both outgoing and incoming linked entities
+- linked entity blocks should include enough identifying context to read next (`name`, optional `ref`, optional `description`, relation)
 
 ### Edit
 ```bash
