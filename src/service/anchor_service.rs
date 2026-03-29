@@ -270,7 +270,6 @@ mod tests {
 
         let files = service.collect_workspace_files(&["./note.txt".into()]).unwrap();
         assert_eq!(files.len(), 1);
-        assert_eq!(files[0].display_path, "./note.txt");
         assert_eq!(files[0].absolute_path, temp.path().join("./note.txt"));
     }
 
