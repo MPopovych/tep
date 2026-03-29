@@ -1,6 +1,6 @@
 ---
 name: tep-context
-description: Use the local `tep` CLI as a context-routing and graph-maintenance layer when working in a repository that has a `tep` workspace. Trigger when reviewing a codebase or docs that are already tagged with `tep`, when deciding what files to read next, when an entity or anchor name appears in a user task, when an agent should assemble a grounded context bundle from `tep entity show`, `tep entity context`, or `tep anchor show`, or when the task involves adding or maintaining `tep` coverage with `entity auto`, `anchor auto`, doc seeding, or `#tepignore` example lines.
+description: Use the local `tep` CLI as a context-routing and graph-maintenance layer only when working in a repository or document set that already has a `tep` workspace or when the user explicitly asks to add or maintain `tep` coverage. Trigger for tasks that involve `tep entity context`, `tep entity show`, `tep anchor show`, `tep entity auto`, `tep anchor auto`, doc seeding with `tep`, or handling `#tepignore` example lines. Do not use for generic repo exploration in projects that are not using `tep`.
 ---
 
 Use `tep` to reduce blind repo reading and to keep the graph useful over time. Prefer the smallest grounded retrieval pass first, and update graph coverage intentionally when the task calls for it.
