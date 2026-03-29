@@ -93,6 +93,64 @@ fn entity_show_includes_incoming_and_outgoing_links() {
 }
 
 #[test]
+fn entity_context_includes_all_link_directions_by_default() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "hello\n[#!#tep:](student)\n")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    for args in [
+        vec!["entity", "create", "student", "--ref", "./docs/student.md", "--description", "A learner"],
+        vec!["entity", "create", "subject", "--ref", "./docs/subject.md", "--description", "A course"],
+        vec!["entity", "create", "teacher", "--ref", "./docs/teacher.md", "--description", "An instructor"],
+    ] {
+        Command::cargo_bin("tep")
+            .expect("binary should build")
+            .current_dir(temp.path())
+            .args(args)
+            .assert()
+            .success();
+    }
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success();
+
+    for args in [
+        vec!["entity", "link", "student", "subject", "--relation", "student has subjects"],
+        vec!["entity", "link", "teacher", "student", "--relation", "teacher mentors student"],
+    ] {
+        Command::cargo_bin("tep")
+            .unwrap()
+            .current_dir(temp.path())
+            .args(args)
+            .assert()
+            .success();
+    }
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "context", "student"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("linked entities:"))
+        .stdout(predicate::str::contains("edge: (1->2)[1] student has subjects"))
+        .stdout(predicate::str::contains("edge: (3->1)[1] teacher mentors student"))
+        .stdout(predicate::str::contains("./docs/subject.md"))
+        .stdout(predicate::str::contains("./docs/teacher.md"));
+}
+
+#[test]
 fn entity_context_can_expand_link_depth() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("note.txt"), "hello\n[#!#tep:](student)\n")
@@ -145,17 +203,16 @@ fn entity_context_can_expand_link_depth() {
     Command::cargo_bin("tep")
         .expect("binary should build")
         .current_dir(temp.path())
-        .args(["entity", "context", "student", "--include-links", "--link-depth", "2"])
+        .args(["entity", "context", "student", "--link-depth", "2"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("outgoing linked entities:"))
-        .stdout(predicate::str::contains("incoming linked entities:"))
+        .stdout(predicate::str::contains("linked entities:"))
         .stdout(predicate::str::contains("subject"))
         .stdout(predicate::str::contains("semester"))
         .stdout(predicate::str::contains("teacher"))
         .stdout(predicate::str::contains("department"))
-        .stdout(predicate::str::contains("depth: 1"))
-        .stdout(predicate::str::contains("depth: 2"))
-        .stdout(predicate::str::contains("./docs/semester.md"))
+        .stdout(predicate::str::contains("edge: (1->2)[1] student has subjects"))
+        .stdout(predicate::str::contains("edge: (3->1)[1] semester contains student records").or(predicate::str::contains("edge: (4->1)[1] teacher mentors student")))
+        .stdout(predicate::str::contains("[2]"))
         .stdout(predicate::str::contains("./docs/department.md"));
 }

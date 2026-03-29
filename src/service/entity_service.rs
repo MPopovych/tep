@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::Path;
 
@@ -35,8 +35,7 @@ pub struct EntityContextResult {
     pub entity: Entity,
     pub anchors: Vec<EntityContextAnchor>,
     pub files: Vec<String>,
-    pub outgoing_links: Vec<LinkedEntityContext>,
-    pub incoming_links: Vec<LinkedEntityContext>,
+    pub linked_entities: Vec<LinkedEntityContext>,
 }
 
 pub struct EntityAutoResult {
@@ -121,7 +120,7 @@ impl<'a> EntityService<'a> {
         Ok(EntityShowResult { entity, anchors, outgoing_links, incoming_links })
     }
 
-    pub fn context(&self, target: &str, include_links: bool, link_depth: usize) -> Result<EntityContextResult> {
+    pub fn context(&self, target: &str, link_depth: usize) -> Result<EntityContextResult> {
         let shown = self.show(target)?;
         let root_entity = shown.entity.clone();
         let mut files = Vec::new();
@@ -135,18 +134,17 @@ impl<'a> EntityService<'a> {
             anchors.push(EntityContextAnchor { anchor, snippet });
         }
 
-        let (outgoing_links, incoming_links) = if include_links && link_depth > 0 {
+        let linked_entities = if link_depth > 0 {
             self.collect_link_context(root_entity.entity_id, link_depth)?
         } else {
-            (Vec::new(), Vec::new())
+            Vec::new()
         };
 
         Ok(EntityContextResult {
             entity: root_entity,
             anchors,
             files,
-            outgoing_links,
-            incoming_links,
+            linked_entities,
         })
     }
 
@@ -197,53 +195,74 @@ impl<'a> EntityService<'a> {
         self.repo.list()
     }
 
-    fn collect_link_context(&self, root_entity_id: i64, link_depth: usize) -> Result<(Vec<LinkedEntityContext>, Vec<LinkedEntityContext>)> {
-        let mut outgoing = Vec::new();
-        let mut incoming = Vec::new();
-        let mut queued_outgoing = HashSet::from([root_entity_id]);
-        let mut queued_incoming = HashSet::from([root_entity_id]);
-        let mut seen_outgoing_targets = HashSet::new();
-        let mut seen_incoming_sources = HashSet::new();
-        let mut outgoing_queue = VecDeque::from([(root_entity_id, 0usize)]);
-        let mut incoming_queue = VecDeque::from([(root_entity_id, 0usize)]);
+    fn collect_link_context(&self, root_entity_id: i64, link_depth: usize) -> Result<Vec<LinkedEntityContext>> {
+        let root_entity = self
+            .repo
+            .find(&crate::entity::EntityLookup::Id(root_entity_id))?
+            .context("root entity not found")?;
 
-        while let Some((entity_id, depth)) = outgoing_queue.pop_front() {
+        let mut discovered: HashMap<i64, LinkedEntityContext> = HashMap::new();
+        let mut queued = HashSet::from([root_entity_id]);
+        let mut queue = VecDeque::from([(root_entity_id, 0usize)]);
+
+        while let Some((entity_id, depth)) = queue.pop_front() {
             if depth >= link_depth {
                 continue;
             }
+
             for (link, entity) in self.repo.list_outgoing_links(entity_id)? {
-                if seen_outgoing_targets.insert(entity.entity_id) {
-                    outgoing.push(LinkedEntityContext {
-                        link: link.clone(),
-                        entity: entity.clone(),
-                        depth: depth + 1,
-                    });
-                }
-                if queued_outgoing.insert(entity.entity_id) {
-                    outgoing_queue.push_back((entity.entity_id, depth + 1));
+                self.record_link_context(&mut discovered, &root_entity, link, entity.clone(), depth + 1);
+                if queued.insert(entity.entity_id) {
+                    queue.push_back((entity.entity_id, depth + 1));
                 }
             }
-        }
 
-        while let Some((entity_id, depth)) = incoming_queue.pop_front() {
-            if depth >= link_depth {
-                continue;
-            }
             for (link, entity) in self.repo.list_incoming_links(entity_id)? {
-                if seen_incoming_sources.insert(entity.entity_id) {
-                    incoming.push(LinkedEntityContext {
-                        link: link.clone(),
-                        entity: entity.clone(),
-                        depth: depth + 1,
-                    });
-                }
-                if queued_incoming.insert(entity.entity_id) {
-                    incoming_queue.push_back((entity.entity_id, depth + 1));
+                self.record_link_context(&mut discovered, &root_entity, link, entity.clone(), depth + 1);
+                if queued.insert(entity.entity_id) {
+                    queue.push_back((entity.entity_id, depth + 1));
                 }
             }
         }
 
-        Ok((outgoing, incoming))
+        let mut linked_entities = discovered.into_values().collect::<Vec<_>>();
+        linked_entities.sort_by_key(|item| (item.depth, item.entity.entity_id));
+        Ok(linked_entities)
+    }
+
+    fn record_link_context(
+        &self,
+        discovered: &mut HashMap<i64, LinkedEntityContext>,
+        root_entity: &Entity,
+        link: EntityLink,
+        related: Entity,
+        depth: usize,
+    ) {
+        if related.entity_id == root_entity.entity_id {
+            return;
+        }
+
+        let context = discovered.entry(related.entity_id).or_insert_with(|| LinkedEntityContext {
+            link: link.clone(),
+            entity: related.clone(),
+            depth,
+        });
+
+        if depth < context.depth {
+            context.link = link;
+            context.entity = related;
+            context.depth = depth;
+            return;
+        }
+
+        if depth == context.depth {
+            let current_edge = format!("{}->{}", context.link.from_entity_id, context.link.to_entity_id);
+            let candidate_edge = format!("{}->{}", link.from_entity_id, link.to_entity_id);
+            if candidate_edge < current_edge {
+                context.link = link;
+                context.entity = related;
+            }
+        }
     }
 
     fn auto_file(&self, path: &Path, result: &mut EntityAutoResult) -> Result<bool> {
@@ -396,7 +415,26 @@ mod tests {
     }
 
     #[test]
-    fn context_traverses_link_depth_and_dedupes_cycles() {
+    fn context_merges_links_and_preserves_direction_in_edge() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let entity_repo = EntityRepository::new(conn);
+
+        entity_repo.create(&NewEntity { name: "student".into(), r#ref: Some("./docs/student.md".into()), description: Some("A learner".into()) }).unwrap();
+        entity_repo.create(&NewEntity { name: "subject".into(), r#ref: Some("./docs/subject.md".into()), description: Some("A course".into()) }).unwrap();
+        entity_repo.create(&NewEntity { name: "teacher".into(), r#ref: Some("./docs/teacher.md".into()), description: Some("An instructor".into()) }).unwrap();
+        entity_repo.link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects").unwrap();
+        entity_repo.link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student").unwrap();
+
+        let result = service.context("student", 1).unwrap();
+        assert_eq!(result.linked_entities.len(), 2);
+        assert!(result.linked_entities.iter().any(|item| item.entity.name == "subject" && item.link.from_entity_id != item.link.to_entity_id && item.depth == 1));
+        assert!(result.linked_entities.iter().any(|item| item.entity.name == "teacher" && item.link.from_entity_id != item.link.to_entity_id && item.depth == 1));
+    }
+
+    #[test]
+    fn context_traverses_link_depth_and_dedupes_entities() {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
         conn.execute_batch(db::schema_sql()).unwrap();
         let service = EntityService::new(conn);
@@ -414,21 +452,17 @@ mod tests {
         entity_repo.link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student").unwrap();
         entity_repo.link(&parse_lookup("department"), &parse_lookup("teacher"), "department employs teacher").unwrap();
 
-        let result = service.context("student", true, 2).unwrap();
-        assert_eq!(result.outgoing_links.len(), 2);
-        assert!(result.outgoing_links.iter().any(|item| item.entity.name == "subject" && item.depth == 1));
-        assert!(result.outgoing_links.iter().any(|item| item.entity.name == "semester" && item.depth == 2));
-        assert_eq!(result.incoming_links.len(), 4);
-        assert!(result.incoming_links.iter().any(|item| item.entity.name == "semester" && item.depth == 1));
-        assert!(result.incoming_links.iter().any(|item| item.entity.name == "teacher" && item.depth == 1));
-        assert!(result.incoming_links.iter().any(|item| item.entity.name == "subject" && item.depth == 2));
-        assert!(result.incoming_links.iter().any(|item| item.entity.name == "department" && item.depth == 2));
-        assert!(!result.outgoing_links.iter().any(|item| item.entity.name == "student"));
-        assert!(!result.incoming_links.iter().any(|item| item.entity.name == "student"));
+        let result = service.context("student", 2).unwrap();
+        assert_eq!(result.linked_entities.len(), 4);
+        assert!(result.linked_entities.iter().any(|item| item.entity.name == "subject" && item.depth == 1));
+        assert!(result.linked_entities.iter().any(|item| item.entity.name == "semester" && item.depth == 1));
+        assert!(result.linked_entities.iter().any(|item| item.entity.name == "teacher" && item.depth == 1));
+        assert!(result.linked_entities.iter().any(|item| item.entity.name == "department" && item.depth == 2));
+        assert!(!result.linked_entities.iter().any(|item| item.entity.name == "student"));
     }
 
     #[test]
-    fn context_includes_ref_files_and_snippet() {
+    fn context_includes_ref_files_snippet_and_links_by_default() {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
         conn.execute_batch(db::schema_sql()).unwrap();
         let service = EntityService::new(conn);
@@ -441,16 +475,21 @@ mod tests {
             r#ref: Some("./docs/student.md".into()),
             description: Some("A learner".into()),
         }).unwrap();
+        entity_repo.create(&NewEntity {
+            name: "subject".into(),
+            r#ref: Some("./docs/subject.md".into()),
+            description: Some("A course".into()),
+        }).unwrap();
+        entity_repo.link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects").unwrap();
         let anchor = service.anchor_repo.create(1, file.to_string_lossy().as_ref(), Some(2), Some(0), Some(12)).unwrap();
         service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
-        let result = service.context("student", false, 1).unwrap();
+        let result = service.context("student", 1).unwrap();
         assert_eq!(result.entity.r#ref.as_deref(), Some("./docs/student.md"));
         assert_eq!(result.files.len(), 1);
         assert!(result.files[0].contains("note.txt"));
         assert_eq!(result.anchors.len(), 1);
-        assert!(result.outgoing_links.is_empty());
-        assert!(result.incoming_links.is_empty());
+        assert_eq!(result.linked_entities.len(), 1);
         let snippet = result.anchors[0].snippet.as_deref().unwrap();
         assert!(snippet.contains("before line"));
         assert!(snippet.contains("anchor line"));

@@ -34,8 +34,8 @@ pub fn format_entity_show(result: &EntityShowResult) -> String {
     for anchor in &result.anchors {
         out.push_str(&format_anchor_compact(anchor));
     }
-    append_link_block(&mut out, "outgoing links:", &result.outgoing_links, true);
-    append_link_block(&mut out, "incoming links:", &result.incoming_links, false);
+    append_show_link_block(&mut out, "outgoing links:", &result.outgoing_links, true);
+    append_show_link_block(&mut out, "incoming links:", &result.incoming_links, false);
     out
 }
 
@@ -61,8 +61,7 @@ pub fn format_entity_context(result: &EntityContextResult) -> String {
     }
 
     append_files_block(&mut out, &result.files);
-    append_context_link_block(&mut out, "outgoing linked entities:", &result.outgoing_links, true);
-    append_context_link_block(&mut out, "incoming linked entities:", &result.incoming_links, false);
+    append_context_link_block(&mut out, &result.linked_entities);
     out
 }
 
@@ -75,8 +74,7 @@ pub fn format_entity_context_files_only(result: &EntityContextResult) -> String 
         out.push_str(&format!("description: {}\n", description));
     }
     append_files_block(&mut out, &result.files);
-    append_context_link_block(&mut out, "outgoing linked entities:", &result.outgoing_links, true);
-    append_context_link_block(&mut out, "incoming linked entities:", &result.incoming_links, false);
+    append_context_link_block(&mut out, &result.linked_entities);
     out
 }
 
@@ -124,7 +122,7 @@ fn append_files_block(out: &mut String, files: &[String]) {
     }
 }
 
-fn append_link_block(out: &mut String, header: &str, links: &[(crate::entity::EntityLink, Entity)], outgoing: bool) {
+fn append_show_link_block(out: &mut String, header: &str, links: &[(crate::entity::EntityLink, Entity)], outgoing: bool) {
     if !links.is_empty() {
         out.push_str(header);
         out.push('\n');
@@ -135,21 +133,24 @@ fn append_link_block(out: &mut String, header: &str, links: &[(crate::entity::En
     }
 }
 
-fn append_context_link_block(out: &mut String, header: &str, links: &[LinkedEntityContext], outgoing: bool) {
+fn append_context_link_block(out: &mut String, links: &[LinkedEntityContext]) {
     if !links.is_empty() {
-        out.push_str(header);
-        out.push('\n');
+        out.push_str("linked entities:\n");
         for item in links {
-            let arrow = if outgoing { "->" } else { "<-" };
-            out.push_str(&format!("{} {} ({})\n", arrow, item.entity.entity_id, item.entity.name));
-            out.push_str(&format!("   depth: {}\n", item.depth));
+            out.push_str(&format!("- {} ({})\n", item.entity.entity_id, item.entity.name));
             if let Some(entity_ref) = &item.entity.r#ref {
-                out.push_str(&format!("   ref: {}\n", entity_ref));
+                out.push_str(&format!("  ref: {}\n", entity_ref));
             }
             if let Some(description) = &item.entity.description {
-                out.push_str(&format!("   description: {}\n", description));
+                out.push_str(&format!("  description: {}\n", description));
             }
-            out.push_str(&format!("   relation: {}\n", item.link.relation));
+            out.push_str(&format!(
+                "  edge: ({}->{})[{}] {}\n",
+                item.link.from_entity_id,
+                item.link.to_entity_id,
+                item.depth,
+                item.link.relation
+            ));
         }
     }
 }
@@ -257,12 +258,12 @@ mod tests {
     }
 
     #[test]
-    fn formats_context_links_with_depth() {
+    fn formats_context_links_with_edge_notation() {
         let rendered = format_entity_context(&EntityContextResult {
             entity: sample_entity(),
             anchors: vec![],
             files: vec!["./docs/student.md".into()],
-            outgoing_links: vec![LinkedEntityContext {
+            linked_entities: vec![LinkedEntityContext {
                 link: crate::entity::EntityLink {
                     from_entity_id: 42,
                     to_entity_id: 10,
@@ -280,10 +281,9 @@ mod tests {
                 },
                 depth: 2,
             }],
-            incoming_links: vec![],
         });
-        assert!(rendered.contains("outgoing linked entities:"));
-        assert!(rendered.contains("depth: 2"));
+        assert!(rendered.contains("linked entities:"));
+        assert!(rendered.contains("edge: (42->10)[2] student has subjects"));
         assert!(rendered.contains("./docs/subject.md"));
     }
 }

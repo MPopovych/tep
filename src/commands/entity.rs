@@ -46,7 +46,7 @@ fn show(service: &EntityService<'_>, target: &str) -> anyhow::Result<()> {
 }
 
 fn context(service: &EntityService<'_>, args: EntityContextArgs) -> anyhow::Result<()> {
-    let result = service.context(&args.target, args.include_links, args.link_depth)?;
+    let result = service.context(&args.target, args.link_depth)?;
     if args.files_only {
         print!("{}", format_entity_context_files_only(&result));
     } else {
