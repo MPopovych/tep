@@ -20,6 +20,7 @@ Current implemented areas:
 - assemble retrieval-oriented entity context bundles
 - audit anchor health across a workspace
 - auto-fix anchor metadata/state from the workspace root
+- index canonical source code alongside docs
 
 ## Workspace model
 
@@ -102,6 +103,44 @@ Meaning:
 - `tep entity auto` ensures the entity exists
 - if the entity has no `ref`, the declaring file path is stored in `ref`
 - a backing anchor relation is created for that declaration location
+
+## Ignore controls
+
+### `#tepignore`
+Ignores only the current line.
+
+Use it for:
+- one-off example lines
+- regex/test strings that look like markers
+- isolated fake literals in source or docs
+
+Example:
+```rust
+let example = "[#!#tep:](student)"; // #tepignore
+```
+
+### `#tepignoreafter`
+Ignores the rest of the file after the first occurrence.
+
+Use it for:
+- test modules
+- large fixture tails
+- intentionally broken example sections
+
+Example:
+```rust
+// real implementation above
+
+// #tepignoreafter
+#[cfg(test)]
+mod tests {
+    ...
+}
+```
+
+Practical rule:
+- prefer `#tepignore` when a few lines are noisy
+- use `#tepignoreafter` when an entire tail section is fixture/test territory
 
 ## Current command surface
 
@@ -203,28 +242,17 @@ Anchor identity is the anchor ID.
 - `line`, `shift`, and `offset` are refreshable metadata only
 - `shift` and `offset` are byte-oriented in practice
 - current codebase internals now centralize shared path/time utilities and shared output rendering helpers
+- current source indexing uses hidden code anchors/comments plus targeted ignore controls to keep tests/fixtures out of the canonical graph
 
 ## Repo self-check
 
-The `tep` repo itself currently has a clean canonical docs graph.
+The `tep` repo itself currently has a clean canonical docs+code graph.
 At the time of this update, `tep health` in the repo root reports:
-- `anchors_healthy: 18`
+- `anchors_healthy: 25`
 - `anchors_moved: 0`
 - `anchors_missing: 0`
 - `duplicate_anchor_ids: 0`
 - `unknown_anchor_ids: 0`
-
-And the canonical entity set in the repo includes:
-- `tep`
-- `workspace`
-- `entity`
-- `anchor`
-- `anchor_entity_relation`
-- `link`
-- `cli`
-- `workspace.discovery`
-- `entity.declaration`
-- `anchor.tag`
 
 ## Documentation map
 

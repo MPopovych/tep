@@ -59,6 +59,11 @@ If a line contains:
 
 anchors on that line are ignored.
 
+Use this for:
+- isolated example lines
+- one-off fake marker literals
+- regex/test/example strings that only affect a single line
+
 ### File-tail ignore
 If a file contains:
 
@@ -68,10 +73,17 @@ If a file contains:
 
 then everything after the first occurrence of that marker is ignored by anchor parsing and auto-indexing.
 
-This is useful for:
+Use this for:
 - fixture files
 - intentionally broken examples
 - unit-test data stored below a cutoff marker
+- `#[cfg(test)]` modules in source files when the whole tail is non-canonical graph material
+
+### Practical rule
+
+Prefer:
+- `#tepignore` for a few noisy lines
+- `#tepignoreafter` for a large fixture/test tail
 
 ## Core rules
 
