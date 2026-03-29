@@ -2,11 +2,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension, params};
 
 pub const DEFAULT_TEP_DIR: &str = ".tep";
 pub const DEFAULT_DB_FILE: &str = ".tep/tep.db";
 pub const DEFAULT_IGNORE_FILE: &str = ".tep_ignore";
+pub const CURRENT_SCHEMA_VERSION: i64 = 2;
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePaths {
@@ -70,7 +71,28 @@ pub fn open_workspace_db_in(root: &Path) -> anyhow::Result<Connection> {
         .with_context(|| format!("failed to open database at {}", paths.db_file.display()))
 }
 
+pub fn ensure_schema(conn: &Connection) -> Result<()> {
+    conn.execute_batch(base_schema_sql())
+        .context("failed to apply database schema")?;
+
+    let current_version = schema_version(conn)?;
+    let detected_version = detect_schema_version(conn)?;
+    let mut version = current_version.max(detected_version);
+
+    if version < 2 {
+        migrate_to_v2(conn)?;
+        version = 2;
+    }
+
+    set_schema_version(conn, version.max(CURRENT_SCHEMA_VERSION))?;
+    Ok(())
+}
+
 pub fn schema_sql() -> &'static str {
+    base_schema_sql()
+}
+
+fn base_schema_sql() -> &'static str {
     r#"
     PRAGMA foreign_keys = ON;
 
@@ -121,6 +143,80 @@ pub fn schema_sql() -> &'static str {
     "#
 }
 
+fn migrate_to_v2(conn: &Connection) -> Result<()> {
+    if !column_exists(conn, "entities", "description")? {
+        conn.execute("ALTER TABLE entities ADD COLUMN description TEXT", [])
+            .context("failed to add description column to entities")?;
+    }
+
+    if !table_exists(conn, "entity_links")? {
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS entity_links (
+                from_entity_id INTEGER NOT NULL,
+                to_entity_id INTEGER NOT NULL,
+                relation TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (from_entity_id, to_entity_id),
+                FOREIGN KEY (from_entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE,
+                FOREIGN KEY (to_entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_entity_links_to_entity ON entity_links(to_entity_id);
+            "#,
+        )
+        .context("failed to create entity_links table")?;
+    }
+
+    Ok(())
+}
+
+fn detect_schema_version(conn: &Connection) -> Result<i64> {
+    if !table_exists(conn, "entities")? {
+        return Ok(0);
+    }
+    if column_exists(conn, "entities", "description")? {
+        return Ok(2);
+    }
+    Ok(1)
+}
+
+fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
+    let exists = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
+            params![table],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    Ok(exists)
+}
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let pragma = format!("PRAGMA table_info({})", table);
+    let mut stmt = conn.prepare(&pragma)?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn schema_version(conn: &Connection) -> Result<i64> {
+    let version = conn.query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))?;
+    Ok(version)
+}
+
+fn set_schema_version(conn: &Connection, version: i64) -> Result<()> {
+    conn.pragma_update(None, "user_version", version)
+        .context("failed to update schema version")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,8 +224,30 @@ mod tests {
     #[test]
     fn schema_applies_to_in_memory_db() {
         let conn = open_in_memory().expect("in-memory db should open");
-        conn.execute_batch(schema_sql())
-            .expect("schema should apply cleanly");
+        ensure_schema(&conn).expect("schema should apply cleanly");
+        assert_eq!(schema_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn migrates_v1_entities_table_to_v2() {
+        let conn = open_in_memory().expect("in-memory db should open");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE entities (
+                entity_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                ref TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            "#,
+        )
+        .unwrap();
+
+        ensure_schema(&conn).expect("migration should succeed");
+        assert!(column_exists(&conn, "entities", "description").unwrap());
+        assert!(table_exists(&conn, "entity_links").unwrap());
+        assert_eq!(schema_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
     }
 
     #[test]

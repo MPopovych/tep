@@ -2,13 +2,14 @@ use std::fs;
 
 use anyhow::{Context, Result};
 
-use crate::db::{self, DEFAULT_DB_FILE, DEFAULT_IGNORE_FILE, DEFAULT_TEP_DIR};
+use crate::db::{self, CURRENT_SCHEMA_VERSION, DEFAULT_DB_FILE, DEFAULT_IGNORE_FILE, DEFAULT_TEP_DIR};
 
 #[derive(Debug, Clone)]
 pub struct InitResult {
     pub tep_dir: String,
     pub db_file: String,
     pub ignore_file: String,
+    pub schema_version: i64,
 }
 
 pub struct WorkspaceService;
@@ -27,13 +28,14 @@ impl WorkspaceService {
         }
 
         let conn = db::open_workspace_db_in(&cwd)?;
-        conn.execute_batch(db::schema_sql())
+        db::ensure_schema(&conn)
             .context("failed to apply database schema")?;
 
         Ok(InitResult {
             tep_dir: DEFAULT_TEP_DIR.into(),
             db_file: DEFAULT_DB_FILE.into(),
             ignore_file: DEFAULT_IGNORE_FILE.into(),
+            schema_version: CURRENT_SCHEMA_VERSION,
         })
     }
 }
@@ -56,6 +58,7 @@ mod tests {
         let result = WorkspaceService::init().expect("init should succeed");
 
         assert_eq!(result.tep_dir, ".tep");
+        assert_eq!(result.schema_version, CURRENT_SCHEMA_VERSION);
         assert!(temp.path().join(".tep").exists());
         assert!(temp.path().join(".tep/tep.db").exists());
         assert!(temp.path().join(".tep_ignore").exists());
