@@ -19,16 +19,21 @@ impl TepIgnoreFilter {
 
         for input in inputs {
             let path = self.resolve_input(input);
-            if path.is_file() {
-                if self.is_special_internal_file(&path) {
+            let absolute_path = if path.is_absolute() {
+                path.clone()
+            } else {
+                self.workspace_root.join(&path)
+            };
+            if absolute_path.is_file() {
+                if self.is_special_internal_file(&absolute_path) {
                     continue;
                 }
-                out.push(path);
+                out.push(self.normalize_path(&absolute_path));
                 continue;
             }
 
-            if path.is_dir() {
-                let mut builder = WalkBuilder::new(&path);
+            if absolute_path.is_dir() {
+                let mut builder = WalkBuilder::new(&absolute_path);
                 builder.hidden(false);
                 builder.git_ignore(false);
                 builder.git_exclude(false);
@@ -40,7 +45,7 @@ impl TepIgnoreFilter {
                     let entry = entry?;
                     let entry_path = entry.path();
                     if entry_path.is_file() && !self.is_special_internal_file(entry_path) {
-                        out.push(entry_path.to_path_buf());
+                        out.push(self.normalize_path(entry_path));
                     }
                 }
             }
@@ -56,13 +61,40 @@ impl TepIgnoreFilter {
         if path.is_absolute() {
             path.to_path_buf()
         } else {
-            self.workspace_root.join(path)
+            self.normalize_path(path)
+        }
+    }
+
+    fn normalize_path(&self, path: &Path) -> PathBuf {
+        let cleaned = normalize_lexically(path);
+        if let Ok(relative) = cleaned.strip_prefix(&self.workspace_root) {
+            if relative.as_os_str().is_empty() {
+                self.workspace_root.clone()
+            } else {
+                PathBuf::from(".").join(relative)
+            }
+        } else {
+            cleaned
         }
     }
 
     fn is_special_internal_file(&self, path: &Path) -> bool {
         matches!(path.file_name().and_then(|s| s.to_str()), Some(".tep_ignore"))
     }
+}
+
+fn normalize_lexically(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -82,6 +114,22 @@ mod tests {
             .expect("collection should succeed");
 
         assert_eq!(paths.len(), 2);
+        assert!(paths.iter().all(|p| p.starts_with(".")));
+    }
+
+    #[test]
+    fn normalizes_relative_input_to_workspace_relative_path() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        fs::write(temp.path().join("a.txt"), "x").expect("should write file");
+
+        let previous = std::env::current_dir().expect("current dir should exist");
+        std::env::set_current_dir(temp.path()).expect("should change current dir");
+
+        let filter = TepIgnoreFilter::for_workspace_root(temp.path());
+        let paths = filter.collect_paths(&["./a.txt".into()]).unwrap();
+        assert_eq!(paths, vec![PathBuf::from("./a.txt")]);
+
+        std::env::set_current_dir(previous).expect("should restore current dir");
     }
 
     #[test]

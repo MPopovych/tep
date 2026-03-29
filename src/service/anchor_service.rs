@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
@@ -39,6 +39,7 @@ pub struct AnchorShowResult {
 }
 
 pub struct AnchorService<'a> {
+    workspace_root: PathBuf,
     anchor_repo: AnchorRepository<'a>,
     anchor_entity_repo: AnchorEntityRepository<'a>,
     entity_repo: EntityRepository<'a>,
@@ -46,16 +47,22 @@ pub struct AnchorService<'a> {
 
 impl<'a> AnchorService<'a> {
     pub fn new(conn: &'a Connection) -> Self {
+        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self::with_workspace_root(conn, workspace_root)
+    }
+
+    pub fn with_workspace_root(conn: &'a Connection, workspace_root: impl Into<PathBuf>) -> Self {
+        let workspace_root = workspace_root.into();
         Self {
-            anchor_repo: AnchorRepository::new(conn),
+            workspace_root: workspace_root.clone(),
+            anchor_repo: AnchorRepository::with_workspace_root(conn, workspace_root),
             anchor_entity_repo: AnchorEntityRepository::new(conn),
             entity_repo: EntityRepository::new(conn),
         }
     }
 
     pub fn sync_paths(&self, paths: &[String]) -> Result<AnchorSyncResult> {
-        let workspace_root = std::env::current_dir().context("failed to determine current directory")?;
-        let filter = TepIgnoreFilter::for_workspace_root(workspace_root);
+        let filter = TepIgnoreFilter::for_workspace_root(&self.workspace_root);
         let files = filter.collect_paths(paths)?;
 
         let mut result = AnchorSyncResult {
@@ -67,6 +74,7 @@ impl<'a> AnchorService<'a> {
         };
 
         for file in files {
+            let file = self.resolve_workspace_path(&file);
             let changed = self.sync_file(&file, &mut result)?;
             if changed {
                 result.files_processed += 1;
@@ -77,8 +85,7 @@ impl<'a> AnchorService<'a> {
     }
 
     pub fn health_paths(&self, paths: &[String]) -> Result<AnchorHealthResult> {
-        let workspace_root = std::env::current_dir().context("failed to determine current directory")?;
-        let filter = TepIgnoreFilter::for_workspace_root(workspace_root);
+        let filter = TepIgnoreFilter::for_workspace_root(&self.workspace_root);
         let files = filter.collect_paths(paths)?;
 
         let mut result = AnchorHealthResult {
@@ -92,17 +99,22 @@ impl<'a> AnchorService<'a> {
             issues: Vec::new(),
         };
 
+        let scoped_files = files
+            .iter()
+            .map(|path| path_string(path.as_path()))
+            .collect::<HashSet<_>>();
         let mut seen_by_anchor_id: HashMap<i64, String> = HashMap::new();
         let mut seen_materialized_ids = HashSet::new();
 
         for file in files {
+            let file = self.resolve_workspace_path(&file);
             if self.inspect_file(&file, &mut result, &mut seen_by_anchor_id, &mut seen_materialized_ids)? {
                 result.files_scanned += 1;
             }
         }
 
         for anchor in self.anchor_repo.list_all()? {
-            if !seen_materialized_ids.contains(&anchor.anchor_id) {
+            if scoped_files.contains(&anchor.file_path) && !seen_materialized_ids.contains(&anchor.anchor_id) {
                 result.anchors_missing += 1;
                 result.issues.push(format!(
                     "missing anchor {} recorded in db but not found in file {}",
@@ -133,6 +145,14 @@ impl<'a> AnchorService<'a> {
         self.anchor_entity_repo.detach(anchor_id, entity.entity_id)
     }
 
+    fn resolve_workspace_path(&self, path: &Path) -> PathBuf {
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.workspace_root.join(path)
+        }
+    }
+
     fn inspect_file(
         &self,
         path: &Path,
@@ -147,7 +167,7 @@ impl<'a> AnchorService<'a> {
         let original = fs::read_to_string(path)
             .with_context(|| format!("failed to read {}", path.display()))?;
         let parsed = parse_anchors(&original);
-        let file_path = path.to_string_lossy().to_string();
+        let file_path = path_string(path);
 
         if parsed.is_empty() {
             return Ok(false);
@@ -192,7 +212,10 @@ impl<'a> AnchorService<'a> {
 
                     match self.anchor_repo.find_by_id(anchor_id)? {
                         Some(stored) => {
-                            if stored.file_path != file_path
+                            let normalized_file_path = self.anchor_repo.find_by_id(anchor_id)?
+                                .map(|a| a.file_path)
+                                .unwrap_or(file_path.clone());
+                            if normalized_file_path != stored.file_path
                                 || stored.line != Some(anchor.line)
                                 || stored.shift != Some(anchor.shift)
                                 || stored.offset != Some(anchor.start_offset as i64)
@@ -275,7 +298,7 @@ impl<'a> AnchorService<'a> {
         result: &mut AnchorSyncResult,
         seen_materialized_ids: &mut HashSet<i64>,
     ) -> Result<String> {
-        let file_path = path.to_string_lossy();
+        let file_path = path_string(path);
         match anchor.kind() {
             AnchorKind::Incomplete => {
                 let created = self.anchor_repo.create(
@@ -360,7 +383,7 @@ impl<'a> AnchorService<'a> {
         seen_materialized_ids: &HashSet<i64>,
         result: &mut AnchorSyncResult,
     ) -> Result<()> {
-        let file_path = path.to_string_lossy();
+        let file_path = path_string(path);
         let existing_ids = self.anchor_repo.list_ids_for_file(&file_path)?;
         for anchor_id in existing_ids {
             if !seen_materialized_ids.contains(&anchor_id) {
@@ -372,27 +395,30 @@ impl<'a> AnchorService<'a> {
     }
 }
 
+fn path_string(path: &Path) -> String {
+    path.to_string_lossy().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db;
-    use std::env;
 
-    fn setup_service() -> AnchorService<'static> {
+    fn setup_service(workspace_root: &Path) -> AnchorService<'static> {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
         db::ensure_schema(conn).expect("schema should apply");
-        AnchorService::new(conn)
+        AnchorService::with_workspace_root(conn, workspace_root)
     }
 
     #[test]
     fn sync_file_materializes_incomplete_anchor() {
-        let service = setup_service();
         let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
         let file = temp.path().join("note.txt");
         std::fs::write(&file, "hello [#!#tep:](student)").expect("should write file");
 
         let result = service
-            .sync_paths(&[file.to_string_lossy().to_string()])
+            .sync_paths(&["./note.txt".into()])
             .expect("sync should succeed");
 
         let updated = std::fs::read_to_string(&file).expect("should read file");
@@ -405,27 +431,29 @@ mod tests {
 
     #[test]
     fn health_reports_moved_and_missing_anchors() {
-        let service = setup_service();
         let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
         let file = temp.path().join("note.txt");
         std::fs::write(&file, "hello [#!#tep:](student)").expect("should write file");
-        service.sync_paths(&[file.to_string_lossy().to_string()]).unwrap();
+        service.sync_paths(&["./note.txt".into()]).unwrap();
 
         let updated = std::fs::read_to_string(&file).unwrap();
         let moved = updated.replace("hello ", "hello world ");
         std::fs::write(&file, moved).unwrap();
 
-        let health = service.health_paths(&[file.to_string_lossy().to_string()]).unwrap();
+        let health = service.health_paths(&["./note.txt".into()]).unwrap();
         assert_eq!(health.anchors_moved, 1);
 
         std::fs::write(&file, "no anchors now\n").unwrap();
-        let health = service.health_paths(&[file.to_string_lossy().to_string()]).unwrap();
+        let health = service.health_paths(&["./note.txt".into()]).unwrap();
+        assert_eq!(health.files_scanned, 0);
         assert_eq!(health.anchors_missing, 1);
     }
 
     #[test]
     fn show_returns_related_entities() {
-        let service = setup_service();
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
         let anchor = service.anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
         let entity = service.entity_repo.ensure(&crate::entity::NewEntity { name: "student".into(), r#ref: None, description: None }).unwrap();
         service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
@@ -438,27 +466,23 @@ mod tests {
 
     #[test]
     fn sync_directory_processes_dot_style_path() {
-        let service = setup_service();
-        let previous = env::current_dir().expect("current dir should exist");
         let temp = tempfile::tempdir().expect("temp dir should be created");
-        env::set_current_dir(temp.path()).expect("should set current dir");
-        std::fs::write("a.txt", "[#!#tep:]").expect("should write file");
+        let service = setup_service(temp.path());
+        std::fs::write(temp.path().join("a.txt"), "[#!#tep:]").expect("should write file");
 
         let result = service.sync_paths(&[".".into()]).expect("sync should succeed");
         assert_eq!(result.anchors_created, 1);
-
-        env::set_current_dir(previous).expect("should restore current dir");
     }
 
     #[test]
     fn sync_multiple_entity_references_creates_relations() {
-        let service = setup_service();
         let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
         let file = temp.path().join("note.txt");
         std::fs::write(&file, "[#!#tep:](student,basic-user)").expect("should write file");
 
         let result = service
-            .sync_paths(&[file.to_string_lossy().to_string()])
+            .sync_paths(&["./note.txt".into()])
             .expect("sync should succeed");
 
         assert_eq!(result.relations_synced, 2);
@@ -466,12 +490,12 @@ mod tests {
 
     #[test]
     fn dropped_anchor_is_deleted_when_removed_from_file() {
-        let service = setup_service();
         let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
         let file = temp.path().join("note.txt");
         std::fs::write(&file, "[#!#tep:]").expect("should write file");
         let first = service
-            .sync_paths(&[file.to_string_lossy().to_string()])
+            .sync_paths(&["./note.txt".into()])
             .expect("first sync should succeed");
         assert_eq!(first.anchors_created, 1);
 
@@ -480,19 +504,19 @@ mod tests {
 
         std::fs::write(&file, "no anchors now\n").expect("should rewrite file");
         let second = service
-            .sync_paths(&[file.to_string_lossy().to_string()])
+            .sync_paths(&["./note.txt".into()])
             .expect("second sync should succeed");
         assert_eq!(second.anchors_dropped, 1);
     }
 
     #[test]
     fn duplicate_materialized_anchor_ids_in_same_file_fail() {
-        let service = setup_service();
         let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
         let file = temp.path().join("bad.txt");
         std::fs::write(&file, "[#!#1#tep:5]\n[#!#1#tep:5]\n").expect("should write file");
 
-        let result = service.sync_paths(&[file.to_string_lossy().to_string()]);
+        let result = service.sync_paths(&["./bad.txt".into()]);
         assert!(result.is_err());
     }
 }

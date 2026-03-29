@@ -51,8 +51,8 @@ mod tests {
 
     #[test]
     fn init_creates_workspace_files_in_current_directory() {
-        let previous = env::current_dir().expect("current dir should exist");
         let temp = tempfile::tempdir().expect("temp dir should be created");
+        let previous = env::current_dir().unwrap_or_else(|_| temp.path().to_path_buf());
         env::set_current_dir(temp.path()).expect("should change current dir");
 
         let result = WorkspaceService::init().expect("init should succeed");
