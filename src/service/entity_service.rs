@@ -16,6 +16,17 @@ pub struct EntityShowResult {
     pub anchors: Vec<Anchor>,
 }
 
+pub struct EntityContextAnchor {
+    pub anchor: Anchor,
+    pub snippet: Option<String>,
+}
+
+pub struct EntityContextResult {
+    pub entity: Entity,
+    pub anchors: Vec<EntityContextAnchor>,
+    pub files: Vec<String>,
+}
+
 pub struct EntityAutoResult {
     pub files_processed: usize,
     pub declarations_seen: usize,
@@ -86,6 +97,26 @@ impl<'a> EntityService<'a> {
             .with_context(|| format!("entity not found: {target}"))?;
         let anchors = self.anchor_repo.list_for_entity(entity.entity_id)?;
         Ok(EntityShowResult { entity, anchors })
+    }
+
+    pub fn context(&self, target: &str) -> Result<EntityContextResult> {
+        let shown = self.show(target)?;
+        let mut files = Vec::new();
+        let mut anchors = Vec::new();
+
+        for anchor in shown.anchors {
+            if !files.contains(&anchor.file_path) {
+                files.push(anchor.file_path.clone());
+            }
+            let snippet = extract_anchor_snippet(&anchor).ok().flatten();
+            anchors.push(EntityContextAnchor { anchor, snippet });
+        }
+
+        Ok(EntityContextResult {
+            entity: shown.entity,
+            anchors,
+            files,
+        })
     }
 
     pub fn edit(
@@ -208,6 +239,30 @@ impl<'a> EntityService<'a> {
     }
 }
 
+fn extract_anchor_snippet(anchor: &Anchor) -> Result<Option<String>> {
+    let text = fs::read_to_string(&anchor.file_path)
+        .with_context(|| format!("failed to read {}", anchor.file_path))?;
+    let offset = match anchor.offset {
+        Some(value) if value >= 0 => value as usize,
+        _ => return Ok(None),
+    };
+    if offset >= text.len() {
+        return Ok(None);
+    }
+
+    let start = text[..offset].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
+    let end = text[offset..]
+        .find('\n')
+        .map(|idx| offset + idx)
+        .unwrap_or(text.len());
+    let line = text[start..end].trim();
+    if line.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(line.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,6 +313,30 @@ mod tests {
         let result = service.show("student").unwrap();
         assert_eq!(result.anchors.len(), 1);
         assert_eq!(result.anchors[0].anchor_id, anchor.anchor_id);
+    }
+
+    #[test]
+    fn context_includes_ref_files_and_snippet() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let entity_repo = EntityRepository::new(conn);
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "hello\nanchor line\n").unwrap();
+        let entity = entity_repo.create(&NewEntity {
+            name: "student".into(),
+            r#ref: Some("./docs/student.md".into()),
+        }).unwrap();
+        let anchor = service.anchor_repo.create(1, file.to_string_lossy().as_ref(), Some(2), Some(0), Some(6)).unwrap();
+        service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
+
+        let result = service.context("student").unwrap();
+        assert_eq!(result.entity.r#ref.as_deref(), Some("./docs/student.md"));
+        assert_eq!(result.files.len(), 1);
+        assert!(result.files[0].contains("note.txt"));
+        assert_eq!(result.anchors.len(), 1);
+        assert_eq!(result.anchors[0].snippet.as_deref(), Some("anchor line"));
     }
 
     #[test]

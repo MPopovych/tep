@@ -1,6 +1,6 @@
 use crate::anchor::Anchor;
 use crate::entity::Entity;
-use crate::service::entity_service::{EntityAutoResult, EntityShowResult};
+use crate::service::entity_service::{EntityAutoResult, EntityContextResult, EntityShowResult};
 
 pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
     format!("{prefix}\n{} ({})\n", entity.entity_id, entity.name)
@@ -26,6 +26,34 @@ pub fn format_entity_show(result: &EntityShowResult) -> String {
     out
 }
 
+pub fn format_entity_context(result: &EntityContextResult) -> String {
+    let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
+    if let Some(entity_ref) = &result.entity.r#ref {
+        out.push_str(&format!("ref: {}\n", entity_ref));
+    }
+    out.push('\n');
+
+    for item in &result.anchors {
+        out.push_str(&format!("anchor {}\n", item.anchor.anchor_id));
+        out.push_str(&format_anchor_location(&item.anchor));
+        if let Some(snippet) = &item.snippet {
+            out.push_str("snippet:\n");
+            out.push_str(snippet);
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+
+    if !result.files.is_empty() {
+        out.push_str("files:\n");
+        for file in &result.files {
+            out.push_str(&format!("- {}\n", file));
+        }
+    }
+
+    out
+}
+
 pub fn format_entity_list(entities: &[Entity]) -> String {
     if entities.is_empty() {
         return String::new();
@@ -39,9 +67,12 @@ pub fn format_entity_list(entities: &[Entity]) -> String {
 }
 
 pub fn format_anchor_compact(anchor: &Anchor) -> String {
+    format!("{}\n{}", anchor.anchor_id, format_anchor_location(anchor))
+}
+
+fn format_anchor_location(anchor: &Anchor) -> String {
     format!(
-        "{}\n{} ({}:{}) [{}]\n",
-        anchor.anchor_id,
+        "{} ({}:{}) [{}]\n",
         anchor.file_path,
         anchor.line.unwrap_or(0),
         anchor.shift.unwrap_or(0),
@@ -52,6 +83,7 @@ pub fn format_anchor_compact(anchor: &Anchor) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::service::entity_service::EntityContextAnchor;
 
     fn sample_entity() -> Entity {
         Entity {
@@ -107,6 +139,25 @@ mod tests {
         assert!(rendered.contains("42 (student)"));
         assert!(rendered.contains("7"));
         assert!(rendered.contains("./file.md (3:4) [22]"));
+    }
+
+    #[test]
+    fn formats_entity_context() {
+        let rendered = format_entity_context(&EntityContextResult {
+            entity: sample_entity(),
+            anchors: vec![EntityContextAnchor {
+                anchor: sample_anchor(),
+                snippet: Some("hello context".into()),
+            }],
+            files: vec!["./file.md".into()],
+        });
+        assert!(rendered.contains("42 (student)"));
+        assert!(rendered.contains("ref: ./docs/student.md"));
+        assert!(rendered.contains("anchor 7"));
+        assert!(rendered.contains("snippet:"));
+        assert!(rendered.contains("hello context"));
+        assert!(rendered.contains("files:"));
+        assert!(rendered.contains("- ./file.md"));
     }
 
     #[test]

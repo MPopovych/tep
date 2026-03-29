@@ -71,6 +71,8 @@ pub enum EntityCommands {
     Auto(EntityAutoArgs),
     #[command(about = "Show one entity and its related anchors")]
     Show { target: String },
+    #[command(about = "Show one entity with snippets and related files")]
+    Context { target: String },
     #[command(about = "Edit an existing entity")]
     Edit(EditEntityArgs),
     #[command(about = "List entities")]

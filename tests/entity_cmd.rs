@@ -76,6 +76,47 @@ fn entity_ensure_is_idempotent() {
 }
 
 #[test]
+fn entity_context_shows_ref_snippet_and_files() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "hello\n[#!#tep:](student)\n")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "create", "student", "--ref", "./docs/student.md"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "context", "student"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ref: ./docs/student.md"))
+        .stdout(predicate::str::contains("anchor "))
+        .stdout(predicate::str::contains("snippet:"))
+        .stdout(predicate::str::contains("[#!#1#tep:"))
+        .stdout(predicate::str::contains("files:"))
+        .stdout(predicate::str::contains("./note.txt"));
+}
+
+#[test]
 fn entity_show_works_from_nested_directory() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     let nested = temp.path().join("docs/nested");
