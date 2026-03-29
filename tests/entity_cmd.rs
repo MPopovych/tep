@@ -136,6 +136,54 @@ fn entity_auto_does_not_overwrite_existing_ref() {
 }
 
 #[test]
+fn entity_auto_rescan_does_not_duplicate_backing_anchor() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "(#!#tep:Student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 1"));
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 0"));
+
+    let output = Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "show", "Student"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let rendered = String::from_utf8(output).expect("stdout should be utf8");
+    let lines: Vec<&str> = rendered.lines().collect();
+    let anchor_id_lines = lines
+        .iter()
+        .filter(|line| line.chars().all(|c| c.is_ascii_digit()))
+        .count();
+    assert_eq!(anchor_id_lines, 1);
+}
+
+#[test]
 fn entity_show_and_edit_work_by_name() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
 

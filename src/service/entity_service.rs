@@ -169,14 +169,40 @@ impl<'a> EntityService<'a> {
             result.refs_filled += 1;
         }
 
-        let anchor = self.anchor_repo.create(
-            declaration.version.unwrap_or(1),
-            file_path,
-            Some(declaration.line),
-            Some(declaration.shift),
-            Some(declaration.start_offset as i64),
-        )?;
-        result.anchors_created += 1;
+        let anchor = if declaration.version.is_some() {
+            if let Some(existing) = self
+                .anchor_repo
+                .find_by_file_and_offset(file_path, declaration.start_offset as i64)?
+            {
+                self.anchor_repo.update_location(
+                    existing.anchor_id,
+                    file_path,
+                    Some(declaration.line),
+                    Some(declaration.shift),
+                    Some(declaration.start_offset as i64),
+                )?
+            } else {
+                let created = self.anchor_repo.create(
+                    declaration.version.unwrap_or(1),
+                    file_path,
+                    Some(declaration.line),
+                    Some(declaration.shift),
+                    Some(declaration.start_offset as i64),
+                )?;
+                result.anchors_created += 1;
+                created
+            }
+        } else {
+            let created = self.anchor_repo.create(
+                1,
+                file_path,
+                Some(declaration.line),
+                Some(declaration.shift),
+                Some(declaration.start_offset as i64),
+            )?;
+            result.anchors_created += 1;
+            created
+        };
 
         self.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id)?;
         result.relations_synced += 1;
@@ -284,5 +310,27 @@ mod tests {
 
         let entity = entity_repo.find(&parse_lookup("Student")).unwrap().unwrap();
         assert_eq!(entity.r#ref.as_deref(), Some("./docs/student.md"));
+    }
+
+    #[test]
+    fn auto_reuses_anchor_for_materialized_declaration_on_rescan() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "(#!#tep:Student)").unwrap();
+
+        let first = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(first.anchors_created, 1);
+        let first_anchors = service.show("Student").unwrap().anchors;
+        assert_eq!(first_anchors.len(), 1);
+        let first_anchor_id = first_anchors[0].anchor_id;
+
+        let second = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(second.anchors_created, 0);
+        let second_anchors = service.show("Student").unwrap().anchors;
+        assert_eq!(second_anchors.len(), 1);
+        assert_eq!(second_anchors[0].anchor_id, first_anchor_id);
     }
 }
