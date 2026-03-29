@@ -5,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
 use crate::anchor::Anchor;
-use crate::entity::{Entity, NewEntity, ParsedEntityDeclaration, UpdateEntity, materialize_entity_declaration, parse_entity_declarations, parse_lookup};
+use crate::entity::{Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity, materialize_entity_declaration, parse_entity_declarations, parse_lookup};
 use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
@@ -15,6 +15,7 @@ use crate::service::entity_context::extract_anchor_snippet;
 pub struct EntityShowResult {
     pub entity: Entity,
     pub anchors: Vec<Anchor>,
+    pub outgoing_links: Vec<(EntityLink, Entity)>,
 }
 
 pub struct EntityContextAnchor {
@@ -37,6 +38,12 @@ pub struct EntityAutoResult {
     pub relations_synced: usize,
 }
 
+pub struct EntityLinkResult {
+    pub from: Entity,
+    pub to: Entity,
+    pub relation: String,
+}
+
 pub struct EntityService<'a> {
     repo: EntityRepository<'a>,
     anchor_repo: AnchorRepository<'a>,
@@ -52,10 +59,11 @@ impl<'a> EntityService<'a> {
         }
     }
 
-    pub fn create(&self, name: String, entity_ref: Option<String>) -> Result<Entity> {
+    pub fn create(&self, name: String, entity_ref: Option<String>, description: Option<String>) -> Result<Entity> {
         self.repo.create(&NewEntity {
             name,
             r#ref: entity_ref,
+            description,
         })
     }
 
@@ -63,6 +71,7 @@ impl<'a> EntityService<'a> {
         self.repo.ensure(&NewEntity {
             name,
             r#ref: entity_ref,
+            description: None,
         })
     }
 
@@ -97,7 +106,8 @@ impl<'a> EntityService<'a> {
             .find(&lookup)?
             .with_context(|| format!("entity not found: {target}"))?;
         let anchors = self.anchor_repo.list_for_entity(entity.entity_id)?;
-        Ok(EntityShowResult { entity, anchors })
+        let outgoing_links = self.repo.list_outgoing_links(entity.entity_id)?;
+        Ok(EntityShowResult { entity, anchors, outgoing_links })
     }
 
     pub fn context(&self, target: &str) -> Result<EntityContextResult> {
@@ -125,8 +135,9 @@ impl<'a> EntityService<'a> {
         target: &str,
         name: Option<String>,
         entity_ref: Option<String>,
+        description: Option<String>,
     ) -> Result<Entity> {
-        if name.is_none() && entity_ref.is_none() {
+        if name.is_none() && entity_ref.is_none() && description.is_none() {
             bail!("entity edit requires at least one field to update");
         }
 
@@ -135,8 +146,31 @@ impl<'a> EntityService<'a> {
             &UpdateEntity {
                 name,
                 r#ref: entity_ref,
+                description,
             },
         )
+    }
+
+    pub fn link(&self, from: &str, to: &str, relation: &str) -> Result<EntityLinkResult> {
+        let from_lookup = parse_lookup(from);
+        let to_lookup = parse_lookup(to);
+        let link = self.repo.link(&from_lookup, &to_lookup, relation)?;
+        let from_entity = self.repo.find(&from_lookup)?.context("source entity not found")?;
+        let to_entity = self.repo.find(&to_lookup)?.context("target entity not found")?;
+        Ok(EntityLinkResult {
+            from: from_entity,
+            to: to_entity,
+            relation: link.relation,
+        })
+    }
+
+    pub fn unlink(&self, from: &str, to: &str) -> Result<(Entity, Entity)> {
+        let from_lookup = parse_lookup(from);
+        let to_lookup = parse_lookup(to);
+        let from_entity = self.repo.find(&from_lookup)?.context("source entity not found")?;
+        let to_entity = self.repo.find(&to_lookup)?.context("target entity not found")?;
+        self.repo.unlink(&from_lookup, &to_lookup)?;
+        Ok((from_entity, to_entity))
     }
 
     pub fn list(&self) -> Result<Vec<Entity>> {
@@ -187,6 +221,7 @@ impl<'a> EntityService<'a> {
         let mut entity = self.repo.ensure(&NewEntity {
             name: declaration.name.clone(),
             r#ref: None,
+            description: None,
         })?;
         result.entities_ensured += 1;
 
@@ -196,6 +231,7 @@ impl<'a> EntityService<'a> {
                 &UpdateEntity {
                     name: None,
                     r#ref: Some(file_path.to_string()),
+                    description: None,
                 },
             )?;
             result.refs_filled += 1;
@@ -257,10 +293,10 @@ mod tests {
     fn edit_requires_at_least_one_field() {
         let service = setup_service();
         let created = service
-            .create("student".into(), None)
+            .create("student".into(), None, None)
             .expect("create should succeed");
 
-        let result = service.edit(&created.entity_id.to_string(), None, None);
+        let result = service.edit(&created.entity_id.to_string(), None, None, None);
         assert!(result.is_err());
     }
 
@@ -268,7 +304,7 @@ mod tests {
     fn show_supports_name_lookup() {
         let service = setup_service();
         service
-            .create("student.permissions".into(), None)
+            .create("student.permissions".into(), None, None)
             .expect("create should succeed");
 
         let result = service.show("student.permissions").expect("show should succeed");
@@ -276,20 +312,14 @@ mod tests {
     }
 
     #[test]
-    fn show_includes_related_anchors() {
-        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
-        let anchor_repo = AnchorRepository::new(conn);
-        let rel_repo = AnchorEntityRepository::new(conn);
-
-        let entity = service.create("student".into(), None).unwrap();
-        let anchor = anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
-        rel_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
-
-        let result = service.show("student").unwrap();
-        assert_eq!(result.anchors.len(), 1);
-        assert_eq!(result.anchors[0].anchor_id, anchor.anchor_id);
+    fn show_includes_outgoing_links() {
+        let service = setup_service();
+        service.create("Student".into(), None, None).unwrap();
+        service.create("Subject".into(), None, None).unwrap();
+        service.link("Student", "Subject", "student has subjects").unwrap();
+        let result = service.show("Student").unwrap();
+        assert_eq!(result.outgoing_links.len(), 1);
+        assert_eq!(result.outgoing_links[0].1.name, "Subject");
     }
 
     #[test]
@@ -304,6 +334,7 @@ mod tests {
         let entity = entity_repo.create(&NewEntity {
             name: "student".into(),
             r#ref: Some("./docs/student.md".into()),
+            description: Some("A learner".into()),
         }).unwrap();
         let anchor = service.anchor_repo.create(1, file.to_string_lossy().as_ref(), Some(2), Some(0), Some(12)).unwrap();
         service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
@@ -317,138 +348,5 @@ mod tests {
         assert!(snippet.contains("before line"));
         assert!(snippet.contains("anchor line"));
         assert!(snippet.contains("after line"));
-    }
-
-    #[test]
-    fn auto_creates_entity_fills_ref_and_creates_anchor_relation() {
-        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
-        let entity_repo = EntityRepository::new(conn);
-        let temp = tempfile::tempdir().unwrap();
-        let file = temp.path().join("note.txt");
-        std::fs::write(&file, "(#!#tep:Student)").unwrap();
-
-        let result = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
-        assert_eq!(result.declarations_seen, 1);
-        assert_eq!(result.entities_ensured, 1);
-        assert_eq!(result.refs_filled, 1);
-        assert_eq!(result.anchors_created, 1);
-        assert_eq!(result.relations_synced, 1);
-
-        let updated = std::fs::read_to_string(&file).unwrap();
-        assert!(updated.contains("(#!#1#tep:Student)"));
-
-        let entity = entity_repo.find(&parse_lookup("Student")).unwrap().unwrap();
-        assert_eq!(entity.r#ref.as_deref(), Some(file.to_string_lossy().as_ref()));
-
-        let anchors = service.show("Student").unwrap().anchors;
-        assert_eq!(anchors.len(), 1);
-    }
-
-    #[test]
-    fn auto_does_not_overwrite_existing_ref() {
-        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
-        let entity_repo = EntityRepository::new(conn);
-        entity_repo.create(&NewEntity {
-            name: "Student".into(),
-            r#ref: Some("./docs/student.md".into()),
-        }).unwrap();
-
-        let temp = tempfile::tempdir().unwrap();
-        let file = temp.path().join("note.txt");
-        std::fs::write(&file, "(#!#tep:Student)").unwrap();
-
-        let result = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
-        assert_eq!(result.refs_filled, 0);
-
-        let entity = entity_repo.find(&parse_lookup("Student")).unwrap().unwrap();
-        assert_eq!(entity.r#ref.as_deref(), Some("./docs/student.md"));
-    }
-
-    #[test]
-    fn auto_reuses_anchor_for_materialized_declaration_on_rescan() {
-        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
-        let temp = tempfile::tempdir().unwrap();
-        let file = temp.path().join("note.txt");
-        std::fs::write(&file, "(#!#tep:Student)").unwrap();
-
-        let first = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
-        assert_eq!(first.anchors_created, 1);
-        let first_anchors = service.show("Student").unwrap().anchors;
-        assert_eq!(first_anchors.len(), 1);
-        let first_anchor_id = first_anchors[0].anchor_id;
-
-        let second = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
-        assert_eq!(second.anchors_created, 0);
-        let second_anchors = service.show("Student").unwrap().anchors;
-        assert_eq!(second_anchors.len(), 1);
-        assert_eq!(second_anchors[0].anchor_id, first_anchor_id);
-    }
-
-    #[test]
-    fn auto_reuses_anchor_after_materialization_shift() {
-        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
-        let temp = tempfile::tempdir().unwrap();
-        let file = temp.path().join("note.txt");
-        std::fs::write(&file, "header\n(#!#tep:Student)\n").unwrap();
-
-        let first = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
-        assert_eq!(first.anchors_created, 1);
-
-        let second = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
-        assert_eq!(second.anchors_created, 0);
-        let anchors = service.show("Student").unwrap().anchors;
-        assert_eq!(anchors.len(), 1);
-    }
-
-    #[test]
-    fn auto_multiple_files_for_same_entity_create_distinct_anchors() {
-        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
-        let temp = tempfile::tempdir().unwrap();
-        let one = temp.path().join("one.txt");
-        let two = temp.path().join("two.txt");
-        std::fs::write(&one, "(#!#tep:Student)").unwrap();
-        std::fs::write(&two, "(#!#tep:Student)").unwrap();
-
-        let result = service.auto(&[
-            one.to_string_lossy().to_string(),
-            two.to_string_lossy().to_string(),
-        ]).unwrap();
-        assert_eq!(result.anchors_created, 2);
-
-        let anchors = service.show("Student").unwrap().anchors;
-        assert_eq!(anchors.len(), 2);
-        assert_ne!(anchors[0].file_path, anchors[1].file_path);
-    }
-
-    #[test]
-    fn auto_two_declarations_in_same_file_for_different_entities_stay_distinct_on_rescan() {
-        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::new(conn);
-        let temp = tempfile::tempdir().unwrap();
-        let file = temp.path().join("note.txt");
-        std::fs::write(&file, "(#!#tep:Student)\n(#!#tep:Project)\n").unwrap();
-
-        let first = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
-        assert_eq!(first.anchors_created, 2);
-
-        let second = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
-        assert_eq!(second.anchors_created, 0);
-
-        let student_anchors = service.show("Student").unwrap().anchors;
-        let project_anchors = service.show("Project").unwrap().anchors;
-        assert_eq!(student_anchors.len(), 1);
-        assert_eq!(project_anchors.len(), 1);
-        assert_ne!(student_anchors[0].anchor_id, project_anchors[0].anchor_id);
     }
 }

@@ -1,6 +1,6 @@
 use crate::cli::{EditEntityArgs, EntityAutoArgs, EntityCommands, EntityContextArgs, UpsertEntityArgs};
 use crate::commands::support::open_ready_workspace_db;
-use crate::output::entity_output::{format_entity_auto_result, format_entity_context, format_entity_context_files_only, format_entity_created, format_entity_list, format_entity_show};
+use crate::output::entity_output::{format_entity_auto_result, format_entity_context, format_entity_context_files_only, format_entity_created, format_entity_link_result, format_entity_list, format_entity_show, format_entity_unlink_result};
 use crate::service::entity_service::EntityService;
 
 pub fn run(command: EntityCommands) -> anyhow::Result<()> {
@@ -15,12 +15,14 @@ pub fn run(command: EntityCommands) -> anyhow::Result<()> {
         EntityCommands::Show { target } => show(&service, &target),
         EntityCommands::Context(args) => context(&service, args),
         EntityCommands::Edit(args) => edit(&service, args),
+        EntityCommands::Link { from, to, relation } => link(&service, &from, &to, &relation),
+        EntityCommands::Unlink { from, to } => unlink(&service, &from, &to),
         EntityCommands::List => list(&service),
     }
 }
 
 fn create(service: &EntityService<'_>, args: UpsertEntityArgs) -> anyhow::Result<()> {
-    let entity = service.create(args.name, args.r#ref)?;
+    let entity = service.create(args.name, args.r#ref, args.description)?;
     print!("{}", format_entity_created("created", &entity));
     Ok(())
 }
@@ -54,8 +56,20 @@ fn context(service: &EntityService<'_>, args: EntityContextArgs) -> anyhow::Resu
 }
 
 fn edit(service: &EntityService<'_>, args: EditEntityArgs) -> anyhow::Result<()> {
-    let entity = service.edit(&args.target, args.name, args.r#ref)?;
+    let entity = service.edit(&args.target, args.name, args.r#ref, args.description)?;
     print!("{}", format_entity_created("updated", &entity));
+    Ok(())
+}
+
+fn link(service: &EntityService<'_>, from: &str, to: &str, relation: &str) -> anyhow::Result<()> {
+    let result = service.link(from, to, relation)?;
+    print!("{}", format_entity_link_result("linked", &result));
+    Ok(())
+}
+
+fn unlink(service: &EntityService<'_>, from: &str, to: &str) -> anyhow::Result<()> {
+    let (from_entity, to_entity) = service.unlink(from, to)?;
+    print!("{}", format_entity_unlink_result("unlinked", &from_entity, &to_entity));
     Ok(())
 }
 

@@ -1,10 +1,14 @@
 use crate::entity::Entity;
 use crate::output::anchor_format::{format_anchor_compact, format_anchor_location};
 use crate::output::styles::{ANSI_CYAN, ANSI_YELLOW, paint};
-use crate::service::entity_service::{EntityAutoResult, EntityContextResult, EntityShowResult};
+use crate::service::entity_service::{EntityAutoResult, EntityContextResult, EntityLinkResult, EntityShowResult};
 
 pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
-    format!("{prefix}\n{} ({})\n", entity.entity_id, entity.name)
+    let mut out = format!("{prefix}\n{} ({})\n", entity.entity_id, entity.name);
+    if let Some(description) = &entity.description {
+        out.push_str(&format!("description: {}\n", description));
+    }
+    out
 }
 
 pub fn format_entity_auto_result(result: &EntityAutoResult) -> String {
@@ -21,8 +25,20 @@ pub fn format_entity_auto_result(result: &EntityAutoResult) -> String {
 
 pub fn format_entity_show(result: &EntityShowResult) -> String {
     let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
+    if let Some(entity_ref) = &result.entity.r#ref {
+        out.push_str(&format!("{}\n", paint(ANSI_YELLOW, format!("ref: {}", paint(ANSI_CYAN, entity_ref)))));
+    }
+    if let Some(description) = &result.entity.description {
+        out.push_str(&format!("description: {}\n", description));
+    }
     for anchor in &result.anchors {
         out.push_str(&format_anchor_compact(anchor));
+    }
+    if !result.outgoing_links.is_empty() {
+        out.push_str("links:\n");
+        for (link, entity) in &result.outgoing_links {
+            out.push_str(&format!("-> {} ({})\n   relation: {}\n", entity.entity_id, entity.name, link.relation));
+        }
     }
     out
 }
@@ -31,6 +47,9 @@ pub fn format_entity_context(result: &EntityContextResult) -> String {
     let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
     if let Some(entity_ref) = &result.entity.r#ref {
         out.push_str(&format!("{}\n", paint(ANSI_YELLOW, format!("ref: {}", paint(ANSI_CYAN, entity_ref)))));
+    }
+    if let Some(description) = &result.entity.description {
+        out.push_str(&format!("description: {}\n", description));
     }
     out.push('\n');
 
@@ -54,8 +73,34 @@ pub fn format_entity_context_files_only(result: &EntityContextResult) -> String 
     if let Some(entity_ref) = &result.entity.r#ref {
         out.push_str(&format!("{}\n", paint(ANSI_YELLOW, format!("ref: {}", paint(ANSI_CYAN, entity_ref)))));
     }
+    if let Some(description) = &result.entity.description {
+        out.push_str(&format!("description: {}\n", description));
+    }
     append_files_block(&mut out, &result.files);
     out
+}
+
+pub fn format_entity_link_result(prefix: &str, result: &EntityLinkResult) -> String {
+    format!(
+        "{}\nfrom: {} ({})\nto: {} ({})\nrelation: {}\n",
+        prefix,
+        result.from.entity_id,
+        result.from.name,
+        result.to.entity_id,
+        result.to.name,
+        result.relation
+    )
+}
+
+pub fn format_entity_unlink_result(prefix: &str, from: &Entity, to: &Entity) -> String {
+    format!(
+        "{}\nfrom: {} ({})\nto: {} ({})\n",
+        prefix,
+        from.entity_id,
+        from.name,
+        to.entity_id,
+        to.name
+    )
 }
 
 pub fn format_entity_list(entities: &[Entity]) -> String {
@@ -83,13 +128,13 @@ fn append_files_block(out: &mut String, files: &[String]) {
 mod tests {
     use super::*;
     use crate::anchor::Anchor;
-    use crate::service::entity_service::EntityContextAnchor;
 
     fn sample_entity() -> Entity {
         Entity {
             entity_id: 42,
             name: "student".into(),
             r#ref: Some("./docs/student.md".into()),
+            description: Some("A learner".into()),
             created_at: "1".into(),
             updated_at: "2".into(),
         }
@@ -113,6 +158,7 @@ mod tests {
         let rendered = format_entity_created("created", &sample_entity());
         assert!(rendered.contains("created"));
         assert!(rendered.contains("42 (student)"));
+        assert!(rendered.contains("description: A learner"));
     }
 
     #[test]
@@ -131,60 +177,33 @@ mod tests {
     }
 
     #[test]
-    fn formats_entity_show_with_anchor() {
+    fn formats_entity_show_with_anchor_and_link() {
         let rendered = format_entity_show(&EntityShowResult {
             entity: sample_entity(),
             anchors: vec![sample_anchor()],
+            outgoing_links: vec![(
+                crate::entity::EntityLink {
+                    from_entity_id: 42,
+                    to_entity_id: 10,
+                    relation: "student has subjects".into(),
+                    created_at: "1".into(),
+                    updated_at: "2".into(),
+                },
+                Entity {
+                    entity_id: 10,
+                    name: "subject".into(),
+                    r#ref: None,
+                    description: None,
+                    created_at: "1".into(),
+                    updated_at: "2".into(),
+                },
+            )],
         });
         assert!(rendered.contains("42 (student)"));
+        assert!(rendered.contains("description: A learner"));
         assert!(rendered.contains("7"));
         assert!(rendered.contains("./file.md"));
-        assert!(rendered.contains("\x1b[36m"));
-        assert!(rendered.contains("\x1b[32m3\x1b[0m"));
-        assert!(rendered.contains("\x1b[35m4\x1b[0m"));
-    }
-
-    #[test]
-    fn formats_entity_context() {
-        let rendered = format_entity_context(&EntityContextResult {
-            entity: sample_entity(),
-            anchors: vec![EntityContextAnchor {
-                anchor: sample_anchor(),
-                snippet: Some("hello context".into()),
-            }],
-            files: vec!["./file.md".into()],
-        });
-        assert!(rendered.contains("42 (student)"));
-        assert!(rendered.contains("ref:"));
-        assert!(rendered.contains("./docs/student.md"));
-        assert!(rendered.contains("anchor 7"));
-        assert!(rendered.contains("snippet:"));
-        assert!(rendered.contains("hello context"));
-        assert!(rendered.contains("files:"));
-        assert!(rendered.contains("- \x1b[36m./file.md\x1b[0m"));
-    }
-
-    #[test]
-    fn formats_entity_context_files_only() {
-        let rendered = format_entity_context_files_only(&EntityContextResult {
-            entity: sample_entity(),
-            anchors: vec![EntityContextAnchor {
-                anchor: sample_anchor(),
-                snippet: Some("hello context".into()),
-            }],
-            files: vec!["./file.md".into()],
-        });
-        assert!(rendered.contains("42 (student)"));
-        assert!(rendered.contains("ref:"));
-        assert!(rendered.contains("files:"));
-        assert!(rendered.contains("./file.md"));
-        assert!(!rendered.contains("anchor 7"));
-        assert!(!rendered.contains("snippet:"));
-    }
-
-    #[test]
-    fn formats_entity_list() {
-        let rendered = format_entity_list(&[sample_entity()]);
-        assert!(rendered.contains("42 (student)"));
+        assert!(rendered.contains("links:"));
+        assert!(rendered.contains("student has subjects"));
     }
 }

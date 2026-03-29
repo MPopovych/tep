@@ -78,6 +78,7 @@ pub fn schema_sql() -> &'static str {
         entity_id INTEGER PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
         ref TEXT,
+        description TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     );
@@ -102,14 +103,13 @@ pub fn schema_sql() -> &'static str {
         FOREIGN KEY (entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS links (
+    CREATE TABLE IF NOT EXISTS entity_links (
         from_entity_id INTEGER NOT NULL,
         to_entity_id INTEGER NOT NULL,
-        relation_type TEXT NOT NULL,
-        priority INTEGER NOT NULL,
+        relation TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        PRIMARY KEY (from_entity_id, relation_type, to_entity_id),
+        PRIMARY KEY (from_entity_id, to_entity_id),
         FOREIGN KEY (from_entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE,
         FOREIGN KEY (to_entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
     );
@@ -117,9 +117,7 @@ pub fn schema_sql() -> &'static str {
     CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
     CREATE INDEX IF NOT EXISTS idx_anchors_file_path ON anchors(file_path);
     CREATE INDEX IF NOT EXISTS idx_anchor_entities_entity_id ON anchor_entities(entity_id);
-    CREATE INDEX IF NOT EXISTS idx_links_from_entity ON links(from_entity_id);
-    CREATE INDEX IF NOT EXISTS idx_links_to_entity ON links(to_entity_id);
-    CREATE INDEX IF NOT EXISTS idx_links_priority ON links(priority);
+    CREATE INDEX IF NOT EXISTS idx_entity_links_to_entity ON entity_links(to_entity_id);
     "#
 }
 

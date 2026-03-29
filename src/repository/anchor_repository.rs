@@ -227,7 +227,7 @@ mod tests {
         let rel_repo = AnchorEntityRepository::new(conn);
 
         let anchor = anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
-        let entity = entity_repo.create(&NewEntity { name: "student".into(), r#ref: None }).unwrap();
+        let entity = entity_repo.create(&NewEntity { name: "student".into(), r#ref: None, description: None }).unwrap();
         rel_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
         let anchors = anchor_repo.list_for_entity(entity.entity_id).unwrap();
@@ -243,7 +243,7 @@ mod tests {
         let entity_repo = EntityRepository::new(conn);
         let rel_repo = AnchorEntityRepository::new(conn);
 
-        let entity = entity_repo.create(&NewEntity { name: "student".into(), r#ref: None }).unwrap();
+        let entity = entity_repo.create(&NewEntity { name: "student".into(), r#ref: None, description: None }).unwrap();
         let old_anchor = anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
         let new_anchor = anchor_repo.create(1, "./file.txt", Some(2), Some(0), Some(5)).unwrap();
         rel_repo.attach(old_anchor.anchor_id, entity.entity_id).unwrap();

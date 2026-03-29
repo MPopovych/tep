@@ -190,6 +190,7 @@ impl<'a> AnchorService<'a> {
             crate::entity::EntityLookup::Name(name) => self.entity_repo.ensure(&crate::entity::NewEntity {
                 name,
                 r#ref: None,
+                description: None,
             }),
         }
     }
@@ -260,7 +261,7 @@ mod tests {
     fn show_returns_related_entities() {
         let service = setup_service();
         let anchor = service.anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
-        let entity = service.entity_repo.ensure(&crate::entity::NewEntity { name: "student".into(), r#ref: None }).unwrap();
+        let entity = service.entity_repo.ensure(&crate::entity::NewEntity { name: "student".into(), r#ref: None, description: None }).unwrap();
         service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
         let result = service.show(anchor.anchor_id).unwrap();

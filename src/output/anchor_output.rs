@@ -1,4 +1,3 @@
-use crate::anchor::Anchor;
 use crate::output::anchor_format::format_anchor_compact;
 use crate::service::anchor_service::{AnchorShowResult, AnchorSyncResult};
 
@@ -29,6 +28,7 @@ pub fn format_anchor_show(result: &AnchorShowResult) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::anchor::Anchor;
     use crate::entity::Entity;
 
     #[test]
@@ -74,6 +74,7 @@ mod tests {
                 entity_id: 1,
                 name: "student".into(),
                 r#ref: None,
+                description: None,
                 created_at: "1".into(),
                 updated_at: "2".into(),
             }],

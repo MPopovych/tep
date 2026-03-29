@@ -75,6 +75,18 @@ pub enum EntityCommands {
     Context(EntityContextArgs),
     #[command(about = "Edit an existing entity")]
     Edit(EditEntityArgs),
+    #[command(about = "Create or update a directional entity link")]
+    Link {
+        from: String,
+        to: String,
+        #[arg(long)]
+        relation: String,
+    },
+    #[command(about = "Remove a directional entity link")]
+    Unlink {
+        from: String,
+        to: String,
+    },
     #[command(about = "List entities")]
     List,
 }
@@ -84,6 +96,8 @@ pub struct UpsertEntityArgs {
     pub name: String,
     #[arg(long)]
     pub r#ref: Option<String>,
+    #[arg(long)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -106,4 +120,6 @@ pub struct EditEntityArgs {
     pub name: Option<String>,
     #[arg(long)]
     pub r#ref: Option<String>,
+    #[arg(long)]
+    pub description: Option<String>,
 }

@@ -56,7 +56,7 @@ impl<'a> AnchorEntityRepository<'a> {
 
     pub fn list_entities_for_anchor(&self, anchor_id: i64) -> Result<Vec<Entity>> {
         let mut stmt = self.conn.prepare(
-            "SELECT e.entity_id, e.name, e.ref, e.created_at, e.updated_at
+            "SELECT e.entity_id, e.name, e.ref, e.description, e.created_at, e.updated_at
              FROM anchor_entities ae
              JOIN entities e ON e.entity_id = ae.entity_id
              WHERE ae.anchor_id = ?1
@@ -67,8 +67,9 @@ impl<'a> AnchorEntityRepository<'a> {
                 entity_id: row.get(0)?,
                 name: row.get(1)?,
                 r#ref: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
+                description: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
             })
         })?;
         let entities = rows.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -111,6 +112,7 @@ mod tests {
             .create(&NewEntity {
                 name: "student".into(),
                 r#ref: None,
+                description: None,
             })
             .expect("entity should be created");
 
@@ -149,6 +151,7 @@ mod tests {
             .create(&NewEntity {
                 name: "basic-user".into(),
                 r#ref: None,
+                description: None,
             })
             .expect("entity should be created");
 

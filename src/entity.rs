@@ -5,6 +5,7 @@ pub struct Entity {
     pub entity_id: i64,
     pub name: String,
     pub r#ref: Option<String>,
+    pub description: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -13,18 +14,29 @@ pub struct Entity {
 pub struct NewEntity {
     pub name: String,
     pub r#ref: Option<String>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct UpdateEntity {
     pub name: Option<String>,
     pub r#ref: Option<String>,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntityLookup {
     Id(i64),
     Name(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntityLink {
+    pub from_entity_id: i64,
+    pub to_entity_id: i64,
+    pub relation: String,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
