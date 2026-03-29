@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::Path;
 
 use anyhow::{Context, Result};
 
@@ -16,16 +15,18 @@ pub struct WorkspaceService;
 
 impl WorkspaceService {
     pub fn init() -> Result<InitResult> {
-        let tep_dir = Path::new(DEFAULT_TEP_DIR);
-        fs::create_dir_all(tep_dir).with_context(|| format!("failed to create {}", DEFAULT_TEP_DIR))?;
+        let cwd = std::env::current_dir().context("failed to determine current directory")?;
+        let paths = db::workspace_paths_for(&cwd);
 
-        let ignore_path = Path::new(DEFAULT_IGNORE_FILE);
-        if !ignore_path.exists() {
-            fs::write(ignore_path, default_ignore_contents())
-                .with_context(|| format!("failed to create {}", DEFAULT_IGNORE_FILE))?;
+        fs::create_dir_all(&paths.tep_dir)
+            .with_context(|| format!("failed to create {}", paths.tep_dir.display()))?;
+
+        if !paths.ignore_file.exists() {
+            fs::write(&paths.ignore_file, default_ignore_contents())
+                .with_context(|| format!("failed to create {}", paths.ignore_file.display()))?;
         }
 
-        let conn = db::open_workspace_db()?;
+        let conn = db::open_workspace_db_in(&cwd)?;
         conn.execute_batch(db::schema_sql())
             .context("failed to apply database schema")?;
 
@@ -48,7 +49,7 @@ mod tests {
 
     #[test]
     fn init_creates_workspace_files_in_current_directory() {
-        let previous = env::temp_dir();
+        let previous = env::current_dir().expect("current dir should exist");
         let temp = tempfile::tempdir().expect("temp dir should be created");
         env::set_current_dir(temp.path()).expect("should change current dir");
 

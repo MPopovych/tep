@@ -1,24 +1,70 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use anyhow::Context;
+use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
 pub const DEFAULT_TEP_DIR: &str = ".tep";
 pub const DEFAULT_DB_FILE: &str = ".tep/tep.db";
 pub const DEFAULT_IGNORE_FILE: &str = ".tep_ignore";
 
+#[derive(Debug, Clone)]
+pub struct WorkspacePaths {
+    pub tep_dir: PathBuf,
+    pub db_file: PathBuf,
+    pub ignore_file: PathBuf,
+}
+
 pub fn open_in_memory() -> rusqlite::Result<Connection> {
     Connection::open_in_memory()
 }
 
+pub fn workspace_paths_for(root: &Path) -> WorkspacePaths {
+    WorkspacePaths {
+        tep_dir: root.join(DEFAULT_TEP_DIR),
+        db_file: root.join(DEFAULT_DB_FILE),
+        ignore_file: root.join(DEFAULT_IGNORE_FILE),
+    }
+}
+
+pub fn find_workspace_root(start: &Path) -> Result<PathBuf> {
+    let mut current = if start.is_dir() {
+        start.to_path_buf()
+    } else {
+        start.parent().unwrap_or(start).to_path_buf()
+    };
+
+    loop {
+        let candidate = current.join(DEFAULT_DB_FILE);
+        if candidate.exists() {
+            return Ok(current);
+        }
+
+        if !current.pop() {
+            break;
+        }
+    }
+
+    bail!("no tep workspace found from {}", start.display())
+}
+
 pub fn open_workspace_db() -> anyhow::Result<Connection> {
-    if let Some(parent) = Path::new(DEFAULT_DB_FILE).parent() {
+    let cwd = std::env::current_dir().context("failed to determine current directory")?;
+    let root = find_workspace_root(&cwd)?;
+    let paths = workspace_paths_for(&root);
+
+    Connection::open(&paths.db_file)
+        .with_context(|| format!("failed to open database at {}", paths.db_file.display()))
+}
+
+pub fn open_workspace_db_in(root: &Path) -> anyhow::Result<Connection> {
+    let paths = workspace_paths_for(root);
+    if let Some(parent) = paths.db_file.parent() {
         fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
     }
 
-    Connection::open(DEFAULT_DB_FILE)
-        .with_context(|| format!("failed to open database at {DEFAULT_DB_FILE}"))
+    Connection::open(&paths.db_file)
+        .with_context(|| format!("failed to open database at {}", paths.db_file.display()))
 }
 
 pub fn schema_sql() -> &'static str {
@@ -83,5 +129,18 @@ mod tests {
         let conn = open_in_memory().expect("in-memory db should open");
         conn.execute_batch(schema_sql())
             .expect("schema should apply cleanly");
+    }
+
+    #[test]
+    fn finds_nearest_workspace_root() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let root = temp.path();
+        let nested = root.join("a/b/c");
+        fs::create_dir_all(&nested).expect("nested dirs should be created");
+        fs::create_dir_all(root.join(DEFAULT_TEP_DIR)).expect("tep dir should exist");
+        fs::write(root.join(DEFAULT_DB_FILE), b"").expect("db marker should exist");
+
+        let found = find_workspace_root(&nested).expect("workspace should be found");
+        assert_eq!(found, root);
     }
 }

@@ -67,6 +67,43 @@ fn anchor_show_returns_compact_format() {
 }
 
 #[test]
+fn anchor_show_works_from_nested_directory() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    let nested = temp.path().join("src/deep");
+    std::fs::create_dir_all(&nested).expect("nested dirs should be created");
+    std::fs::write(temp.path().join("note.txt"), "[#!#tep:](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success();
+
+    let updated = std::fs::read_to_string(temp.path().join("note.txt"))
+        .expect("should read file");
+    let id_start = updated.find("tep:").expect("materialized anchor should exist") + 4;
+    let id_end = updated[id_start..].find(']').expect("anchor id should end") + id_start;
+    let anchor_id = &updated[id_start..id_end];
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(&nested)
+        .args(["anchor", "show", anchor_id])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(student)"));
+}
+
+#[test]
 fn anchor_auto_handles_unicode_prefix_text() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("unicode.txt"), "żółw 🐢\n[#!#tep:](student)")

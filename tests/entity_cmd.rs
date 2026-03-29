@@ -62,6 +62,37 @@ fn entity_ensure_is_idempotent() {
 }
 
 #[test]
+fn entity_show_works_from_nested_directory() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    let nested = temp.path().join("docs/nested");
+    std::fs::create_dir_all(&nested).expect("nested dirs should be created");
+    std::fs::write(temp.path().join("note.txt"), "(#!#tep:Student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./note.txt"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(&nested)
+        .args(["entity", "show", "Student"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(Student)"));
+}
+
+#[test]
 fn entity_auto_creates_entity_fills_ref_and_rewrites_declaration() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("note.txt"), "(#!#tep:Student)")
