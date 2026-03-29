@@ -1,5 +1,3 @@
-// (#!#1#tep:repo.anchor)
-// [#!#1#tep:45](repo.anchor.path-normalization)
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -10,7 +8,7 @@ use crate::utils::path::normalize_to_workspace;
 use crate::utils::time::now_utc;
 
 pub struct AnchorRepository<'a> {
-    conn: &'a Connection,
+    pub(crate) conn: &'a Connection,
     workspace_root: PathBuf,
 }
 
@@ -121,6 +119,19 @@ impl<'a> AnchorRepository<'a> {
             "SELECT anchor_id, version, file_path, line, shift, offset, created_at, updated_at
              FROM anchors
              ORDER BY anchor_id ASC",
+        )?;
+        let rows = stmt.query_map([], map_anchor_row)?;
+        let anchors = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(anchors)
+    }
+
+    pub fn list_without_entities(&self) -> Result<Vec<Anchor>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT a.anchor_id, a.version, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
+             FROM anchors a
+             LEFT JOIN anchor_entities ae ON ae.anchor_id = a.anchor_id
+             WHERE ae.anchor_id IS NULL
+             ORDER BY a.anchor_id ASC",
         )?;
         let rows = stmt.query_map([], map_anchor_row)?;
         let anchors = rows.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -257,6 +268,15 @@ mod tests {
         repo.delete(a.anchor_id).unwrap();
         let ids = repo.list_ids_for_file("./file.txt").unwrap();
         assert_eq!(ids, vec![b.anchor_id]);
+    }
+
+    #[test]
+    fn list_without_entities_returns_orphan_anchor() {
+        let repo = setup_repo();
+        repo.create(1, "./docs/orphan.md", Some(1), Some(0), Some(0)).unwrap();
+        let anchors = repo.list_without_entities().unwrap();
+        assert_eq!(anchors.len(), 1);
+        assert_eq!(anchors[0].file_path, "./docs/orphan.md");
     }
 
     #[test]

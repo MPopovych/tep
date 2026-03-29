@@ -1,5 +1,3 @@
-// (#!#1#tep:repo.entity)
-// [#!#1#tep:46](repo.entity.links)
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -83,6 +81,19 @@ impl<'a> EntityRepository<'a> {
     pub fn list(&self) -> Result<Vec<Entity>> {
         let mut stmt = self.conn.prepare(
             "SELECT entity_id, name, ref, description, created_at, updated_at FROM entities ORDER BY entity_id ASC",
+        )?;
+        let rows = stmt.query_map([], map_entity_row)?;
+        let entities = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(entities)
+    }
+
+    pub fn list_without_anchors(&self) -> Result<Vec<Entity>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.entity_id, e.name, e.ref, e.description, e.created_at, e.updated_at
+             FROM entities e
+             LEFT JOIN anchor_entities ae ON ae.entity_id = e.entity_id
+             WHERE ae.entity_id IS NULL
+             ORDER BY e.entity_id ASC",
         )?;
         let rows = stmt.query_map([], map_entity_row)?;
         let entities = rows.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -257,6 +268,15 @@ mod tests {
         assert_eq!(updated.name, "student.profile");
         assert_eq!(updated.r#ref.as_deref(), Some("./docs/profile.md"));
         assert_eq!(updated.description.as_deref(), Some("Profile entity"));
+    }
+
+    #[test]
+    fn list_without_anchors_returns_orphan_entities() {
+        let repo = setup_repo();
+        repo.create(&NewEntity { name: "orphan.entity".into(), r#ref: None, description: None }).unwrap();
+        let entities = repo.list_without_anchors().unwrap();
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].name, "orphan.entity");
     }
 
     #[test]

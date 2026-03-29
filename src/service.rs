@@ -1,4 +1,5 @@
 pub mod anchor_service;
 pub mod entity_context;
 pub mod entity_service;
+pub mod health_service;
 pub mod workspace_service;

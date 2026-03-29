@@ -1,5 +1,6 @@
 use crate::output::anchor_format::format_anchor_compact;
-use crate::service::anchor_service::{AnchorHealthResult, AnchorShowResult, AnchorSyncResult};
+use crate::service::anchor_service::{AnchorShowResult, AnchorSyncResult};
+use crate::service::health_service::HealthReport;
 
 pub fn format_anchor_sync_result(result: &AnchorSyncResult) -> String {
     format!(
@@ -12,24 +13,26 @@ pub fn format_anchor_sync_result(result: &AnchorSyncResult) -> String {
     )
 }
 
-pub fn format_anchor_health_result(result: &AnchorHealthResult) -> String {
+pub fn format_anchor_health_result(report: &HealthReport) -> String {
     let mut out = format!(
-        "anchor health report\nfiles_scanned: {}\nanchors_seen: {}\nanchors_healthy: {}\nanchors_moved: {}\nanchors_missing: {}\nduplicate_anchor_ids: {}\nunknown_anchor_ids: {}\n",
-        result.files_scanned,
-        result.anchors_seen,
-        result.anchors_healthy,
-        result.anchors_moved,
-        result.anchors_missing,
-        result.duplicate_anchor_ids,
-        result.unknown_anchor_ids
+        "workspace health report\nfiles_scanned: {}\nanchors_seen: {}\nanchors_healthy: {}\nanchors_moved: {}\nanchors_missing: {}\nduplicate_anchor_ids: {}\nunknown_anchor_ids: {}\nentities_without_anchors: {}\nanchors_without_entities: {}\n",
+        report.files_scanned,
+        report.anchors_seen,
+        report.anchors_healthy,
+        report.issue_counts.anchors_moved,
+        report.issue_counts.anchors_missing,
+        report.issue_counts.duplicate_anchor_ids,
+        report.issue_counts.unknown_anchor_ids,
+        report.issue_counts.entities_without_anchors,
+        report.issue_counts.anchors_without_entities
     );
 
-    if !result.issues.is_empty() {
-        out.push_str("issues:\n");
-        for issue in &result.issues {
-            out.push_str(&format!("- {}\n", issue));
-        }
-    }
+    append_group(&mut out, "moved anchors", &report.groups.moved_anchors);
+    append_group(&mut out, "missing anchors", &report.groups.missing_anchors);
+    append_group(&mut out, "duplicate anchor ids", &report.groups.duplicate_anchor_ids);
+    append_group(&mut out, "unknown anchor ids", &report.groups.unknown_anchor_ids);
+    append_group(&mut out, "entities without anchors", &report.groups.entities_without_anchors);
+    append_group(&mut out, "anchors without entities", &report.groups.anchors_without_entities);
 
     out
 }
@@ -46,12 +49,21 @@ pub fn format_anchor_show(result: &AnchorShowResult) -> String {
     out
 }
 
+fn append_group(out: &mut String, label: &str, items: &[String]) {
+    if !items.is_empty() {
+        out.push_str(&format!("{}:\n", label));
+        for item in items {
+            out.push_str(&format!("- {}\n", item));
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::anchor::Anchor;
     use crate::entity::Entity;
+    use crate::service::health_service::{HealthIssueCounts, HealthIssueGroups};
 
     #[test]
     fn formats_anchor_sync_result() {
@@ -73,23 +85,35 @@ mod tests {
 
     #[test]
     fn formats_anchor_health_result() {
-        let rendered = format_anchor_health_result(&AnchorHealthResult {
+        let rendered = format_anchor_health_result(&HealthReport {
             files_scanned: 2,
             anchors_seen: 3,
             anchors_healthy: 1,
-            anchors_moved: 1,
-            anchors_missing: 1,
-            duplicate_anchor_ids: 1,
-            unknown_anchor_ids: 0,
-            issues: vec!["anchor 7 metadata drifted".into()],
+            issue_counts: HealthIssueCounts {
+                anchors_moved: 1,
+                anchors_missing: 1,
+                duplicate_anchor_ids: 1,
+                unknown_anchor_ids: 0,
+                entities_without_anchors: 1,
+                anchors_without_entities: 1,
+            },
+            groups: HealthIssueGroups {
+                moved_anchors: vec!["anchor 7 metadata drifted".into()],
+                missing_anchors: vec![],
+                duplicate_anchor_ids: vec![],
+                unknown_anchor_ids: vec![],
+                entities_without_anchors: vec!["3 (orphan.entity)".into()],
+                anchors_without_entities: vec!["9 ./docs/orphan.md".into()],
+            },
         });
 
-        assert!(rendered.contains("anchor health report"));
+        assert!(rendered.contains("workspace health report"));
         assert!(rendered.contains("files_scanned: 2"));
         assert!(rendered.contains("anchors_moved: 1"));
-        assert!(rendered.contains("anchors_missing: 1"));
-        assert!(rendered.contains("duplicate_anchor_ids: 1"));
-        assert!(rendered.contains("issues:"));
+        assert!(rendered.contains("entities_without_anchors: 1"));
+        assert!(rendered.contains("anchors_without_entities: 1"));
+        assert!(rendered.contains("moved anchors:"));
+        assert!(rendered.contains("entities without anchors:"));
     }
 
     #[test]
