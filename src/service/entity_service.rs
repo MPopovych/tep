@@ -255,8 +255,8 @@ fn extract_anchor_snippet(anchor: &Anchor) -> Result<Option<String>> {
     let raw_start = offset.saturating_sub(CONTEXT_WINDOW_BYTES);
     let raw_end = (offset + CONTEXT_WINDOW_BYTES).min(text.len());
 
-    let start = floor_char_boundary(&text, raw_start);
-    let end = ceil_char_boundary(&text, raw_end);
+    let start = snap_start_to_line_boundary(&text, raw_start);
+    let end = snap_end_to_line_boundary(&text, raw_end);
     if start >= end {
         return Ok(None);
     }
@@ -283,6 +283,22 @@ fn ceil_char_boundary(text: &str, mut idx: usize) -> usize {
         idx += 1;
     }
     idx
+}
+
+fn snap_start_to_line_boundary(text: &str, raw_start: usize) -> usize {
+    let start = floor_char_boundary(text, raw_start);
+    match text[..start].rfind('\n') {
+        Some(idx) => idx + 1,
+        None => 0,
+    }
+}
+
+fn snap_end_to_line_boundary(text: &str, raw_end: usize) -> usize {
+    let end = ceil_char_boundary(text, raw_end);
+    match text[end..].find('\n') {
+        Some(idx) => end + idx,
+        None => text.len(),
+    }
 }
 
 #[cfg(test)]
@@ -381,6 +397,7 @@ mod tests {
         };
         let snippet = extract_anchor_snippet(&anchor).unwrap().unwrap();
         assert!(snippet.starts_with("anchor at start"));
+        assert!(!snippet.starts_with('\n'));
     }
 
     #[test]
@@ -401,6 +418,30 @@ mod tests {
         };
         let snippet = extract_anchor_snippet(&anchor).unwrap().unwrap();
         assert!(snippet.ends_with("anchor at end"));
+        assert!(!snippet.ends_with('\n'));
+    }
+
+    #[test]
+    fn snippet_snaps_to_line_boundaries() {
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("lines.txt");
+        std::fs::write(&file, "one\ntwo anchor target\nthree\n").unwrap();
+        let offset = "one\n".len() + 4;
+        let anchor = Anchor {
+            anchor_id: 1,
+            version: 1,
+            file_path: file.to_string_lossy().into(),
+            line: Some(2),
+            shift: Some(4),
+            offset: Some(offset as i64),
+            created_at: "1".into(),
+            updated_at: "1".into(),
+        };
+        let snippet = extract_anchor_snippet(&anchor).unwrap().unwrap();
+        assert!(snippet.starts_with("one\n") || snippet.starts_with("two anchor target"));
+        assert!(snippet.ends_with("three") || snippet.ends_with("two anchor target"));
+        assert!(!snippet.starts_with("ne"));
+        assert!(!snippet.ends_with("thr"));
     }
 
     #[test]

@@ -123,6 +123,7 @@ Suggested approach:
 - extract a small surrounding byte window around the anchor
 - clamp safely to file boundaries
 - trim to valid UTF-8 character boundaries
+- then snap outward to nearby line boundaries for cleaner output
 - keep snippet length small and predictable
 
 A snippet does not need to be perfect.
