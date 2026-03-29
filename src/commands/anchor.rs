@@ -1,7 +1,6 @@
 use crate::cli::AnchorCommands;
 use crate::commands::support::{print_rendered, with_anchor_service};
 use crate::output::anchor_output::{format_anchor_relation_result, format_anchor_show, format_anchor_sync_result};
-use crate::service::anchor_service::AnchorService;
 
 pub fn run(command: AnchorCommands) -> anyhow::Result<()> {
     with_anchor_service(|service| match command {

@@ -1,5 +1,5 @@
-// (#!#1#tep:module.anchor)
-// [#!#1#tep:43](anchor.parser)
+use crate::utils::parse::{line_contains_marker, parse_scan_limit};
+
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
 pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
 
@@ -45,9 +45,9 @@ impl ParsedAnchor {
 pub fn parse_anchors(input: &str) -> Vec<ParsedAnchor> {
     let mut out = Vec::new();
     let mut i = 0usize;
-    let ignore_after = input.find(TEPIGNORE_AFTER_MARKER).unwrap_or(input.len());
+    let scan_limit = parse_scan_limit(input, TEPIGNORE_AFTER_MARKER);
 
-    while i < input.len() && i < ignore_after {
+    while i < input.len() && i < scan_limit {
         let rest = &input[i..];
         if rest.starts_with("[#!#tep:]") || rest.starts_with("[#!#") {
             if let Some(parsed) = try_parse_anchor(input, i) {
@@ -93,21 +93,14 @@ fn try_parse_anchor(input: &str, start: usize) -> Option<ParsedAnchor> {
     };
 
     let raw = format!("{}{}", head, &after_head[..suffix_len]);
-
-    let (version, anchor_id) = if head == "[#!#tep:]" {
-        (None, None)
-    } else if head.starts_with("[#!#") && head.ends_with(']') {
-        parse_materialized_head(head)?
-    } else {
-        return None;
-    };
+    let (version, anchor_id) = parse_anchor_head(head)?;
 
     let prefix = &input[..start];
     let line = prefix.bytes().filter(|b| *b == b'\n').count() as i64 + 1;
     let last_newline = prefix.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
     let shift = (start - last_newline) as i64;
 
-    if line_contains_tepignore(input, start) {
+    if line_contains_marker(input, start, TEPIGNORE_MARKER) {
         return None;
     }
 
@@ -122,21 +115,19 @@ fn try_parse_anchor(input: &str, start: usize) -> Option<ParsedAnchor> {
     })
 }
 
+fn parse_anchor_head(head: &str) -> Option<(Option<i64>, Option<i64>)> {
+    if head == "[#!#tep:]" {
+        return Some((None, None));
+    }
+    parse_materialized_head(head)
+}
+
 fn parse_materialized_head(head: &str) -> Option<(Option<i64>, Option<i64>)> {
     let body = head.strip_prefix("[#!#")?.strip_suffix(']')?;
     let (version_str, rest) = body.split_once("#tep:")?;
     let version = version_str.parse::<i64>().ok()?;
     let anchor_id = rest.parse::<i64>().ok()?;
     Some((Some(version), Some(anchor_id)))
-}
-
-fn line_contains_tepignore(input: &str, start: usize) -> bool {
-    let line_start = input[..start].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-    let line_end = input[start..]
-        .find('\n')
-        .map(|idx| start + idx)
-        .unwrap_or(input.len());
-    input[line_start..line_end].contains(TEPIGNORE_MARKER)
 }
 
 pub fn materialize_anchor(parsed: &ParsedAnchor, new_anchor_id: i64, version: i64) -> String {
@@ -152,7 +143,6 @@ pub fn materialize_anchor(parsed: &ParsedAnchor, new_anchor_id: i64, version: i6
     }
 }
 
-// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

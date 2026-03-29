@@ -1,5 +1,5 @@
-// (#!#1#tep:module.entity)
-// [#!#1#tep:44](entity.declaration.parser)
+use crate::utils::parse::{line_contains_marker, parse_scan_limit};
+
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
 pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
 
@@ -74,9 +74,9 @@ pub fn validate_name(name: &str) -> Result<(), &'static str> {
 pub fn parse_entity_declarations(input: &str) -> Vec<ParsedEntityDeclaration> {
     let mut out = Vec::new();
     let mut i = 0usize;
-    let ignore_after = input.find(TEPIGNORE_AFTER_MARKER).unwrap_or(input.len());
+    let scan_limit = parse_scan_limit(input, TEPIGNORE_AFTER_MARKER);
 
-    while i < input.len() && i < ignore_after {
+    while i < input.len() && i < scan_limit {
         let rest = &input[i..];
         if rest.starts_with("(#!#tep:") || rest.starts_with("(#!#") {
             if let Some(parsed) = try_parse_entity_declaration(input, i) {
@@ -117,7 +117,7 @@ fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntit
     let last_newline = prefix.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
     let shift = (start - last_newline) as i64;
 
-    if line_contains_tepignore(input, start) {
+    if line_contains_marker(input, start, TEPIGNORE_MARKER) {
         return None;
     }
 
@@ -131,20 +131,10 @@ fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntit
     })
 }
 
-fn line_contains_tepignore(input: &str, start: usize) -> bool {
-    let line_start = input[..start].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-    let line_end = input[start..]
-        .find('\n')
-        .map(|idx| start + idx)
-        .unwrap_or(input.len());
-    input[line_start..line_end].contains(TEPIGNORE_MARKER)
-}
-
 pub fn materialize_entity_declaration(parsed: &ParsedEntityDeclaration, version: i64) -> String {
     format!("(#!#{}#tep:{})", version, parsed.name)
 }
 
-// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

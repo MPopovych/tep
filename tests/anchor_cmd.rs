@@ -44,7 +44,7 @@ fn health_command_reports_workspace_anchor_issues() {
         .args(["health"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("anchor health report"))
+        .stdout(predicate::str::contains("workspace health report"))
         .stdout(predicate::str::contains("anchors_healthy: 1"));
 
     let updated = std::fs::read_to_string(&path).expect("should read file");

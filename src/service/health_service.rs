@@ -1,12 +1,11 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use crate::anchor::{AnchorKind, ParsedAnchor, parse_anchors};
-use crate::entity::Entity;
 use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
