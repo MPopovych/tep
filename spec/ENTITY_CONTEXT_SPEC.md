@@ -83,6 +83,18 @@ Behavior:
 - traversal should dedupe entities and avoid cycles
 - depth should reflect distance from the root entity, not raw recursion count
 
+## Repo behavior note
+
+In the `tep` repo itself, current canonical context output remains healthy after repeated health/auto/refactor passes.
+The repo’s canonical docs graph is expected to stay clean under:
+
+```bash
+tep health
+tep anchor auto .
+```
+
+with `.tep_ignore` excluding non-canonical example/fixture material.
+
 ## Proposed text output
 
 Example shape:

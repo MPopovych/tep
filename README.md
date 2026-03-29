@@ -18,7 +18,8 @@ Current implemented areas:
 - attach entities to anchors
 - show entities with related anchors and links
 - assemble retrieval-oriented entity context bundles
-- show anchors with related entities
+- audit anchor health across a workspace
+- auto-fix anchor metadata/state from the workspace root
 
 ## Workspace model
 
@@ -110,6 +111,7 @@ tep init
 tep version
 tep -V
 tep --version
+tep health [path]
 ```
 
 ### Entities
@@ -146,6 +148,20 @@ tep a ...
 tep attach <entity-id-or-name> <anchor-id>
 tep detach <entity-id-or-name> <anchor-id>
 ```
+
+## Health and root repair
+
+`tep health` performs a read-only anchor health audit.
+
+Example:
+```bash
+tep health
+tep health ./docs
+```
+
+`tep anchor auto .` is the repair path for a workspace root.
+
+In practice, repo-wide health and auto-fix should usually be paired with a sensible `.tep_ignore` so example fixtures and intentionally broken samples do not pollute canonical workspace health.
 
 ## Output style
 
@@ -186,6 +202,29 @@ Anchor identity is the anchor ID.
 - `.gitignore` is not
 - `line`, `shift`, and `offset` are refreshable metadata only
 - `shift` and `offset` are byte-oriented in practice
+- current codebase internals now centralize shared path/time utilities and shared output rendering helpers
+
+## Repo self-check
+
+The `tep` repo itself currently has a clean canonical docs graph.
+At the time of this update, `tep health` in the repo root reports:
+- `anchors_healthy: 18`
+- `anchors_moved: 0`
+- `anchors_missing: 0`
+- `duplicate_anchor_ids: 0`
+- `unknown_anchor_ids: 0`
+
+And the canonical entity set in the repo includes:
+- `tep`
+- `workspace`
+- `entity`
+- `anchor`
+- `anchor_entity_relation`
+- `link`
+- `cli`
+- `workspace.discovery`
+- `entity.declaration`
+- `anchor.tag`
 
 ## Documentation map
 

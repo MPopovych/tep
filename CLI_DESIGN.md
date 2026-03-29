@@ -68,6 +68,7 @@ tep init
 tep version
 tep -V
 tep --version
+tep health [path]
 ```
 
 ### Entities
@@ -153,6 +154,15 @@ Example edge line:
 ```txt
 edge: (1->2)[1] student has subjects
 ```
+
+## Internal implementation notes
+
+Recent internal cleanup points:
+- shared path logic lives in `src/utils/path.rs`
+- shared time helper lives in `src/utils/time.rs`
+- shared output rendering helpers live in `src/output/render.rs`
+- service constructors can now be workspace-root aware for more reliable tests
+- command-layer boilerplate is reduced through shared support helpers
 
 ## Non-goals for current scope
 
