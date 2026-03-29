@@ -170,11 +170,7 @@ impl<'a> EntityService<'a> {
         }
 
         let anchor = if declaration.version.is_some() {
-            if let Some(existing) = self
-                .anchor_repo
-                .find_by_file_and_offset(file_path, declaration.start_offset as i64)?
-                .or(self.anchor_repo.find_latest_for_entity_in_file(entity.entity_id, file_path)?)
-            {
+            if let Some(existing) = self.anchor_repo.find_latest_for_entity_in_file(entity.entity_id, file_path)? {
                 self.anchor_repo.update_location(
                     existing.anchor_id,
                     file_path,

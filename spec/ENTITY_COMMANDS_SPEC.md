@@ -77,6 +77,8 @@ Behavior:
   (#!#1#tep:Student)
   ```
 - do not overwrite an existing non-null `ref`
+- anchor reuse for already-versioned declarations should rely on durable identity and existing relations, not on `line`, `shift`, or `offset`
+- `line`, `shift`, and `offset` are refreshable metadata only
 
 ### Show
 ```bash

@@ -94,20 +94,6 @@ impl<'a> AnchorRepository<'a> {
         Ok(anchors)
     }
 
-    pub fn find_by_file_and_offset(&self, file_path: &str, offset: i64) -> Result<Option<Anchor>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT anchor_id, version, file_path, line, shift, offset, created_at, updated_at
-             FROM anchors
-             WHERE file_path = ?1 AND offset = ?2
-             ORDER BY anchor_id ASC
-             LIMIT 1",
-        )?;
-        let anchor = stmt
-            .query_row(params![file_path, offset], map_anchor_row)
-            .optional()?;
-        Ok(anchor)
-    }
-
     pub fn find_latest_for_entity_in_file(&self, entity_id: i64, file_path: &str) -> Result<Option<Anchor>> {
         let mut stmt = self.conn.prepare(
             "SELECT a.anchor_id, a.version, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
@@ -247,14 +233,6 @@ mod tests {
         let anchors = anchor_repo.list_for_entity(entity.entity_id).unwrap();
         assert_eq!(anchors.len(), 1);
         assert_eq!(anchors[0].anchor_id, anchor.anchor_id);
-    }
-
-    #[test]
-    fn find_by_file_and_offset_returns_matching_anchor() {
-        let repo = setup_repo();
-        let created = repo.create(1, "./file.txt", Some(3), Some(4), Some(22)).unwrap();
-        let found = repo.find_by_file_and_offset("./file.txt", 22).unwrap().unwrap();
-        assert_eq!(found.anchor_id, created.anchor_id);
     }
 
     #[test]
