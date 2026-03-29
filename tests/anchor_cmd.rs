@@ -61,6 +61,33 @@ fn anchor_auto_materializes_incomplete_anchor() {
 }
 
 #[test]
+fn anchor_auto_ignores_line_with_tepgnore() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    let path = temp.path().join("examples.txt");
+    std::fs::write(&path, "example [#!#tep:](student) #tepgnore\n")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./examples.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_seen: 0"))
+        .stdout(predicate::str::contains("anchors_created: 0"));
+
+    let updated = std::fs::read_to_string(&path).expect("should read file");
+    assert_eq!(updated, "example [#!#tep:](student) #tepgnore\n");
+}
+
+#[test]
 fn anchor_show_returns_compact_format() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("note.txt"), "[#!#tep:](student)")

@@ -144,6 +144,33 @@ fn entity_auto_creates_entity_fills_ref_and_rewrites_declaration() {
 }
 
 #[test]
+fn entity_auto_ignores_line_with_tepgnore() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    let path = temp.path().join("examples.txt");
+    std::fs::write(&path, "example (#!#tep:Student) #tepgnore\n")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./examples.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("declarations_seen: 0"))
+        .stdout(predicate::str::contains("anchors_created: 0"));
+
+    let updated = std::fs::read_to_string(&path).expect("should read file");
+    assert_eq!(updated, "example (#!#tep:Student) #tepgnore\n");
+}
+
+#[test]
 fn entity_auto_does_not_overwrite_existing_ref() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("note.txt"), "(#!#tep:Student)")

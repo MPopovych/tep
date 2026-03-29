@@ -1,3 +1,5 @@
+pub const TEPGNORE_MARKER: &str = "#tepgnore";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
     pub entity_id: i64,
@@ -99,6 +101,10 @@ fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntit
     let last_newline = prefix.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
     let shift = (start - last_newline) as i64;
 
+    if line_contains_tepgnore(input, start) {
+        return None;
+    }
+
     Some(ParsedEntityDeclaration {
         raw: raw.to_string(),
         version,
@@ -107,6 +113,15 @@ fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntit
         line,
         shift,
     })
+}
+
+fn line_contains_tepgnore(input: &str, start: usize) -> bool {
+    let line_start = input[..start].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
+    let line_end = input[start..]
+        .find('\n')
+        .map(|idx| start + idx)
+        .unwrap_or(input.len());
+    input[line_start..line_end].contains(TEPGNORE_MARKER)
 }
 
 pub fn materialize_entity_declaration(parsed: &ParsedEntityDeclaration, version: i64) -> String {
@@ -168,6 +183,12 @@ mod tests {
     #[test]
     fn ignores_numeric_entity_declaration_name() {
         let parsed = parse_entity_declarations("(#!#tep:123)");
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn ignores_entity_declaration_when_line_contains_tepgnore() {
+        let parsed = parse_entity_declarations("example (#!#tep:Student) #tepgnore");
         assert!(parsed.is_empty());
     }
 }

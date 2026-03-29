@@ -77,6 +77,9 @@ For targeted files, the command:
 6. detects dropped anchors in those files
 7. removes stale anchor state that no longer exists in the file
 
+If a line contains the literal marker `#tepgnore`, anchors on that line are ignored.
+This is useful for docs and examples that intentionally show incomplete tags.
+
 ## Entity reference instruction behavior
 
 The payload in `( ... )` is optional.
