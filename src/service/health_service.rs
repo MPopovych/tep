@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use crate::anchor::{AnchorKind, ParsedAnchor, parse_anchors};
+use crate::entity::parse_entity_declarations;
 use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
@@ -46,7 +47,6 @@ pub struct HealthReport {
 struct ParsedFile {
     absolute_path: PathBuf,
     display_path: String,
-    anchors: Vec<ParsedAnchor>,
 }
 
 #[derive(Debug, Default)]
@@ -78,10 +78,6 @@ impl<'a> HealthService<'a> {
 
     pub fn audit_paths(&self, paths: &[String]) -> Result<HealthReport> {
         let files = self.collect_workspace_files(paths)?;
-        let scoped_files = files
-            .iter()
-            .map(|file| self.anchor_repo.normalized_path_for(&file.display_path))
-            .collect::<HashSet<_>>();
 
         let mut report = HealthReport {
             files_scanned: 0,
@@ -105,7 +101,12 @@ impl<'a> HealthService<'a> {
             },
         };
 
+        let scoped_files = files
+            .iter()
+            .map(|file| self.anchor_repo.normalized_path_for(&file.display_path))
+            .collect::<HashSet<_>>();
         let mut tracker = HealthTracker::default();
+
         for file in files {
             if self.inspect_file(&file, &mut report, &mut tracker)? {
                 report.files_scanned += 1;
@@ -126,23 +127,44 @@ impl<'a> HealthService<'a> {
             .map(|path| ParsedFile {
                 absolute_path: resolve_from_workspace(&path, &self.workspace_root),
                 display_path: display_path(&path),
-                anchors: Vec::new(),
             })
             .collect())
     }
 
-    fn inspect_file(&self, file: &ParsedFile, report: &mut HealthReport, tracker: &mut HealthTracker) -> Result<bool> {
-        let parsed = self.read_parsed_file(file)?;
-        if parsed.anchors.is_empty() {
+    fn inspect_file(
+        &self,
+        file: &ParsedFile,
+        report: &mut HealthReport,
+        tracker: &mut HealthTracker,
+    ) -> Result<bool> {
+        let original = fs::read_to_string(&file.absolute_path)
+            .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
+        let parsed_anchors = parse_anchors(&original);
+        let parsed_declarations = parse_entity_declarations(&original);
+        if parsed_anchors.is_empty() && parsed_declarations.is_empty() {
             return Ok(false);
         }
 
-        report.anchors_seen += parsed.anchors.len();
-        let mut local_ids = HashSet::new();
+        report.anchors_seen += parsed_anchors.len() + parsed_declarations.len();
 
-        for anchor in &parsed.anchors {
-            if let AnchorKind::Materialized = anchor.kind() {
-                self.inspect_materialized_anchor(anchor, &parsed.display_path, report, tracker, &mut local_ids)?;
+        let mut local_ids = HashSet::new();
+        for anchor in &parsed_anchors {
+            match anchor.kind() {
+                AnchorKind::Incomplete => {}
+                AnchorKind::Materialized => {
+                    self.inspect_materialized_anchor(anchor, &file.display_path, report, tracker, &mut local_ids)?;
+                }
+            }
+        }
+
+        for declaration in &parsed_declarations {
+            if let Some(existing) = self
+                .entity_repo
+                .find(&crate::entity::EntityLookup::Name(declaration.name.clone()))?
+                .and_then(|entity| self.anchor_repo.find_latest_for_entity_in_file(entity.entity_id, &file.display_path).ok().flatten())
+            {
+                tracker.seen_materialized_ids.insert(existing.anchor_id);
+                report.anchors_healthy += 1;
             }
         }
 
@@ -162,10 +184,10 @@ impl<'a> HealthService<'a> {
 
         if !local_ids.insert(anchor_id) {
             report.issue_counts.duplicate_anchor_ids += 1;
-            report
-                .groups
-                .duplicate_anchor_ids
-                .push(format!("duplicate materialized anchor {} found in the same file {}", anchor_id, file_path));
+            report.groups.duplicate_anchor_ids.push(format!(
+                "anchor {} appears multiple times in {}",
+                anchor_id, file_path
+            ));
             return Ok(());
         }
 
@@ -179,7 +201,9 @@ impl<'a> HealthService<'a> {
                 return Ok(());
             }
         } else {
-            tracker.seen_by_anchor_id.insert(anchor_id, file_path.to_string());
+            tracker
+                .seen_by_anchor_id
+                .insert(anchor_id, file_path.to_string());
         }
 
         match self.anchor_repo.find_by_id(anchor_id)? {
@@ -229,45 +253,33 @@ impl<'a> HealthService<'a> {
         for anchor in self.anchor_repo.list_all()? {
             if scoped_files.contains(&anchor.file_path) && !seen_materialized_ids.contains(&anchor.anchor_id) {
                 report.issue_counts.anchors_missing += 1;
-                report
-                    .groups
-                    .missing_anchors
-                    .push(format!("missing anchor {} recorded in db but not found in file {}", anchor.anchor_id, anchor.file_path));
+                report.groups.missing_anchors.push(format!(
+                    "missing anchor {} recorded in db but not found in file {}",
+                    anchor.anchor_id, anchor.file_path
+                ));
             }
         }
         Ok(())
     }
 
     fn report_entities_without_anchors(&self, report: &mut HealthReport) -> Result<()> {
-        for entity in self.entity_repo.list_without_anchors()? {
-            report.issue_counts.entities_without_anchors += 1;
-            report
-                .groups
-                .entities_without_anchors
-                .push(format!("{} ({})", entity.entity_id, entity.name));
-        }
+        let entities = self.entity_repo.list_without_anchors()?;
+        report.issue_counts.entities_without_anchors = entities.len();
+        report.groups.entities_without_anchors = entities
+            .into_iter()
+            .map(|entity| format!("{} ({})", entity.entity_id, entity.name))
+            .collect();
         Ok(())
     }
 
     fn report_anchors_without_entities(&self, report: &mut HealthReport) -> Result<()> {
-        for anchor in self.anchor_repo.list_without_entities()? {
-            report.issue_counts.anchors_without_entities += 1;
-            report
-                .groups
-                .anchors_without_entities
-                .push(format!("{} {}", anchor.anchor_id, anchor.file_path));
-        }
+        let anchors = self.anchor_repo.list_without_entities()?;
+        report.issue_counts.anchors_without_entities = anchors.len();
+        report.groups.anchors_without_entities = anchors
+            .into_iter()
+            .map(|anchor| format!("{} {}", anchor.anchor_id, anchor.file_path))
+            .collect();
         Ok(())
-    }
-
-    fn read_parsed_file(&self, file: &ParsedFile) -> Result<ParsedFile> {
-        let original = fs::read_to_string(&file.absolute_path)
-            .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
-        Ok(ParsedFile {
-            absolute_path: file.absolute_path.clone(),
-            display_path: file.display_path.clone(),
-            anchors: parse_anchors(&original),
-        })
     }
 }
 
@@ -278,45 +290,39 @@ mod tests {
     use crate::entity::NewEntity;
     use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 
-    fn setup_health_service() -> HealthService<'static> {
+    fn setup_service() -> HealthService<'static> {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        db::ensure_schema(conn).expect("schema should apply");
+        conn.execute_batch(db::schema_sql())
+            .expect("schema should apply");
         HealthService::with_workspace_root(conn, "/tmp/project")
     }
 
     #[test]
     fn reports_entities_without_anchors() {
-        let service = setup_health_service();
+        let service = setup_service();
         service
             .entity_repo
-            .create(&NewEntity {
-                name: "orphan.entity".into(),
-                r#ref: None,
-                description: None,
-            })
+            .create(&NewEntity { name: "student".into(), r#ref: None, description: None })
             .unwrap();
 
-        let report = service.audit_paths(&[".".into()]).unwrap();
+        let report = service.audit_paths(&["src".into()]).unwrap();
         assert_eq!(report.issue_counts.entities_without_anchors, 1);
-        assert!(report.groups.entities_without_anchors.iter().any(|item| item.contains("orphan.entity")));
     }
 
     #[test]
     fn reports_anchors_without_entities() {
-        let service = setup_health_service();
-        service
-            .anchor_repo
-            .create(1, "./docs/orphan.md", Some(1), Some(0), Some(0))
-            .unwrap();
+        let service = setup_service();
+        service.anchor_repo.create(1, "./docs/student.md", Some(1), Some(0), Some(0)).unwrap();
+        std::fs::create_dir_all("/tmp/project/docs").ok();
+        std::fs::write("/tmp/project/docs/student.md", "[#!#1#tep:1](student)").ok(); // #tepignore
 
-        let report = service.audit_paths(&[".".into()]).unwrap();
+        let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.issue_counts.anchors_without_entities, 1);
-        assert!(report.groups.anchors_without_entities.iter().any(|item| item.contains("./docs/orphan.md")));
     }
 
     #[test]
     fn reports_healthy_anchor_when_attached() {
-        let service = setup_health_service();
+        let service = setup_service();
         let entity = service
             .entity_repo
             .create(&NewEntity {

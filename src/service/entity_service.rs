@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
-use crate::anchor::Anchor;
+use crate::anchor::{Anchor, parse_anchors};
 use crate::entity::{Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity, materialize_entity_declaration, parse_entity_declarations, parse_lookup};
 use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
@@ -254,11 +254,28 @@ impl<'a> EntityService<'a> {
         rewritten.push_str(&original[cursor..]);
 
         if rewritten != original {
-            fs::write(&file.absolute_path, rewritten)
+            fs::write(&file.absolute_path, &rewritten)
                 .with_context(|| format!("failed to write {}", file.absolute_path.display()))?;
         }
 
+        self.refresh_anchor_locations(&file.display_path, &rewritten)?;
+
         Ok(true)
+    }
+
+    fn refresh_anchor_locations(&self, file_path: &str, text: &str) -> Result<()> {
+        for anchor in parse_anchors(text) {
+            if let Some(anchor_id) = anchor.anchor_id {
+                self.anchor_repo.update_location(
+                    anchor_id,
+                    file_path,
+                    Some(anchor.line),
+                    Some(anchor.shift),
+                    Some(anchor.start_offset as i64),
+                )?;
+            }
+        }
+        Ok(())
     }
 
     fn sync_declaration(
