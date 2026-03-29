@@ -2,6 +2,7 @@ use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::entity::{Entity, EntityLink, EntityLookup, NewEntity, UpdateEntity, validate_name};
+use crate::utils::time::now_utc;
 
 pub struct EntityRepository<'a> {
     conn: &'a Connection,
@@ -191,17 +192,6 @@ fn map_entity_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Entity> {
         created_at: row.get(4)?,
         updated_at: row.get(5)?,
     })
-}
-
-fn now_utc() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time should be after unix epoch")
-        .as_secs();
-
-    secs.to_string()
 }
 
 #[cfg(test)]

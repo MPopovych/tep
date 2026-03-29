@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use ignore::WalkBuilder;
 
+use crate::utils::path::{normalize_to_workspace, resolve_from_workspace};
+
 pub struct TepIgnoreFilter {
     workspace_root: PathBuf,
 }
@@ -19,11 +21,7 @@ impl TepIgnoreFilter {
 
         for input in inputs {
             let path = self.resolve_input(input);
-            let absolute_path = if path.is_absolute() {
-                path.clone()
-            } else {
-                self.workspace_root.join(&path)
-            };
+            let absolute_path = resolve_from_workspace(&path, &self.workspace_root);
             if absolute_path.is_file() {
                 if self.is_special_internal_file(&absolute_path) {
                     continue;
@@ -66,35 +64,12 @@ impl TepIgnoreFilter {
     }
 
     fn normalize_path(&self, path: &Path) -> PathBuf {
-        let cleaned = normalize_lexically(path);
-        if let Ok(relative) = cleaned.strip_prefix(&self.workspace_root) {
-            if relative.as_os_str().is_empty() {
-                self.workspace_root.clone()
-            } else {
-                PathBuf::from(".").join(relative)
-            }
-        } else {
-            cleaned
-        }
+        normalize_to_workspace(path, &self.workspace_root)
     }
 
     fn is_special_internal_file(&self, path: &Path) -> bool {
         matches!(path.file_name().and_then(|s| s.to_str()), Some(".tep_ignore"))
     }
-}
-
-fn normalize_lexically(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for component in path.components() {
-        match component {
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                out.pop();
-            }
-            other => out.push(other.as_os_str()),
-        }
-    }
-    out
 }
 
 #[cfg(test)]

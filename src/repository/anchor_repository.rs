@@ -1,9 +1,11 @@
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::anchor::Anchor;
+use crate::utils::path::normalize_to_workspace;
+use crate::utils::time::now_utc;
 
 pub struct AnchorRepository<'a> {
     conn: &'a Connection,
@@ -146,23 +148,14 @@ impl<'a> AnchorRepository<'a> {
         Ok(())
     }
 
-    fn normalize_path(&self, input: &str) -> String {
-        let path = Path::new(input);
-        let absolute = if path.is_absolute() {
-            normalize_lexically(path)
-        } else {
-            normalize_lexically(&self.workspace_root.join(path))
-        };
+    pub fn normalized_path_for(&self, input: &str) -> String {
+        self.normalize_path(input)
+    }
 
-        if let Ok(relative) = absolute.strip_prefix(&self.workspace_root) {
-            if relative.as_os_str().is_empty() {
-                ".".into()
-            } else {
-                format!("./{}", relative.to_string_lossy())
-            }
-        } else {
-            absolute.to_string_lossy().to_string()
-        }
+    fn normalize_path(&self, input: &str) -> String {
+        normalize_to_workspace(Path::new(input), &self.workspace_root)
+            .to_string_lossy()
+            .to_string()
     }
 }
 
@@ -177,31 +170,6 @@ fn map_anchor_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Anchor> {
         created_at: row.get(6)?,
         updated_at: row.get(7)?,
     })
-}
-
-fn normalize_lexically(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                out.pop();
-            }
-            other => out.push(other.as_os_str()),
-        }
-    }
-    out
-}
-
-fn now_utc() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time should be after unix epoch")
-        .as_secs();
-
-    secs.to_string()
 }
 
 #[cfg(test)]
@@ -325,5 +293,11 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(found.anchor_id, new_anchor.anchor_id);
+    }
+
+    #[test]
+    fn normalized_path_for_returns_workspace_relative_path() {
+        let repo = setup_repo();
+        assert_eq!(repo.normalized_path_for("/tmp/project/./docs/a.md"), "./docs/a.md");
     }
 }
