@@ -1,10 +1,11 @@
 use crate::entity::Entity;
 use crate::output::anchor_format::{format_anchor_compact, format_anchor_location};
-use crate::output::styles::{ANSI_CYAN, ANSI_YELLOW, paint};
-use crate::service::entity_service::{EntityAutoResult, EntityContextResult, EntityLinkResult, EntityShowResult, LinkedEntityContext};
+use crate::output::render::{append_context_link_block, append_entity_metadata, append_files_block, append_show_link_block, render_entity_header};
+use crate::service::entity_service::{EntityAutoResult, EntityContextResult, EntityLinkResult, EntityShowResult};
 
 pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
-    let mut out = format!("{prefix}\n{} ({})\n", entity.entity_id, entity.name);
+    let mut out = format!("{prefix}\n");
+    out.push_str(&render_entity_header(entity));
     if let Some(description) = &entity.description {
         out.push_str(&format!("description: {}\n", description));
     }
@@ -24,13 +25,8 @@ pub fn format_entity_auto_result(result: &EntityAutoResult) -> String {
 }
 
 pub fn format_entity_show(result: &EntityShowResult) -> String {
-    let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
-    if let Some(entity_ref) = &result.entity.r#ref {
-        out.push_str(&format!("{}\n", paint(ANSI_YELLOW, format!("ref: {}", paint(ANSI_CYAN, entity_ref)))));
-    }
-    if let Some(description) = &result.entity.description {
-        out.push_str(&format!("description: {}\n", description));
-    }
+    let mut out = render_entity_header(&result.entity);
+    append_entity_metadata(&mut out, &result.entity);
     for anchor in &result.anchors {
         out.push_str(&format_anchor_compact(anchor));
     }
@@ -40,13 +36,8 @@ pub fn format_entity_show(result: &EntityShowResult) -> String {
 }
 
 pub fn format_entity_context(result: &EntityContextResult) -> String {
-    let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
-    if let Some(entity_ref) = &result.entity.r#ref {
-        out.push_str(&format!("{}\n", paint(ANSI_YELLOW, format!("ref: {}", paint(ANSI_CYAN, entity_ref)))));
-    }
-    if let Some(description) = &result.entity.description {
-        out.push_str(&format!("description: {}\n", description));
-    }
+    let mut out = render_entity_header(&result.entity);
+    append_entity_metadata(&mut out, &result.entity);
     out.push('\n');
 
     for item in &result.anchors {
@@ -66,13 +57,8 @@ pub fn format_entity_context(result: &EntityContextResult) -> String {
 }
 
 pub fn format_entity_context_files_only(result: &EntityContextResult) -> String {
-    let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
-    if let Some(entity_ref) = &result.entity.r#ref {
-        out.push_str(&format!("{}\n", paint(ANSI_YELLOW, format!("ref: {}", paint(ANSI_CYAN, entity_ref)))));
-    }
-    if let Some(description) = &result.entity.description {
-        out.push_str(&format!("description: {}\n", description));
-    }
+    let mut out = render_entity_header(&result.entity);
+    append_entity_metadata(&mut out, &result.entity);
     append_files_block(&mut out, &result.files);
     append_context_link_block(&mut out, &result.linked_entities);
     out
@@ -108,51 +94,9 @@ pub fn format_entity_list(entities: &[Entity]) -> String {
 
     let mut out = String::new();
     for entity in entities {
-        out.push_str(&format!("{} ({})\n", entity.entity_id, entity.name));
+        out.push_str(&render_entity_header(entity));
     }
     out
-}
-
-fn append_files_block(out: &mut String, files: &[String]) {
-    if !files.is_empty() {
-        out.push_str("files:\n");
-        for file in files {
-            out.push_str(&format!("- {}\n", paint(ANSI_CYAN, file)));
-        }
-    }
-}
-
-fn append_show_link_block(out: &mut String, header: &str, links: &[(crate::entity::EntityLink, Entity)], outgoing: bool) {
-    if !links.is_empty() {
-        out.push_str(header);
-        out.push('\n');
-        for (link, entity) in links {
-            let arrow = if outgoing { "->" } else { "<-" };
-            out.push_str(&format!("{} {} ({})\n   relation: {}\n", arrow, entity.entity_id, entity.name, link.relation));
-        }
-    }
-}
-
-fn append_context_link_block(out: &mut String, links: &[LinkedEntityContext]) {
-    if !links.is_empty() {
-        out.push_str("linked entities:\n");
-        for item in links {
-            out.push_str(&format!("- {} ({})\n", item.entity.entity_id, item.entity.name));
-            if let Some(entity_ref) = &item.entity.r#ref {
-                out.push_str(&format!("  ref: {}\n", entity_ref));
-            }
-            if let Some(description) = &item.entity.description {
-                out.push_str(&format!("  description: {}\n", description));
-            }
-            out.push_str(&format!(
-                "  edge: ({}->{})[{}] {}\n",
-                item.link.from_entity_id,
-                item.link.to_entity_id,
-                item.depth,
-                item.link.relation
-            ));
-        }
-    }
 }
 
 #[cfg(test)]
@@ -263,7 +207,7 @@ mod tests {
             entity: sample_entity(),
             anchors: vec![],
             files: vec!["./docs/student.md".into()],
-            linked_entities: vec![LinkedEntityContext {
+            linked_entities: vec![crate::service::entity_service::LinkedEntityContext {
                 link: crate::entity::EntityLink {
                     from_entity_id: 42,
                     to_entity_id: 10,
