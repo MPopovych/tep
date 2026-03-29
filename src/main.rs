@@ -5,9 +5,20 @@ mod db;
 mod entity;
 mod errors;
 mod filter;
-mod output;
+mod output {
+    pub mod anchor_format;
+    pub mod anchor_output;
+    pub mod entity_output;
+    pub mod styles;
+    pub mod workspace_output;
+}
 mod repository;
-mod service;
+mod service {
+    pub mod anchor_service;
+    pub mod entity_context;
+    pub mod entity_service;
+    pub mod workspace_service;
+}
 
 use clap::Parser;
 use cli::Cli;

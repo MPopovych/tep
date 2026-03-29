@@ -1,11 +1,6 @@
 use crate::anchor::Anchor;
+use crate::output::anchor_format::format_anchor_compact;
 use crate::service::anchor_service::{AnchorShowResult, AnchorSyncResult};
-
-const ANSI_RESET: &str = "\x1b[0m";
-const ANSI_CYAN: &str = "\x1b[36m";
-const ANSI_GREEN: &str = "\x1b[32m";
-const ANSI_YELLOW: &str = "\x1b[33m";
-const ANSI_MAGENTA: &str = "\x1b[35m";
 
 pub fn format_anchor_sync_result(result: &AnchorSyncResult) -> String {
     format!(
@@ -30,24 +25,6 @@ pub fn format_anchor_show(result: &AnchorShowResult) -> String {
     out
 }
 
-pub fn format_anchor_compact(anchor: &Anchor) -> String {
-    format!(
-        "{}\n{}{}{} ({}{}{}:{}{}{} ) {}[{}]{}\n",
-        anchor.anchor_id,
-        ANSI_CYAN,
-        anchor.file_path,
-        ANSI_RESET,
-        ANSI_GREEN,
-        anchor.line.unwrap_or(0),
-        ANSI_RESET,
-        ANSI_MAGENTA,
-        anchor.shift.unwrap_or(0),
-        ANSI_RESET,
-        ANSI_YELLOW,
-        anchor.offset.unwrap_or(0),
-        ANSI_RESET
-    )
-}
 
 #[cfg(test)]
 mod tests {

@@ -1,12 +1,8 @@
 use crate::anchor::Anchor;
 use crate::entity::Entity;
+use crate::output::anchor_format::{format_anchor_compact, format_anchor_location};
+use crate::output::styles::{ANSI_CYAN, ANSI_YELLOW, paint};
 use crate::service::entity_service::{EntityAutoResult, EntityContextResult, EntityShowResult};
-
-const ANSI_RESET: &str = "\x1b[0m";
-const ANSI_CYAN: &str = "\x1b[36m";
-const ANSI_GREEN: &str = "\x1b[32m";
-const ANSI_YELLOW: &str = "\x1b[33m";
-const ANSI_MAGENTA: &str = "\x1b[35m";
 
 pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
     format!("{prefix}\n{} ({})\n", entity.entity_id, entity.name)
@@ -35,7 +31,7 @@ pub fn format_entity_show(result: &EntityShowResult) -> String {
 pub fn format_entity_context(result: &EntityContextResult) -> String {
     let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
     if let Some(entity_ref) = &result.entity.r#ref {
-        out.push_str(&format!("{}ref:{} {}{}{}\n", ANSI_YELLOW, ANSI_RESET, ANSI_CYAN, entity_ref, ANSI_RESET));
+        out.push_str(&format!("{}\n", paint(ANSI_YELLOW, format!("ref: {}", paint(ANSI_CYAN, entity_ref)))));
     }
     out.push('\n');
 
@@ -53,7 +49,7 @@ pub fn format_entity_context(result: &EntityContextResult) -> String {
     if !result.files.is_empty() {
         out.push_str("files:\n");
         for file in &result.files {
-            out.push_str(&format!("- {}{}{}\n", ANSI_CYAN, file, ANSI_RESET));
+            out.push_str(&format!("- {}\n", paint(ANSI_CYAN, file)));
         }
     }
 
@@ -72,27 +68,6 @@ pub fn format_entity_list(entities: &[Entity]) -> String {
     out
 }
 
-pub fn format_anchor_compact(anchor: &Anchor) -> String {
-    format!("{}\n{}", anchor.anchor_id, format_anchor_location(anchor))
-}
-
-fn format_anchor_location(anchor: &Anchor) -> String {
-    format!(
-        "{}{}{} ({}{}{}:{}{}{} ) {}[{}]{}\n",
-        ANSI_CYAN,
-        anchor.file_path,
-        ANSI_RESET,
-        ANSI_GREEN,
-        anchor.line.unwrap_or(0),
-        ANSI_RESET,
-        ANSI_MAGENTA,
-        anchor.shift.unwrap_or(0),
-        ANSI_RESET,
-        ANSI_YELLOW,
-        anchor.offset.unwrap_or(0),
-        ANSI_RESET
-    )
-}
 
 #[cfg(test)]
 mod tests {
