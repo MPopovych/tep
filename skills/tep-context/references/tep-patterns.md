@@ -2,9 +2,9 @@
 
 ## Goal
 
-Use `tep` to identify the smallest relevant context bundle before reading many files.
+Use `tep` to identify the smallest relevant context bundle before reading many files, and to maintain graph coverage deliberately when needed.
 
-## Common commands
+## Common retrieval commands
 
 ### Entity context
 ```bash
@@ -38,7 +38,7 @@ Useful when:
 - a task references an anchor id
 - you want to see which entities are attached to one location
 
-## Suggested reading strategy
+## Suggested retrieval strategy
 
 ### Start narrow
 If the user gives a likely entity name:
@@ -63,16 +63,36 @@ If the entity is missing or weakly covered:
 - sparse single-anchor entities
 - stale-seeming snippets without reinforcing refs/files
 
-## Editing guidance
+## Maintenance commands
 
-### If updating graph coverage
-Use:
+### Update entity declarations
 ```bash
 tep entity auto <pathspec...>
+```
+
+Use when:
+- docs contain entity declaration markers
+- you want to ensure entities and relation anchors are synced
+
+### Update anchors
+```bash
 tep anchor auto <pathspec...>
 ```
 
-### If editing docs with examples
+Use when:
+- docs or code contain anchor tags
+- you want to materialize incomplete anchors
+- you want to refresh relation coverage
+
+## Doc seeding guidance
+
+When adding `tep` coverage to docs:
+- prefer one anchor per important section or paragraph
+- favor semantic section boundaries over dense tagging
+- use entity declarations where a file or section defines a canonical thing
+- keep examples readable and avoid noisy anchor clutter
+
+### Example hygiene
 Keep example-only lines marked with:
 ```txt
 #tepignore
@@ -92,3 +112,4 @@ That means:
 - doc-first implementation work
 - context assembly for agent coding tasks
 - understanding architecture/doc relationships with minimal repo scanning
+- maintaining and extending `tep` graph coverage in docs or code

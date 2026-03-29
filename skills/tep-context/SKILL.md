@@ -1,22 +1,25 @@
 ---
 name: tep-context
-description: Use the local `tep` CLI as a context-routing layer when working in a repository that has a `tep` workspace. Trigger when reviewing a codebase or docs that are already tagged with `tep`, when deciding what files to read next, when an entity or anchor name appears in a user task, or when an agent should assemble a grounded context bundle from `tep entity show`, `tep entity context`, or `tep anchor show` before making changes.
+description: Use the local `tep` CLI as a context-routing and graph-maintenance layer when working in a repository that has a `tep` workspace. Trigger when reviewing a codebase or docs that are already tagged with `tep`, when deciding what files to read next, when an entity or anchor name appears in a user task, when an agent should assemble a grounded context bundle from `tep entity show`, `tep entity context`, or `tep anchor show`, or when the task involves adding or maintaining `tep` coverage with `entity auto`, `anchor auto`, doc seeding, or `#tepignore` example lines.
 ---
 
-Use `tep` to reduce blind repo reading. Prefer a small, grounded retrieval pass before loading many files.
+Use `tep` to reduce blind repo reading and to keep the graph useful over time. Prefer the smallest grounded retrieval pass first, and update graph coverage intentionally when the task calls for it.
 
 ## Workflow
 
 1. Confirm a `tep` workspace exists for the repo tree.
-2. Start from the most obvious entity name when possible.
-3. Run the smallest useful retrieval command first.
-4. Read only the returned files/snippets that look relevant.
+2. Decide whether the task is mainly:
+   - retrieval
+   - maintenance
+   - or both
+3. Start with the smallest useful `tep` command.
+4. Read or update only the files that look relevant.
 5. Fall back to normal repo exploration only when `tep` coverage is missing or weak.
 
-## Preferred command order
+## Retrieval-first command order
 
 ### 1. Entity-centered retrieval
-Use first when the user task mentions a concept, component, feature, workflow, or doc subject.
+Use first when the task mentions a concept, component, feature, workflow, schema, or doc subject.
 
 ```bash
 tep entity context <name-or-id>
@@ -38,8 +41,9 @@ Use when you already have an anchor id.
 tep anchor show <anchor-id>
 ```
 
-### 3. Discovery and sync
-Use only when you are intentionally updating the graph.
+## Maintenance commands
+
+Use these only when you are intentionally updating graph coverage.
 
 ```bash
 tep entity auto <pathspec...>
@@ -54,8 +58,9 @@ tep anchor auto <pathspec...>
 - Respect `#tepignore` example lines when editing docs.
 - Do not assume `.gitignore` affects `tep`; only `.tep_ignore` does.
 - Prefer reading the smallest set of files surfaced by `tep` before doing broad repo scans.
+- Prefer small, intentional anchor coverage over dense anchor spam.
 
-## Good agent usage patterns
+## Good retrieval usage patterns
 
 ### If the user asks to change a feature
 1. infer likely entity name
@@ -69,9 +74,23 @@ tep anchor auto <pathspec...>
 2. summarize from the surfaced docs and snippets
 3. only broaden search if the graph is thin
 
-### If you edit docs with tag examples
-- keep example-only lines marked with `#tepignore`
-- avoid materializing example tags unintentionally
+## Good maintenance usage patterns
+
+### If you are seeding or improving docs
+- add a small number of intentional anchors
+- anchor section boundaries or key paragraphs
+- avoid anchoring every line
+- keep example-only tag lines marked with `#tepignore`
+
+### If you are adding entity declarations
+- use `tep entity auto <pathspec...>`
+- let declarations fill `ref` when missing
+- avoid overwriting meaningful existing refs casually
+
+### If you are syncing anchors
+- use `tep anchor auto <pathspec...>`
+- remember that `[...]` means anchor tags
+- remember that `(...)` means entity declarations
 
 ## Limitations
 
@@ -81,4 +100,4 @@ tep anchor auto <pathspec...>
 
 ## Reference
 
-Read `references/tep-patterns.md` when you need concrete command patterns, expected outputs, or guidance on how to interpret `tep` results during repo work.
+Read `references/tep-patterns.md` when you need concrete command patterns, retrieval interpretation guidance, doc-seeding guidance, or maintenance reminders.
