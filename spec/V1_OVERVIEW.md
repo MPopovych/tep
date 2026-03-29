@@ -8,7 +8,7 @@ V1 is based on four primary stored concepts:
 - entities
 - anchors
 - anchor-entity relations
-- links
+- entity links
 
 ## Important identity rules
 
@@ -17,6 +17,7 @@ Entities have:
 - an integer `entity_id`
 - a unique `name`
 - an optional `ref`
+- an optional `description`
 
 Commands can resolve entities by either:
 - integer id
@@ -61,25 +62,24 @@ That means:
 ### Entities ↔ entities
 Links are planned to be:
 - directional
-- typed
-- prioritized
+- free-text described
+- simple in the first version
 
-## Priority rule
-
-Priority is user-defined.
-
-Convention:
-- `1` is best / highest priority
-- larger numbers are lower priority
+First-version simplification:
+- one link per ordered pair
+- no link priorities
 
 ## Entity command direction
 
-Current commands:
-- `tep entity create <name> [--ref <value>]`
+Current / planned commands:
+- `tep entity create <name> [--ref <value>] [--description <value>]`
 - `tep entity ensure <name> [--ref <value>]`
 - `tep entity auto <pathspec...>`
 - `tep entity show <name-or-id>`
-- `tep entity edit <name-or-id> [--name <value>] [--ref <value>]`
+- `tep entity context <name-or-id> [--files-only]`
+- `tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]`
+- `tep entity link <from> <to> --relation <text>`
+- `tep entity unlink <from> <to>`
 - `tep entity list`
 
 Shorthand:
@@ -132,18 +132,21 @@ The first useful implementation slice focuses on:
 - entity ensure
 - entity auto
 - entity show
+- entity context
 - entity edit
 - entity list
 - anchor auto
 - anchor show
 - attach
 - detach
+- directional entity links
 
 ## V1 non-goals
 
 Not required for early versions:
 - AST-aware parsing
 - semantic inference
+- link priorities
 - editor plugin support
 - remote sync
 - cloud-first behavior

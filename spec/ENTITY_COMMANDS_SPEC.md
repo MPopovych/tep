@@ -4,10 +4,11 @@ This document captures the current intended behavior of entity-related commands.
 
 ## Entity data model
 
-Current entity shape:
+Current / planned entity shape:
 - `entity_id` integer
 - `name` unique
 - `ref` nullable
+- `description` nullable
 - `created_at`
 - `updated_at`
 
@@ -42,6 +43,7 @@ Current behavior:
 ```bash
 tep entity create "student"
 tep entity create "student" --ref "./docs/student.md"
+tep entity create "student" --description "A learner enrolled in the system"
 ```
 
 Behavior:
@@ -96,17 +98,51 @@ Behavior:
 - accept either unique name or entity id
 - print compact entity data
 - include related anchors
+- later should include `description` and outgoing links when present
+
+### Context
+```bash
+tep entity context "student"
+tep entity context "student" --files-only
+```
+
+Behavior:
+- return a retrieval-oriented view of the entity
+- include `ref`
+- include related anchors and snippets by default
+- include deduplicated file list
+- `--files-only` returns only the entity header, `ref`, and file list
 
 ### Edit
 ```bash
 tep entity edit "student" --ref "./docs/student.md"
 tep entity edit 42 --name "student.profile" --ref "./docs/profile.md"
+tep entity edit "student" --description "A learner enrolled in the system"
 ```
 
 Behavior:
 - accept either unique name or entity id
 - update only provided fields
 - print the updated entity
+
+### Link
+```bash
+tep entity link Student Subject --relation "student has subjects assigned to him each semester"
+```
+
+Behavior:
+- create or update a directional entity-to-entity link
+- relation text is free-form
+- first argument is the source entity
+- second argument is the target entity
+
+### Unlink
+```bash
+tep entity unlink Student Subject
+```
+
+Behavior:
+- remove the directional link from source to target
 
 ### List
 ```bash
@@ -131,6 +167,8 @@ When anchors are included, each anchor uses the shared compact anchor format:
 
 ## Storage direction
 
-Current storage model:
+Current / planned storage model:
 - SQLite integer primary key for `entity_id`
 - unique constraint on `name`
+- nullable `description` on entities
+- directional entity links with one link per ordered pair

@@ -21,6 +21,7 @@ Examples:
 - [Entity Commands Spec](./ENTITY_COMMANDS_SPEC.md)
 - [Anchor Flow Spec](./ANCHOR_FLOW_SPEC.md)
 - [Entity Context Spec](./ENTITY_CONTEXT_SPEC.md)
+- [Entity Links Spec](./ENTITY_LINKS_SPEC.md)
 - [Marker and Anchor Spec](./MARKER_AND_ANCHOR_SPEC.md)
 - [Workspace and Ignore Spec](./WORKSPACE_AND_IGNORE_SPEC.md)
 

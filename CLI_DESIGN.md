@@ -13,7 +13,7 @@ The goal is to manage a small local graph of:
 - entities
 - anchors
 - anchor-entity associations
-- future entity links
+- entity links
 
 ## Git-like similarities
 
@@ -26,9 +26,6 @@ The similarity to git is mostly ergonomic:
 `tep` is not a version-control system.
 
 ## Workspace behavior
-
-[#!#1#tep:10](cli,workspace,workspace.discovery)
-
 
 ### Initialize a workspace
 ```bash
@@ -61,11 +58,14 @@ tep --version
 
 ### Entities
 ```bash
-tep entity create <name> [--ref <value>]
+tep entity create <name> [--ref <value>] [--description <value>]
 tep entity ensure <name> [--ref <value>]
 tep entity auto <pathspec...>
 tep entity show <name-or-id>
-tep entity edit <name-or-id> [--name <value>] [--ref <value>]
+tep entity context <name-or-id> [--files-only]
+tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]
+tep entity link <from> <to> --relation <text>
+tep entity unlink <from> <to>
 tep entity list
 ```
 
@@ -92,9 +92,6 @@ tep detach <entity-id-or-name> <anchor-id>
 ```
 
 ## Marker syntax
-
-[#!#1#tep:11](anchor.tag,entity.declaration,cli)
-
 
 ### Anchor tag
 ```txt
@@ -137,9 +134,6 @@ Not part of the current implemented CLI surface:
 - `doctor`
 - `scan`
 - `anchor list`
-- `link add`
-- `link list`
-- `link remove`
 - `resolve`
 - `graph`
 - `context get`
