@@ -2,6 +2,12 @@ use crate::anchor::Anchor;
 use crate::entity::Entity;
 use crate::service::entity_service::{EntityAutoResult, EntityContextResult, EntityShowResult};
 
+const ANSI_RESET: &str = "\x1b[0m";
+const ANSI_CYAN: &str = "\x1b[36m";
+const ANSI_GREEN: &str = "\x1b[32m";
+const ANSI_YELLOW: &str = "\x1b[33m";
+const ANSI_MAGENTA: &str = "\x1b[35m";
+
 pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
     format!("{prefix}\n{} ({})\n", entity.entity_id, entity.name)
 }
@@ -29,7 +35,7 @@ pub fn format_entity_show(result: &EntityShowResult) -> String {
 pub fn format_entity_context(result: &EntityContextResult) -> String {
     let mut out = format!("{} ({})\n", result.entity.entity_id, result.entity.name);
     if let Some(entity_ref) = &result.entity.r#ref {
-        out.push_str(&format!("ref: {}\n", entity_ref));
+        out.push_str(&format!("{}ref:{} {}{}{}\n", ANSI_YELLOW, ANSI_RESET, ANSI_CYAN, entity_ref, ANSI_RESET));
     }
     out.push('\n');
 
@@ -47,7 +53,7 @@ pub fn format_entity_context(result: &EntityContextResult) -> String {
     if !result.files.is_empty() {
         out.push_str("files:\n");
         for file in &result.files {
-            out.push_str(&format!("- {}\n", file));
+            out.push_str(&format!("- {}{}{}\n", ANSI_CYAN, file, ANSI_RESET));
         }
     }
 
@@ -72,11 +78,19 @@ pub fn format_anchor_compact(anchor: &Anchor) -> String {
 
 fn format_anchor_location(anchor: &Anchor) -> String {
     format!(
-        "{} ({}:{}) [{}]\n",
+        "{}{}{} ({}{}{}:{}{}{} ) {}[{}]{}\n",
+        ANSI_CYAN,
         anchor.file_path,
+        ANSI_RESET,
+        ANSI_GREEN,
         anchor.line.unwrap_or(0),
+        ANSI_RESET,
+        ANSI_MAGENTA,
         anchor.shift.unwrap_or(0),
-        anchor.offset.unwrap_or(0)
+        ANSI_RESET,
+        ANSI_YELLOW,
+        anchor.offset.unwrap_or(0),
+        ANSI_RESET
     )
 }
 
@@ -138,7 +152,10 @@ mod tests {
         });
         assert!(rendered.contains("42 (student)"));
         assert!(rendered.contains("7"));
-        assert!(rendered.contains("./file.md (3:4) [22]"));
+        assert!(rendered.contains("./file.md"));
+        assert!(rendered.contains("\x1b[36m"));
+        assert!(rendered.contains("\x1b[32m3\x1b[0m"));
+        assert!(rendered.contains("\x1b[35m4\x1b[0m"));
     }
 
     #[test]
@@ -152,12 +169,13 @@ mod tests {
             files: vec!["./file.md".into()],
         });
         assert!(rendered.contains("42 (student)"));
-        assert!(rendered.contains("ref: ./docs/student.md"));
+        assert!(rendered.contains("ref:"));
+        assert!(rendered.contains("./docs/student.md"));
         assert!(rendered.contains("anchor 7"));
         assert!(rendered.contains("snippet:"));
         assert!(rendered.contains("hello context"));
         assert!(rendered.contains("files:"));
-        assert!(rendered.contains("- ./file.md"));
+        assert!(rendered.contains("- \x1b[36m./file.md\x1b[0m"));
     }
 
     #[test]

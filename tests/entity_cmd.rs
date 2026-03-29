@@ -108,12 +108,13 @@ fn entity_context_shows_ref_snippet_and_files() {
         .args(["entity", "context", "student"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("ref: ./docs/student.md"))
+        .stdout(predicate::str::contains("ref:"))
+        .stdout(predicate::str::contains("./docs/student.md"))
         .stdout(predicate::str::contains("anchor "))
         .stdout(predicate::str::contains("snippet:"))
         .stdout(predicate::str::contains("[#!#1#tep:"))
         .stdout(predicate::str::contains("files:"))
-        .stdout(predicate::str::contains("./note.txt"));
+        .stdout(predicate::str::contains("note.txt"));
 }
 
 #[test]
@@ -181,7 +182,7 @@ fn entity_auto_creates_entity_fills_ref_and_rewrites_declaration() {
         .assert()
         .success()
         .stdout(predicate::str::contains("(Student)"))
-        .stdout(predicate::str::contains("./note.txt (1:"));
+        .stdout(predicate::str::contains("note.txt"));
 }
 
 #[test]
@@ -483,7 +484,7 @@ fn entity_show_includes_related_anchors() {
         .assert()
         .success()
         .stdout(predicate::str::contains("student"))
-        .stdout(predicate::str::contains("./note.txt (1:"));
+        .stdout(predicate::str::contains("note.txt"));
 }
 
 #[test]

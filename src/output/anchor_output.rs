@@ -1,6 +1,12 @@
 use crate::anchor::Anchor;
 use crate::service::anchor_service::{AnchorShowResult, AnchorSyncResult};
 
+const ANSI_RESET: &str = "\x1b[0m";
+const ANSI_CYAN: &str = "\x1b[36m";
+const ANSI_GREEN: &str = "\x1b[32m";
+const ANSI_YELLOW: &str = "\x1b[33m";
+const ANSI_MAGENTA: &str = "\x1b[35m";
+
 pub fn format_anchor_sync_result(result: &AnchorSyncResult) -> String {
     format!(
         "anchor sync complete\nfiles_processed: {}\nanchors_seen: {}\nanchors_created: {}\nanchors_dropped: {}\nrelations_synced: {}\n",
@@ -26,12 +32,20 @@ pub fn format_anchor_show(result: &AnchorShowResult) -> String {
 
 pub fn format_anchor_compact(anchor: &Anchor) -> String {
     format!(
-        "{}\n{} ({}:{}) [{}]\n",
+        "{}\n{}{}{} ({}{}{}:{}{}{} ) {}[{}]{}\n",
         anchor.anchor_id,
+        ANSI_CYAN,
         anchor.file_path,
+        ANSI_RESET,
+        ANSI_GREEN,
         anchor.line.unwrap_or(0),
+        ANSI_RESET,
+        ANSI_MAGENTA,
         anchor.shift.unwrap_or(0),
-        anchor.offset.unwrap_or(0)
+        ANSI_RESET,
+        ANSI_YELLOW,
+        anchor.offset.unwrap_or(0),
+        ANSI_RESET
     )
 }
 
@@ -89,7 +103,10 @@ mod tests {
         });
 
         assert!(rendered.contains("7"));
-        assert!(rendered.contains("./file.md (3:4) [22]"));
+        assert!(rendered.contains("./file.md"));
+        assert!(rendered.contains("\x1b[36m"));
+        assert!(rendered.contains("\x1b[32m3\x1b[0m"));
+        assert!(rendered.contains("\x1b[35m4\x1b[0m"));
         assert!(rendered.contains("1 (student)"));
     }
 }

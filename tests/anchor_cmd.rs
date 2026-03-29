@@ -119,7 +119,7 @@ fn anchor_show_returns_compact_format() {
         .args(["anchor", "show", anchor_id])
         .assert()
         .success()
-        .stdout(predicate::str::contains("./note.txt (1:"))
+        .stdout(predicate::str::contains("note.txt"))
         .stdout(predicate::str::contains("(student)"));
 }
 
