@@ -31,7 +31,6 @@ pub struct AnchorShowResult {
 #[derive(Debug, Clone)]
 struct ParsedFile {
     absolute_path: PathBuf,
-    display_path: String,
 }
 
 pub struct AnchorService<'a> {
@@ -104,7 +103,6 @@ impl<'a> AnchorService<'a> {
             .into_iter()
             .map(|path| ParsedFile {
                 absolute_path: resolve_from_workspace(&path, &self.workspace_root),
-                display_path: display_path(&path),
             })
             .collect())
     }
