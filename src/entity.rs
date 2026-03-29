@@ -1,3 +1,5 @@
+// (#!#1#tep:module.entity)
+// [#!#1#tep:44](entity.declaration.parser)
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
 pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
 
@@ -142,6 +144,7 @@ pub fn materialize_entity_declaration(parsed: &ParsedEntityDeclaration, version:
     format!("(#!#{}#tep:{})", version, parsed.name)
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

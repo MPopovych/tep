@@ -1,3 +1,5 @@
+// (#!#1#tep:service.anchor.health)
+// [#!#1#tep:47](service.anchor.sync)
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -432,6 +434,7 @@ impl<'a> AnchorService<'a> {
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

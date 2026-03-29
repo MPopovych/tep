@@ -1,3 +1,5 @@
+// (#!#1#tep:service.entity.context)
+// [#!#1#tep:48](service.entity.auto)
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -355,7 +357,7 @@ impl<'a> EntityService<'a> {
         declaration: &ParsedEntityDeclaration,
         result: &mut EntityAutoResult,
     ) -> Result<String> {
-        let entity = self.ensure_entity_for_declaration(declaration, result)?;
+        let entity = self.ensure_entity_for_declaration(declaration, file_path, result)?;
         let anchor = self.ensure_anchor_for_declaration(file_path, declaration, entity.entity_id, result)?;
         self.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id)?;
         result.relations_synced += 1;
@@ -366,6 +368,7 @@ impl<'a> EntityService<'a> {
     fn ensure_entity_for_declaration(
         &self,
         declaration: &ParsedEntityDeclaration,
+        file_path: &str,
         result: &mut EntityAutoResult,
     ) -> Result<Entity> {
         let mut entity = self.repo.ensure(&NewEntity {
@@ -380,10 +383,11 @@ impl<'a> EntityService<'a> {
                 &parse_lookup(&entity.entity_id.to_string()),
                 &UpdateEntity {
                     name: None,
-                    r#ref: Some(String::new()),
+                    r#ref: Some(file_path.to_string()),
                     description: None,
                 },
             )?;
+            result.refs_filled += 1;
         }
 
         Ok(entity)
@@ -433,6 +437,7 @@ impl<'a> EntityService<'a> {
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

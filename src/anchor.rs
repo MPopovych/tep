@@ -1,3 +1,5 @@
+// (#!#1#tep:module.anchor)
+// [#!#1#tep:43](anchor.parser)
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
 pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
 
@@ -150,6 +152,7 @@ pub fn materialize_anchor(parsed: &ParsedAnchor, new_anchor_id: i64, version: i6
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

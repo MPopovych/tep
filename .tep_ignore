@@ -2,7 +2,6 @@
 .tep/
 .git/
 target/
-src/
 tests/
 spec/ANCHOR_FLOW_SPEC.md
 spec/MARKER_AND_ANCHOR_SPEC.md
