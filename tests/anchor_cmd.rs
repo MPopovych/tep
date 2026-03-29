@@ -61,10 +61,10 @@ fn anchor_auto_materializes_incomplete_anchor() {
 }
 
 #[test]
-fn anchor_auto_ignores_line_with_tepgnore() {
+fn anchor_auto_ignores_line_with_tepignore() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     let path = temp.path().join("examples.txt");
-    std::fs::write(&path, "example [#!#tep:](student) #tepgnore\n")
+    std::fs::write(&path, "example [#!#tep:](student) #tepignore\n")
         .expect("should write file");
 
     Command::cargo_bin("tep")
@@ -84,7 +84,7 @@ fn anchor_auto_ignores_line_with_tepgnore() {
         .stdout(predicate::str::contains("anchors_created: 0"));
 
     let updated = std::fs::read_to_string(&path).expect("should read file");
-    assert_eq!(updated, "example [#!#tep:](student) #tepgnore\n");
+    assert_eq!(updated, "example [#!#tep:](student) #tepignore\n");
 }
 
 #[test]

@@ -1,4 +1,4 @@
-pub const TEPGNORE_MARKER: &str = "#tepgnore";
+pub const TEPIGNORE_MARKER: &str = "#tepignore";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Anchor {
@@ -103,7 +103,7 @@ fn try_parse_anchor(input: &str, start: usize) -> Option<ParsedAnchor> {
     let last_newline = prefix.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
     let shift = (start - last_newline) as i64;
 
-    if line_contains_tepgnore(input, start) {
+    if line_contains_tepignore(input, start) {
         return None;
     }
 
@@ -126,13 +126,13 @@ fn parse_materialized_head(head: &str) -> Option<(Option<i64>, Option<i64>)> {
     Some((Some(version), Some(anchor_id)))
 }
 
-fn line_contains_tepgnore(input: &str, start: usize) -> bool {
+fn line_contains_tepignore(input: &str, start: usize) -> bool {
     let line_start = input[..start].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
     let line_end = input[start..]
         .find('\n')
         .map(|idx| start + idx)
         .unwrap_or(input.len());
-    input[line_start..line_end].contains(TEPGNORE_MARKER)
+    input[line_start..line_end].contains(TEPIGNORE_MARKER)
 }
 
 pub fn materialize_anchor(parsed: &ParsedAnchor, new_anchor_id: i64, version: i64) -> String {
@@ -229,8 +229,8 @@ mod tests {
     }
 
     #[test]
-    fn ignores_anchor_when_line_contains_tepgnore() {
-        let parsed = parse_anchors("example [#!#tep:](student) #tepgnore");
+    fn ignores_anchor_when_line_contains_tepignore() {
+        let parsed = parse_anchors("example [#!#tep:](student) #tepignore");
         assert!(parsed.is_empty());
     }
 }

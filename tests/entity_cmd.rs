@@ -144,10 +144,10 @@ fn entity_auto_creates_entity_fills_ref_and_rewrites_declaration() {
 }
 
 #[test]
-fn entity_auto_ignores_line_with_tepgnore() {
+fn entity_auto_ignores_line_with_tepignore() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     let path = temp.path().join("examples.txt");
-    std::fs::write(&path, "example (#!#tep:Student) #tepgnore\n")
+    std::fs::write(&path, "example (#!#tep:Student) #tepignore\n")
         .expect("should write file");
 
     Command::cargo_bin("tep")
@@ -167,7 +167,7 @@ fn entity_auto_ignores_line_with_tepgnore() {
         .stdout(predicate::str::contains("anchors_created: 0"));
 
     let updated = std::fs::read_to_string(&path).expect("should read file");
-    assert_eq!(updated, "example (#!#tep:Student) #tepgnore\n");
+    assert_eq!(updated, "example (#!#tep:Student) #tepignore\n");
 }
 
 #[test]
