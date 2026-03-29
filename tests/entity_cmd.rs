@@ -214,6 +214,92 @@ fn entity_auto_rescan_after_materialization_shift_stays_stable() {
 }
 
 #[test]
+fn entity_auto_same_entity_in_two_files_creates_two_anchors() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("one.txt"), "(#!#tep:Student)")
+        .expect("should write file");
+    std::fs::write(temp.path().join("two.txt"), "(#!#tep:Student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./one.txt", "./two.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 2"));
+
+    let output = Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "show", "Student"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let rendered = String::from_utf8(output).expect("stdout should be utf8");
+    assert!(rendered.contains("./one.txt"));
+    assert!(rendered.contains("./two.txt"));
+}
+
+#[test]
+fn entity_auto_two_entities_in_same_file_stay_distinct_on_rescan() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(
+        temp.path().join("note.txt"),
+        "(#!#tep:Student)\n(#!#tep:Project)\n",
+    )
+    .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 2"));
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 0"));
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "show", "Student"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("./note.txt"));
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "show", "Project"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("./note.txt"));
+}
+
+#[test]
 fn entity_show_and_edit_work_by_name() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
 

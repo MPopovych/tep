@@ -348,4 +348,48 @@ mod tests {
         let anchors = service.show("Student").unwrap().anchors;
         assert_eq!(anchors.len(), 1);
     }
+
+    #[test]
+    fn auto_multiple_files_for_same_entity_create_distinct_anchors() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let temp = tempfile::tempdir().unwrap();
+        let one = temp.path().join("one.txt");
+        let two = temp.path().join("two.txt");
+        std::fs::write(&one, "(#!#tep:Student)").unwrap();
+        std::fs::write(&two, "(#!#tep:Student)").unwrap();
+
+        let result = service.auto(&[
+            one.to_string_lossy().to_string(),
+            two.to_string_lossy().to_string(),
+        ]).unwrap();
+        assert_eq!(result.anchors_created, 2);
+
+        let anchors = service.show("Student").unwrap().anchors;
+        assert_eq!(anchors.len(), 2);
+        assert_ne!(anchors[0].file_path, anchors[1].file_path);
+    }
+
+    #[test]
+    fn auto_two_declarations_in_same_file_for_different_entities_stay_distinct_on_rescan() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "(#!#tep:Student)\n(#!#tep:Project)\n").unwrap();
+
+        let first = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(first.anchors_created, 2);
+
+        let second = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(second.anchors_created, 0);
+
+        let student_anchors = service.show("Student").unwrap().anchors;
+        let project_anchors = service.show("Project").unwrap().anchors;
+        assert_eq!(student_anchors.len(), 1);
+        assert_eq!(project_anchors.len(), 1);
+        assert_ne!(student_anchors[0].anchor_id, project_anchors[0].anchor_id);
+    }
 }
