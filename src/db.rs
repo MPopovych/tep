@@ -45,7 +45,10 @@ pub fn find_workspace_root(start: &Path) -> Result<PathBuf> {
         }
     }
 
-    bail!("no tep workspace found from {}", start.display())
+    bail!(
+        "no tep workspace found from {}\nrun `tep init` in the project root to create one",
+        start.display()
+    )
 }
 
 pub fn open_workspace_db() -> anyhow::Result<Connection> {
@@ -142,5 +145,14 @@ mod tests {
 
         let found = find_workspace_root(&nested).expect("workspace should be found");
         assert_eq!(found, root);
+    }
+
+    #[test]
+    fn missing_workspace_error_is_actionable() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let err = find_workspace_root(temp.path()).expect_err("workspace should be missing");
+        let rendered = err.to_string();
+        assert!(rendered.contains("no tep workspace found"));
+        assert!(rendered.contains("tep init"));
     }
 }

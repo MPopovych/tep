@@ -28,6 +28,20 @@ fn entity_create_prints_created_entity() {
 }
 
 #[test]
+fn entity_command_fails_cleanly_outside_workspace() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "list"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no tep workspace found"))
+        .stderr(predicate::str::contains("tep init"));
+}
+
+#[test]
 fn entity_ensure_is_idempotent() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
 

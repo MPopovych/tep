@@ -2,6 +2,36 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 #[test]
+fn anchor_command_fails_cleanly_outside_workspace() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "[#!#tep:](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no tep workspace found"))
+        .stderr(predicate::str::contains("tep init"));
+}
+
+#[test]
+fn attach_command_fails_cleanly_outside_workspace() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["attach", "student", "1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no tep workspace found"))
+        .stderr(predicate::str::contains("tep init"));
+}
+
+#[test]
 fn anchor_auto_materializes_incomplete_anchor() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("note.txt"), "hello [#!#tep:](student)")
