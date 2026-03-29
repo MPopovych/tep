@@ -113,6 +113,8 @@ pub struct EntityContextArgs {
     pub files_only: bool,
     #[arg(long)]
     pub include_links: bool,
+    #[arg(long, default_value_t = 1)]
+    pub link_depth: usize,
 }
 
 #[derive(Debug, Args, Clone)]

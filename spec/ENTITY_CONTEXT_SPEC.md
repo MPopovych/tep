@@ -32,10 +32,11 @@ For example:
 - the top related anchors
 - a small snippet around each anchor
 - a deduplicated shortlist of files worth reading next
+- optionally, a bounded set of directly or near-directly linked entities
 
 That is more useful for context assembly than raw graph metadata alone.
 
-## Minimal v1 behavior
+## Minimal behavior
 
 For a target entity, the command should return:
 
@@ -44,6 +45,7 @@ For a target entity, the command should return:
 3. related anchors in compact form
 4. a small text snippet around each anchor when possible
 5. a deduplicated file list at the end
+6. optional linked-entity context when explicitly requested
 
 ## Files-only mode
 
@@ -59,6 +61,23 @@ In this mode, the command should return only:
 - deduplicated related file list
 
 This is useful when the caller wants a file shortlist without being tied to any specific document format or snippet strategy.
+
+## Linked-entity expansion
+
+Linked entities can be included explicitly:
+
+```bash
+tep entity context <name-or-id> --include-links
+tep entity context <name-or-id> --include-links --link-depth 2
+```
+
+Behavior:
+- `--include-links` enables graph expansion through entity links
+- `--link-depth` bounds traversal depth
+- default `--link-depth` is `1`
+- traversal should include both outgoing and incoming directions
+- traversal should dedupe entities and avoid cycles
+- depth should reflect distance from the root entity, not raw recursion count
 
 ## Proposed text output
 
@@ -83,6 +102,12 @@ snippet:
 files:
 - ./README.md
 - ./CLI_DESIGN.md
+
+outgoing linked entities:
+-> 2 (workspace.discovery)
+   depth: 1
+   ref: ./CLI_DESIGN.md
+   relation: tep relies on workspace discovery
 ```
 
 Files-only example:
@@ -138,6 +163,26 @@ files:
 - <path>
 ```
 
+### Linked entity block
+When link expansion is enabled, print linked entities grouped by direction.
+Each item should include:
+- entity header
+- depth
+- `ref` when present
+- `description` when present
+- relation text
+
+Example:
+
+```txt
+incoming linked entities:
+<- 8 (teacher)
+   depth: 1
+   ref: ./docs/teacher.md
+   description: An instructor
+   relation: teacher mentors student
+```
+
 ## Snippet behavior
 
 The first version should stay simple.
@@ -160,17 +205,21 @@ Suggested order:
 1. `ref` first
 2. anchors sorted by anchor id ascending, or by file then anchor id
 3. files deduplicated in first-seen order
+4. outgoing linked entities in traversal discovery order
+5. incoming linked entities in traversal discovery order
 
 A later version may sort by priority or stronger ranking rules.
 
 ## Limits
 
-Useful future flags:
+Useful flags:
 
 ```bash
 tep entity context <target> --limit 5
 tep entity context <target> --snippet-bytes 240
 tep entity context <target> --files-only
+tep entity context <target> --include-links
+tep entity context <target> --include-links --link-depth 2
 tep entity context <target> --json
 ```
 
@@ -183,6 +232,7 @@ It is less good for choosing what to read next.
 - surfaces the primary `ref`
 - surfaces actual local text, not just anchor coordinates
 - gives a short file shortlist
+- can surface nearby graph neighbors when explicitly requested
 - reduces manual file hopping
 - makes prompt/context assembly more repeatable
 
@@ -191,17 +241,19 @@ It is less good for choosing what to read next.
 - the caller does not want snippet formatting assumptions
 - the repository mixes different content styles
 
-## Non-goals for first version
+`--include-links --link-depth <n>` is useful when:
+- the caller wants a bounded graph neighborhood
+- direct links alone are not enough context
+- recursive expansion needs a hard stop to avoid context explosion
 
-Not required in the first slice:
-- graph traversal through links
+## Non-goals
+
+Not required in this slice:
 - priority-aware ranking
 - deep snippet semantics
 - AST-aware extraction
 - token-budget optimization
-- recursive context assembly
-
-Those can come later.
+- unbounded recursive context assembly
 
 ## Recommended implementation slice
 
@@ -212,5 +264,6 @@ Smallest useful implementation:
 4. extract a short bounded snippet around each anchor when possible
 5. print a deduplicated file list
 6. add `--files-only` to skip anchors and snippets when only file routing is needed
+7. add explicit bounded link expansion with `--include-links --link-depth <n>`
 
-That would already make `tep` significantly more useful for agent workflows.
+That makes `tep` significantly more useful for agent workflows without making context assembly unbounded.

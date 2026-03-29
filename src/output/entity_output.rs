@@ -142,6 +142,7 @@ fn append_context_link_block(out: &mut String, header: &str, links: &[LinkedEnti
         for item in links {
             let arrow = if outgoing { "->" } else { "<-" };
             out.push_str(&format!("{} {} ({})\n", arrow, item.entity.entity_id, item.entity.name));
+            out.push_str(&format!("   depth: {}\n", item.depth));
             if let Some(entity_ref) = &item.entity.r#ref {
                 out.push_str(&format!("   ref: {}\n", entity_ref));
             }
@@ -253,5 +254,36 @@ mod tests {
         assert!(rendered.contains("incoming links:"));
         assert!(rendered.contains("student has subjects"));
         assert!(rendered.contains("teacher mentors student"));
+    }
+
+    #[test]
+    fn formats_context_links_with_depth() {
+        let rendered = format_entity_context(&EntityContextResult {
+            entity: sample_entity(),
+            anchors: vec![],
+            files: vec!["./docs/student.md".into()],
+            outgoing_links: vec![LinkedEntityContext {
+                link: crate::entity::EntityLink {
+                    from_entity_id: 42,
+                    to_entity_id: 10,
+                    relation: "student has subjects".into(),
+                    created_at: "1".into(),
+                    updated_at: "2".into(),
+                },
+                entity: Entity {
+                    entity_id: 10,
+                    name: "subject".into(),
+                    r#ref: Some("./docs/subject.md".into()),
+                    description: Some("A course".into()),
+                    created_at: "1".into(),
+                    updated_at: "2".into(),
+                },
+                depth: 2,
+            }],
+            incoming_links: vec![],
+        });
+        assert!(rendered.contains("outgoing linked entities:"));
+        assert!(rendered.contains("depth: 2"));
+        assert!(rendered.contains("./docs/subject.md"));
     }
 }
