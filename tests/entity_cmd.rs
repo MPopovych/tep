@@ -62,6 +62,80 @@ fn entity_ensure_is_idempotent() {
 }
 
 #[test]
+fn entity_auto_creates_entity_fills_ref_and_rewrites_declaration() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "(#!#tep:Student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("entity auto complete"))
+        .stdout(predicate::str::contains("declarations_seen: 1"))
+        .stdout(predicate::str::contains("refs_filled: 1"));
+
+    let updated = std::fs::read_to_string(temp.path().join("note.txt"))
+        .expect("should read file");
+    assert!(updated.contains("(#!#1#tep:Student)"));
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "show", "Student"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(Student)"))
+        .stdout(predicate::str::contains("./note.txt (1:"));
+}
+
+#[test]
+fn entity_auto_does_not_overwrite_existing_ref() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "(#!#tep:Student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "create", "Student", "--ref", "./docs/student.md"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("refs_filled: 0"));
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["entity", "show", "Student"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(Student)"));
+}
+
+#[test]
 fn entity_show_and_edit_work_by_name() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
 

@@ -20,8 +20,8 @@ A lot of useful context is fragmented across:
 
 At a high level:
 - `tep` stores **entities**,
-- users place **anchor tags** in files,
-- each anchor tag contains its own **anchor ID**,
+- users place **anchor tags** and **entity declaration tags** in files,
+- anchor tags contain their own **anchor ID**,
 - entities can connect to multiple anchors,
 - anchors can connect to multiple entities,
 - entities can also link to other entities.
@@ -29,22 +29,44 @@ At a high level:
 This makes it possible for a human or an agent to:
 - read an anchor ID from a file,
 - resolve which entities are attached to it,
+- discover entities declared in files,
 - follow entity links,
 - collect related anchors,
 - and assemble context from connected files.
 
-## Example anchor tag
+## Example syntax
 
+### Anchor tag
 In Java, for example:
 
 ```java
-//[#@#1#tep:123763636473]
+// [#!#1#tep:123763636473]
 ```
 
-Important meaning:
+Meaning:
 - `#1#` is the tep version marker for future compatibility
 - `123763636473` is the **anchor ID**
-- the tag identifies the anchor, not an entity
+- square brackets identify an anchor tag
+
+### Entity declaration tag
+An entity declaration uses parentheses:
+
+```txt
+(#!#tep:Student)
+```
+
+After `tep entity auto <file>`, it becomes:
+
+```txt
+(#!#1#tep:Student)
+```
+
+Meaning:
+- parentheses identify an entity declaration marker
+- `Student` is the entity name
+- `entity auto` ensures the entity exists
+- if the entity has no `ref`, the declaring file path is stored in `ref`
+- a backing anchor relation is created for that declaration location
 
 ## Design principles
 
@@ -53,7 +75,7 @@ Important meaning:
 - **local-first** — no server required
 - **CLI-driven** — scriptable and easy to automate
 - **explicit graph** — relationships are user-defined
-- **future-compatible markers** — versioned anchor syntax
+- **future-compatible markers** — versioned syntax
 
 ## Tech direction
 

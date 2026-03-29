@@ -55,6 +55,29 @@ Behavior:
 
 This is especially useful for automation and agents.
 
+### Auto
+```bash
+tep entity auto ./file.md
+tep entity auto ./docs
+tep entity auto .
+```
+
+Behavior:
+- scan targeted files for entity declaration tags
+- declaration syntax:
+  ```txt
+  (#!#tep:Student)
+  ```
+- ensure the declared entity exists
+- if the entity has no `ref`, fill it with the declaring file path
+- create a backing anchor for the declaration location
+- attach the entity to that anchor
+- rewrite the declaration to versioned form:
+  ```txt
+  (#!#1#tep:Student)
+  ```
+- do not overwrite an existing non-null `ref`
+
 ### Show
 ```bash
 tep entity show "student"
@@ -103,7 +126,7 @@ Compact entity format:
 
 When anchors are included, each anchor should use the shared compact anchor format:
 ```txt
-<anchor_id> (<optional_name>)
+<anchor_id>
 <file> (<line>:<shift>) [<offset>]
 ```
 

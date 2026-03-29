@@ -1,6 +1,6 @@
 use anyhow::Context;
 
-use crate::cli::{AnchorAutoArgs, AnchorCommands};
+use crate::cli::AnchorCommands;
 use crate::db;
 use crate::output::anchor_output::{format_anchor_relation_result, format_anchor_show, format_anchor_sync_result};
 use crate::service::anchor_service::AnchorService;

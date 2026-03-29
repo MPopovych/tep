@@ -1,9 +1,21 @@
 use crate::anchor::Anchor;
 use crate::entity::Entity;
-use crate::service::entity_service::EntityShowResult;
+use crate::service::entity_service::{EntityAutoResult, EntityShowResult};
 
 pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
     format!("{prefix}\n{} ({})\n", entity.entity_id, entity.name)
+}
+
+pub fn format_entity_auto_result(result: &EntityAutoResult) -> String {
+    format!(
+        "entity auto complete\nfiles_processed: {}\ndeclarations_seen: {}\nentities_ensured: {}\nrefs_filled: {}\nanchors_created: {}\nrelations_synced: {}\n",
+        result.files_processed,
+        result.declarations_seen,
+        result.entities_ensured,
+        result.refs_filled,
+        result.anchors_created,
+        result.relations_synced
+    )
 }
 
 pub fn format_entity_show(result: &EntityShowResult) -> String {
@@ -69,6 +81,21 @@ mod tests {
         let rendered = format_entity_created("created", &sample_entity());
         assert!(rendered.contains("created"));
         assert!(rendered.contains("42 (student)"));
+    }
+
+    #[test]
+    fn formats_entity_auto_result() {
+        let rendered = format_entity_auto_result(&EntityAutoResult {
+            files_processed: 1,
+            declarations_seen: 2,
+            entities_ensured: 2,
+            refs_filled: 1,
+            anchors_created: 2,
+            relations_synced: 2,
+        });
+        assert!(rendered.contains("entity auto complete"));
+        assert!(rendered.contains("declarations_seen: 2"));
+        assert!(rendered.contains("refs_filled: 1"));
     }
 
     #[test]

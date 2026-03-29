@@ -1,8 +1,8 @@
 use anyhow::Context;
 
-use crate::cli::{EditEntityArgs, EntityCommands, UpsertEntityArgs};
+use crate::cli::{EditEntityArgs, EntityAutoArgs, EntityCommands, UpsertEntityArgs};
 use crate::db;
-use crate::output::entity_output::{format_entity_created, format_entity_list, format_entity_show};
+use crate::output::entity_output::{format_entity_auto_result, format_entity_created, format_entity_list, format_entity_show};
 use crate::service::entity_service::EntityService;
 
 pub fn run(command: EntityCommands) -> anyhow::Result<()> {
@@ -15,6 +15,7 @@ pub fn run(command: EntityCommands) -> anyhow::Result<()> {
     match command {
         EntityCommands::Create(args) => create(&service, args),
         EntityCommands::Ensure(args) => ensure(&service, args),
+        EntityCommands::Auto(args) => auto(&service, args),
         EntityCommands::Show { target } => show(&service, &target),
         EntityCommands::Edit(args) => edit(&service, args),
         EntityCommands::List => list(&service),
@@ -30,6 +31,12 @@ fn create(service: &EntityService<'_>, args: UpsertEntityArgs) -> anyhow::Result
 fn ensure(service: &EntityService<'_>, args: UpsertEntityArgs) -> anyhow::Result<()> {
     let entity = service.ensure(args.name, args.r#ref)?;
     print!("{}", format_entity_created("ensured", &entity));
+    Ok(())
+}
+
+fn auto(service: &EntityService<'_>, args: EntityAutoArgs) -> anyhow::Result<()> {
+    let result = service.auto(&args.paths)?;
+    print!("{}", format_entity_auto_result(&result));
     Ok(())
 }
 

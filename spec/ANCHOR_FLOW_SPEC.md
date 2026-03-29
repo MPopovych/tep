@@ -6,7 +6,7 @@ This document captures the planned anchor workflow for `tep`.
 
 Users should be able to place **incomplete anchors** directly into files, then ask `tep` to materialize and synchronize them.
 
-The user-facing command shape is planned as:
+The user-facing command shape is:
 
 ```bash
 tep anchor auto <pathspec...>
@@ -23,7 +23,7 @@ The command should work on targeted files and directories in a pathspec-oriented
 
 ## Incomplete anchor syntax
 
-Planned incomplete anchor examples:
+Incomplete anchor examples:
 
 ```txt
 [#!#tep:](student)
@@ -36,6 +36,7 @@ Important:
 - the `:` is the anchor ID slot
 - in incomplete form, the ID slot is empty
 - when multiple entity references are present, they are comma-separated inside `( ... )`
+- square brackets identify anchor tags
 
 Examples:
 ```txt
@@ -50,7 +51,7 @@ Examples:
 
 After processing, an incomplete anchor becomes a materialized anchor.
 
-Planned examples:
+Examples:
 
 ```txt
 [#!#1#tep:123456](student)
@@ -87,7 +88,7 @@ The payload in `( ... )` is optional.
 
 When present, it is treated as an **entity reference instruction list**.
 
-Planned behavior:
+Behavior:
 - entries are comma-separated
 - each entry may be an entity ID or entity name
 - if an entry looks like an entity ID, try resolving by ID
@@ -98,9 +99,22 @@ Important assumption:
 - the entity reference instruction list is not the durable identity of the anchor
 - it is an instruction for synchronizing anchor-entity relations
 
+## Entity declarations are separate
+
+`tep anchor auto` does **not** process entity declaration tags.
+Those belong to `tep entity auto`.
+
+Entity declaration syntax uses parentheses, for example:
+
+```txt
+(#!#tep:Student)
+```
+
+That is intentionally separate from anchor tags.
+
 ## Anchor show
 
-Planned command:
+Command:
 ```bash
 tep anchor show <anchor-id>
 ```
@@ -111,7 +125,7 @@ Behavior:
 
 Shared anchor format:
 ```txt
-<anchor_id> (<optional_name>)
+<anchor_id>
 <file> (<line>:<shift>) [<offset>]
 ```
 
@@ -147,12 +161,12 @@ The command should respect `.tep_ignore` when selecting and scanning files.
 
 ## Separate schemas
 
-The planned storage model should keep these concerns separate:
+The storage model keeps these concerns separate:
 
 ### Anchors schema
 Stores the anchor itself.
 
-Likely concerns:
+Concerns:
 - anchor identity
 - version
 - current file path
@@ -162,7 +176,7 @@ Likely concerns:
 ### Anchor-entity relation schema
 Stores associations between anchors and entities.
 
-This relation should remain separate from both:
+This relation remains separate from both:
 - the anchor record
 - the entity record
 
@@ -176,4 +190,4 @@ This spec does not yet freeze:
 - exact stale-anchor deletion strategy
 - exact rewrite safety guarantees
 
-Those should be tightened before implementation begins.
+Those should be tightened as implementation evolves.

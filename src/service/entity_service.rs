@@ -1,8 +1,13 @@
+use std::fs;
+use std::path::Path;
+
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
 use crate::anchor::Anchor;
-use crate::entity::{Entity, NewEntity, UpdateEntity, parse_lookup};
+use crate::entity::{Entity, NewEntity, ParsedEntityDeclaration, UpdateEntity, materialize_entity_declaration, parse_entity_declarations, parse_lookup};
+use crate::filter::tep_ignore_filter::TepIgnoreFilter;
+use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 
@@ -11,9 +16,19 @@ pub struct EntityShowResult {
     pub anchors: Vec<Anchor>,
 }
 
+pub struct EntityAutoResult {
+    pub files_processed: usize,
+    pub declarations_seen: usize,
+    pub entities_ensured: usize,
+    pub refs_filled: usize,
+    pub anchors_created: usize,
+    pub relations_synced: usize,
+}
+
 pub struct EntityService<'a> {
     repo: EntityRepository<'a>,
     anchor_repo: AnchorRepository<'a>,
+    anchor_entity_repo: AnchorEntityRepository<'a>,
 }
 
 impl<'a> EntityService<'a> {
@@ -21,6 +36,7 @@ impl<'a> EntityService<'a> {
         Self {
             repo: EntityRepository::new(conn),
             anchor_repo: AnchorRepository::new(conn),
+            anchor_entity_repo: AnchorEntityRepository::new(conn),
         }
     }
 
@@ -36,6 +52,30 @@ impl<'a> EntityService<'a> {
             name,
             r#ref: entity_ref,
         })
+    }
+
+    pub fn auto(&self, paths: &[String]) -> Result<EntityAutoResult> {
+        let workspace_root = std::env::current_dir().context("failed to determine current directory")?;
+        let filter = TepIgnoreFilter::for_workspace_root(workspace_root);
+        let files = filter.collect_paths(paths)?;
+
+        let mut result = EntityAutoResult {
+            files_processed: 0,
+            declarations_seen: 0,
+            entities_ensured: 0,
+            refs_filled: 0,
+            anchors_created: 0,
+            relations_synced: 0,
+        };
+
+        for file in files {
+            let changed = self.auto_file(&file, &mut result)?;
+            if changed {
+                result.files_processed += 1;
+            }
+        }
+
+        Ok(result)
     }
 
     pub fn show(&self, target: &str) -> Result<EntityShowResult> {
@@ -70,13 +110,86 @@ impl<'a> EntityService<'a> {
     pub fn list(&self) -> Result<Vec<Entity>> {
         self.repo.list()
     }
+
+    fn auto_file(&self, path: &Path, result: &mut EntityAutoResult) -> Result<bool> {
+        if !path.is_file() {
+            return Ok(false);
+        }
+
+        let original = fs::read_to_string(path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let declarations = parse_entity_declarations(&original);
+        if declarations.is_empty() {
+            return Ok(false);
+        }
+
+        result.declarations_seen += declarations.len();
+
+        let mut rewritten = String::with_capacity(original.len() + 64);
+        let mut cursor = 0usize;
+        let file_path = path.to_string_lossy().to_string();
+
+        for declaration in declarations {
+            rewritten.push_str(&original[cursor..declaration.start_offset]);
+            let replacement = self.sync_declaration(&file_path, &declaration, result)?;
+            rewritten.push_str(&replacement);
+            cursor = declaration.start_offset + declaration.raw.len();
+        }
+
+        rewritten.push_str(&original[cursor..]);
+
+        if rewritten != original {
+            fs::write(path, rewritten)
+                .with_context(|| format!("failed to write {}", path.display()))?;
+        }
+
+        Ok(true)
+    }
+
+    fn sync_declaration(
+        &self,
+        file_path: &str,
+        declaration: &ParsedEntityDeclaration,
+        result: &mut EntityAutoResult,
+    ) -> Result<String> {
+        let mut entity = self.repo.ensure(&NewEntity {
+            name: declaration.name.clone(),
+            r#ref: None,
+        })?;
+        result.entities_ensured += 1;
+
+        if entity.r#ref.is_none() {
+            entity = self.repo.update(
+                &parse_lookup(&entity.entity_id.to_string()),
+                &UpdateEntity {
+                    name: None,
+                    r#ref: Some(file_path.to_string()),
+                },
+            )?;
+            result.refs_filled += 1;
+        }
+
+        let anchor = self.anchor_repo.create(
+            declaration.version.unwrap_or(1),
+            file_path,
+            Some(declaration.line),
+            Some(declaration.shift),
+            Some(declaration.start_offset as i64),
+        )?;
+        result.anchors_created += 1;
+
+        self.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id)?;
+        result.relations_synced += 1;
+
+        Ok(materialize_entity_declaration(declaration, 1))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db;
-    use crate::repository::anchor_entity_repository::AnchorEntityRepository;
+    use crate::repository::entity_repository::EntityRepository;
 
     fn setup_service() -> EntityService<'static> {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
@@ -122,5 +235,54 @@ mod tests {
         let result = service.show("student").unwrap();
         assert_eq!(result.anchors.len(), 1);
         assert_eq!(result.anchors[0].anchor_id, anchor.anchor_id);
+    }
+
+    #[test]
+    fn auto_creates_entity_fills_ref_and_creates_anchor_relation() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let entity_repo = EntityRepository::new(conn);
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "(#!#tep:Student)").unwrap();
+
+        let result = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(result.declarations_seen, 1);
+        assert_eq!(result.entities_ensured, 1);
+        assert_eq!(result.refs_filled, 1);
+        assert_eq!(result.anchors_created, 1);
+        assert_eq!(result.relations_synced, 1);
+
+        let updated = std::fs::read_to_string(&file).unwrap();
+        assert!(updated.contains("(#!#1#tep:Student)"));
+
+        let entity = entity_repo.find(&parse_lookup("Student")).unwrap().unwrap();
+        assert_eq!(entity.r#ref.as_deref(), Some(file.to_string_lossy().as_ref()));
+
+        let anchors = service.show("Student").unwrap().anchors;
+        assert_eq!(anchors.len(), 1);
+    }
+
+    #[test]
+    fn auto_does_not_overwrite_existing_ref() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql()).unwrap();
+        let service = EntityService::new(conn);
+        let entity_repo = EntityRepository::new(conn);
+        entity_repo.create(&NewEntity {
+            name: "Student".into(),
+            r#ref: Some("./docs/student.md".into()),
+        }).unwrap();
+
+        let temp = tempfile::tempdir().unwrap();
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "(#!#tep:Student)").unwrap();
+
+        let result = service.auto(&[file.to_string_lossy().to_string()]).unwrap();
+        assert_eq!(result.refs_filled, 0);
+
+        let entity = entity_repo.find(&parse_lookup("Student")).unwrap().unwrap();
+        assert_eq!(entity.r#ref.as_deref(), Some("./docs/student.md"));
     }
 }
