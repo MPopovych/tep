@@ -1,0 +1,27 @@
+[package]
+name = "tep"
+version = "0.1.0"
+edition = "2024"
+description = "tep - text entity pointers"
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive", "env"] }
+ignore = "0.4"
+rusqlite = { version = "0.39", features = ["bundled"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+assert_fs = "1"
+predicates = "3"
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

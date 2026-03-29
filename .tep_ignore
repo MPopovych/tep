@@ -1,0 +1,5 @@
+# local tep ignore rules for the repo workspace
+.tep/
+.git/
+target/
+playground/

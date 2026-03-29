@@ -1,0 +1,139 @@
+use anyhow::{Context, Result};
+use rusqlite::{Connection, params};
+
+pub struct AnchorEntityRepository<'a> {
+    conn: &'a Connection,
+}
+
+impl<'a> AnchorEntityRepository<'a> {
+    pub fn new(conn: &'a Connection) -> Self {
+        Self { conn }
+    }
+
+    pub fn attach(&self, anchor_id: i64, entity_id: i64) -> Result<()> {
+        let now = now_utc();
+        self.conn.execute(
+            "INSERT OR IGNORE INTO anchor_entities (anchor_id, entity_id, created_at) VALUES (?1, ?2, ?3)",
+            params![anchor_id, entity_id, now],
+        )
+        .with_context(|| format!("failed to attach anchor {} to entity {}", anchor_id, entity_id))?;
+        Ok(())
+    }
+
+    pub fn detach(&self, anchor_id: i64, entity_id: i64) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM anchor_entities WHERE anchor_id = ?1 AND entity_id = ?2",
+            params![anchor_id, entity_id],
+        )
+        .with_context(|| format!("failed to detach anchor {} from entity {}", anchor_id, entity_id))?;
+        Ok(())
+    }
+
+    pub fn replace_for_anchor(&self, anchor_id: i64, entity_ids: &[i64]) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM anchor_entities WHERE anchor_id = ?1",
+            params![anchor_id],
+        )
+        .with_context(|| format!("failed to clear anchor-entity relations for anchor {}", anchor_id))?;
+
+        for entity_id in entity_ids {
+            self.attach(anchor_id, *entity_id)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn list_entity_ids_for_anchor(&self, anchor_id: i64) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT entity_id FROM anchor_entities WHERE anchor_id = ?1 ORDER BY entity_id ASC",
+        )?;
+        let rows = stmt.query_map(params![anchor_id], |row| row.get::<_, i64>(0))?;
+        let ids = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(ids)
+    }
+}
+
+fn now_utc() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be after unix epoch")
+        .as_secs();
+
+    secs.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+    use crate::repository::anchor_repository::AnchorRepository;
+    use crate::repository::entity_repository::EntityRepository;
+    use crate::entity::NewEntity;
+
+    fn setup() -> (&'static Connection, AnchorEntityRepository<'static>, i64, i64) {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        conn.execute_batch(db::schema_sql())
+            .expect("schema should apply");
+
+        let anchor_repo = AnchorRepository::new(conn);
+        let entity_repo = EntityRepository::new(conn);
+        let relation_repo = AnchorEntityRepository::new(conn);
+
+        let anchor = anchor_repo
+            .create(1, "./file.txt", Some(1), Some(0), Some(0))
+            .expect("anchor should be created");
+        let entity = entity_repo
+            .create(&NewEntity {
+                name: "student".into(),
+                r#ref: None,
+            })
+            .expect("entity should be created");
+
+        (conn, relation_repo, anchor.anchor_id, entity.entity_id)
+    }
+
+    #[test]
+    fn attach_and_list_relations() {
+        let (_conn, repo, anchor_id, entity_id) = setup();
+        repo.attach(anchor_id, entity_id).expect("attach should succeed");
+        let ids = repo
+            .list_entity_ids_for_anchor(anchor_id)
+            .expect("list should succeed");
+        assert_eq!(ids, vec![entity_id]);
+    }
+
+    #[test]
+    fn replace_for_anchor_replaces_existing_relations() {
+        let (conn, repo, anchor_id, entity_id) = setup();
+        repo.attach(anchor_id, entity_id).expect("attach should succeed");
+
+        let entity_repo = EntityRepository::new(conn);
+        let other = entity_repo
+            .create(&NewEntity {
+                name: "basic-user".into(),
+                r#ref: None,
+            })
+            .expect("entity should be created");
+
+        repo.replace_for_anchor(anchor_id, &[other.entity_id])
+            .expect("replace should succeed");
+
+        let ids = repo
+            .list_entity_ids_for_anchor(anchor_id)
+            .expect("list should succeed");
+        assert_eq!(ids, vec![other.entity_id]);
+    }
+
+    #[test]
+    fn detach_removes_relation() {
+        let (_conn, repo, anchor_id, entity_id) = setup();
+        repo.attach(anchor_id, entity_id).expect("attach should succeed");
+        repo.detach(anchor_id, entity_id).expect("detach should succeed");
+        let ids = repo
+            .list_entity_ids_for_anchor(anchor_id)
+            .expect("list should succeed");
+        assert!(ids.is_empty());
+    }
+}
