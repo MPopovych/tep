@@ -1,8 +1,7 @@
 // (#!#1#tep:service.entity.context)
 // [#!#1#tep:48](service.entity.auto)
-use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
@@ -14,6 +13,7 @@ use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 use crate::service::entity_context::extract_anchor_snippet;
+use crate::service::entity_link_context::collect_link_context;
 use crate::utils::path::{display_path, resolve_from_workspace};
 
 pub struct EntityShowResult {
@@ -139,7 +139,7 @@ impl<'a> EntityService<'a> {
         let shown = self.show(target)?;
         let root_entity = shown.entity.clone();
         let (anchors, files) = self.build_anchor_context(&shown.anchors);
-        let linked_entities = self.build_link_context(root_entity.entity_id, link_depth)?;
+        let linked_entities = collect_link_context(&self.repo, root_entity.entity_id, link_depth)?;
 
         Ok(EntityContextResult {
             entity: root_entity,
@@ -224,97 +224,6 @@ impl<'a> EntityService<'a> {
         }
 
         (context_anchors, files)
-    }
-
-    fn build_link_context(&self, root_entity_id: i64, link_depth: usize) -> Result<Vec<LinkedEntityContext>> {
-        if link_depth == 0 {
-            return Ok(Vec::new());
-        }
-        self.collect_link_context(root_entity_id, link_depth)
-    }
-
-    fn collect_link_context(&self, root_entity_id: i64, link_depth: usize) -> Result<Vec<LinkedEntityContext>> {
-        let root_entity = self
-            .repo
-            .find(&crate::entity::EntityLookup::Id(root_entity_id))?
-            .context("root entity not found")?;
-
-        let mut discovered: HashMap<i64, LinkedEntityContext> = HashMap::new();
-        let mut queued = HashSet::from([root_entity_id]);
-        let mut queue = VecDeque::from([(root_entity_id, 0usize)]);
-
-        while let Some((entity_id, depth)) = queue.pop_front() {
-            if depth >= link_depth {
-                continue;
-            }
-
-            self.enqueue_neighbors(entity_id, depth + 1, &root_entity, &mut discovered, &mut queued, &mut queue)?;
-        }
-
-        let mut linked_entities = discovered.into_values().collect::<Vec<_>>();
-        linked_entities.sort_by_key(|item| (item.depth, item.entity.entity_id));
-        Ok(linked_entities)
-    }
-
-    fn enqueue_neighbors(
-        &self,
-        entity_id: i64,
-        depth: usize,
-        root_entity: &Entity,
-        discovered: &mut HashMap<i64, LinkedEntityContext>,
-        queued: &mut HashSet<i64>,
-        queue: &mut VecDeque<(i64, usize)>,
-    ) -> Result<()> {
-        for (link, entity) in self.repo.list_outgoing_links(entity_id)? {
-            self.record_link_context(discovered, root_entity, link, entity.clone(), depth);
-            if queued.insert(entity.entity_id) {
-                queue.push_back((entity.entity_id, depth));
-            }
-        }
-
-        for (link, entity) in self.repo.list_incoming_links(entity_id)? {
-            self.record_link_context(discovered, root_entity, link, entity.clone(), depth);
-            if queued.insert(entity.entity_id) {
-                queue.push_back((entity.entity_id, depth));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn record_link_context(
-        &self,
-        discovered: &mut HashMap<i64, LinkedEntityContext>,
-        root_entity: &Entity,
-        link: EntityLink,
-        related: Entity,
-        depth: usize,
-    ) {
-        if related.entity_id == root_entity.entity_id {
-            return;
-        }
-
-        let context = discovered.entry(related.entity_id).or_insert_with(|| LinkedEntityContext {
-            link: link.clone(),
-            entity: related.clone(),
-            depth,
-        });
-
-        if depth < context.depth {
-            context.link = link;
-            context.entity = related;
-            context.depth = depth;
-            return;
-        }
-
-        if depth == context.depth {
-            let current_edge = format!("{}->{}", context.link.from_entity_id, context.link.to_entity_id);
-            let candidate_edge = format!("{}->{}", link.from_entity_id, link.to_entity_id);
-            if candidate_edge < current_edge {
-                context.link = link;
-                context.entity = related;
-            }
-        }
     }
 
     fn auto_file(&self, file: &WorkspaceFile, result: &mut EntityAutoResult) -> Result<bool> {
@@ -467,13 +376,6 @@ mod tests {
         let (anchors, files) = service.build_anchor_context(&[anchor.clone(), anchor]);
         assert_eq!(anchors.len(), 2);
         assert_eq!(files, vec!["./docs/a.md".to_string()]);
-    }
-
-    #[test]
-    fn build_link_context_returns_empty_for_zero_depth() {
-        let service = setup_service();
-        let links = service.build_link_context(1, 0).unwrap();
-        assert!(links.is_empty());
     }
 
     #[test]
