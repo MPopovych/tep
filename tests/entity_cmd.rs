@@ -151,6 +151,80 @@ fn entity_context_includes_all_link_directions_by_default() {
 }
 
 #[test]
+fn entity_create_rejects_empty_name() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "   "])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("entity name cannot be empty"));
+}
+
+#[test]
+fn entity_edit_requires_at_least_one_field() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "student"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "edit", "student"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("entity edit requires at least one field to update"));
+}
+
+#[test]
+fn entity_show_reports_missing_entity() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "show", "missing"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("entity not found: missing"));
+}
+
+#[test]
+fn entity_link_rejects_empty_relation() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "student"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "subject"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "link", "student", "subject", "--relation", "   "])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("relation cannot be empty"));
+}
+
+#[test]
+fn entity_link_rejects_self_link() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "student"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "link", "student", "student", "--relation", "self link"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("entity cannot link to itself"));
+}
+
+#[test]
 fn entity_context_can_expand_link_depth() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("note.txt"), "hello\n[#!#tep:](student)\n")

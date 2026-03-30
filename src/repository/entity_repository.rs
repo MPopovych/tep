@@ -109,6 +109,9 @@ impl<'a> EntityRepository<'a> {
         }
         let from_entity = self.find(from)?.context("source entity not found")?;
         let to_entity = self.find(to)?.context("target entity not found")?;
+        if from_entity.entity_id == to_entity.entity_id {
+            bail!("entity cannot link to itself");
+        }
         let now = now_utc();
         self.conn.execute(
             "INSERT INTO entity_links (from_entity_id, to_entity_id, relation, created_at, updated_at)
@@ -332,5 +335,71 @@ mod tests {
         let student = repo.find(&EntityLookup::Name("Student".into())).unwrap().unwrap();
         let outgoing = repo.list_outgoing_links(student.entity_id).unwrap();
         assert!(outgoing.is_empty());
+    }
+
+    #[test]
+    fn create_rejects_empty_name() {
+        let repo = setup_repo();
+        let err = repo.create(&NewEntity {
+            name: "   ".into(),
+            r#ref: None,
+            description: None,
+        }).expect_err("empty name should fail");
+        assert!(err.to_string().contains("entity name cannot be empty"));
+    }
+
+    #[test]
+    fn update_rejects_numeric_name() {
+        let repo = setup_repo();
+        let entity = repo.create(&NewEntity {
+            name: "Student".into(),
+            r#ref: None,
+            description: None,
+        }).unwrap();
+        let err = repo.update(
+            &EntityLookup::Id(entity.entity_id),
+            &UpdateEntity {
+                name: Some("123".into()),
+                r#ref: None,
+                description: None,
+            },
+        ).expect_err("numeric name should fail");
+        assert!(err.to_string().contains("entity name cannot be purely numeric"));
+    }
+
+    #[test]
+    fn link_rejects_whitespace_relation() {
+        let repo = setup_repo();
+        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
+        repo.create(&NewEntity { name: "Subject".into(), r#ref: None, description: None }).unwrap();
+        let err = repo.link(
+            &EntityLookup::Name("Student".into()),
+            &EntityLookup::Name("Subject".into()),
+            "   ",
+        ).expect_err("empty relation should fail");
+        assert!(err.to_string().contains("relation cannot be empty"));
+    }
+
+    #[test]
+    fn unlink_requires_both_entities_to_exist() {
+        let repo = setup_repo();
+        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
+        let err = repo.unlink(
+            &EntityLookup::Name("Student".into()),
+            &EntityLookup::Name("Missing".into()),
+        ).expect_err("missing target should fail");
+        assert!(err.to_string().contains("target entity not found"));
+    }
+
+    #[test]
+    fn link_rejects_self_links() {
+        let repo = setup_repo();
+        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
+        let err = repo.link(
+            &EntityLookup::Name("Student".into()),
+            &EntityLookup::Name("Student".into()),
+            "self link",
+        ).expect_err("self link should fail");
+        assert!(err.to_string().contains("entity cannot link to itself"));
     }
 }

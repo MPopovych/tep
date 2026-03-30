@@ -375,6 +375,34 @@ fn anchor_auto_fails_for_duplicate_materialized_anchor_ids_in_same_file() {
 }
 
 #[test]
+fn anchor_show_reports_missing_anchor() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["anchor", "show", "999"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("anchor not found: 999"));
+}
+
+#[test]
+fn attach_reports_missing_anchor_after_workspace_init() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["attach", "student", "999"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("anchor 999"));
+}
+
+#[test]
 fn anchor_auto_fails_for_cross_file_anchor_id_conflict() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("one.txt"), "[#!#tep:]").expect("should write file");

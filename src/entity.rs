@@ -197,6 +197,17 @@ mod tests {
     }
 
     #[test]
+    fn ignores_invalid_materialized_entity_declaration_version() {
+        let parsed = parse_entity_declarations("(#!#abc#tep:Student)");
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn parse_lookup_preserves_non_numeric_whitespace_input_as_name() {
+        assert_eq!(parse_lookup(" 42 "), EntityLookup::Name(" 42 ".into()));
+    }
+
+    #[test]
     fn ignores_entity_declaration_when_line_contains_tepignore() {
         let parsed = parse_entity_declarations("example (#!#tep:Student) #tepignore");
         assert!(parsed.is_empty());
