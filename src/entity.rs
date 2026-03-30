@@ -59,19 +59,49 @@ pub fn parse_lookup(input: &str) -> EntityLookup {
     if let Ok(id) = input.parse::<i64>() {
         EntityLookup::Id(id)
     } else {
-        EntityLookup::Name(input.to_string())
+        EntityLookup::Name(normalize_name(input))
     }
 }
 
+pub fn normalize_name(input: &str) -> String {
+    input.trim().to_ascii_lowercase()
+}
+
 pub fn validate_name(name: &str) -> Result<(), &'static str> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
+    let normalized = normalize_name(name);
+    if normalized.is_empty() {
         return Err("entity name cannot be empty");
     }
-    if trimmed.chars().all(|c| c.is_ascii_digit()) {
+    if normalized.chars().all(|c| c.is_ascii_digit()) {
         return Err("entity name cannot be purely numeric");
     }
+    if !normalized
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '_')
+    {
+        return Err("entity name may only contain lowercase letters, numbers, dots, and underscores");
+    }
     Ok(())
+}
+
+pub fn validate_description(description: &str) -> Result<(), &'static str> {
+    if description.contains('"') {
+        return Err("entity description cannot contain quotes");
+    }
+    if description.contains('\n') || description.contains('\r') {
+        return Err("entity description cannot contain newlines");
+    }
+    Ok(())
+}
+
+pub fn normalize_description(description: Option<String>) -> Result<Option<String>, &'static str> {
+    match description {
+        Some(value) => {
+            validate_description(&value)?;
+            Ok(Some(value.trim().to_string()))
+        }
+        None => Ok(None),
+    }
 }
 
 pub fn parse_entity_declarations(input: &str) -> Vec<ParsedEntityDeclaration> {
@@ -114,6 +144,7 @@ fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntit
     };
 
     validate_name(name).ok()?;
+    let normalized_name = normalize_name(name);
 
     let prefix = &input[..start];
     let line = prefix.bytes().filter(|b| *b == b'\n').count() as i64 + 1;
@@ -127,7 +158,7 @@ fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntit
     Some(ParsedEntityDeclaration {
         raw: raw.to_string(),
         version,
-        name: name.to_string(),
+        name: normalized_name,
         start_offset: start,
         line,
         shift,
@@ -148,8 +179,8 @@ mod tests {
     }
 
     #[test]
-    fn parses_non_numeric_lookup_as_name() {
-        assert_eq!(parse_lookup("student"), EntityLookup::Name("student".into()));
+    fn parses_non_numeric_lookup_as_normalized_name() {
+        assert_eq!(parse_lookup("Student"), EntityLookup::Name("student".into()));
     }
 
     #[test]
@@ -168,11 +199,42 @@ mod tests {
     }
 
     #[test]
+    fn rejects_name_with_dash() {
+        assert!(validate_name("student-profile").is_err());
+    }
+
+    #[test]
+    fn normalizes_mixed_case_name() {
+        assert_eq!(normalize_name(" Student.Profile "), "student.profile");
+    }
+
+    #[test]
+    fn accepts_uppercase_name_input_but_normalizes_it() {
+        assert!(validate_name("STUDENT").is_ok());
+        assert_eq!(normalize_name("STUDENT"), "student");
+    }
+
+    #[test]
+    fn rejects_description_with_quotes() {
+        assert!(validate_description("A \"learner\"").is_err());
+    }
+
+    #[test]
+    fn rejects_description_with_newlines() {
+        assert!(validate_description("A learner\nwith break").is_err());
+    }
+
+    #[test]
+    fn accepts_description_with_spaces() {
+        assert!(validate_description("A learner in the system").is_ok());
+    }
+
+    #[test]
     fn parses_incomplete_entity_declaration() {
         let parsed = parse_entity_declarations("abc (#!#tep:Student) xyz");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].version, None);
-        assert_eq!(parsed[0].name, "Student");
+        assert_eq!(parsed[0].name, "student");
     }
 
     #[test]
@@ -180,14 +242,14 @@ mod tests {
         let parsed = parse_entity_declarations("(#!#1#tep:Student)");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].version, Some(1));
-        assert_eq!(parsed[0].name, "Student");
+        assert_eq!(parsed[0].name, "student");
     }
 
     #[test]
     fn materializes_entity_declaration() {
         let parsed = parse_entity_declarations("(#!#tep:Student)");
         let out = materialize_entity_declaration(&parsed[0], 1);
-        assert_eq!(out, "(#!#1#tep:Student)");
+        assert_eq!(out, "(#!#1#tep:student)");
     }
 
     #[test]
@@ -204,7 +266,7 @@ mod tests {
 
     #[test]
     fn parse_lookup_preserves_non_numeric_whitespace_input_as_name() {
-        assert_eq!(parse_lookup(" 42 "), EntityLookup::Name(" 42 ".into()));
+        assert_eq!(parse_lookup(" 42a "), EntityLookup::Name("42a".into()));
     }
 
     #[test]
@@ -217,6 +279,6 @@ mod tests {
     fn ignores_entity_declarations_after_tepignoreafter_marker() {
         let parsed = parse_entity_declarations("(#!#tep:Student)\n#tepignoreafter\n(#!#tep:Teacher)");
         assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].name, "Student");
+        assert_eq!(parsed[0].name, "student");
     }
 }

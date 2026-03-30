@@ -94,7 +94,21 @@ pub fn format_entity_list(entities: &[Entity]) -> String {
 
     let mut out = String::new();
     for entity in entities {
-        out.push_str(&render_entity_header(entity));
+        out.push_str(&format_entity_list_line(entity));
+        out.push('\n');
+    }
+    out
+}
+
+fn format_entity_list_line(entity: &Entity) -> String {
+    let mut out = format!("{} {}", entity.entity_id, entity.name);
+    if let Some(description) = &entity.description {
+        out.push_str(&format!(" - \"{}\"", description));
+    }
+    if let Some(entity_ref) = &entity.r#ref {
+        if !entity_ref.is_empty() {
+            out.push_str(&format!(" ({})", entity_ref));
+        }
     }
     out
 }
@@ -119,6 +133,7 @@ mod tests {
         Anchor {
             anchor_id: 7,
             version: 1,
+            name: Some("student_processor".into()),
             file_path: "./file.md".into(),
             line: Some(3),
             shift: Some(4),
@@ -193,12 +208,30 @@ mod tests {
         });
         assert!(rendered.contains("42 (student)"));
         assert!(rendered.contains("description: A learner"));
-        assert!(rendered.contains("7"));
+        assert!(rendered.contains("7 (student_processor)"));
         assert!(rendered.contains("./file.md"));
+        assert!(rendered.contains("student_processor"));
         assert!(rendered.contains("outgoing links:"));
         assert!(rendered.contains("incoming links:"));
         assert!(rendered.contains("student has subjects"));
         assert!(rendered.contains("teacher mentors student"));
+    }
+
+    #[test]
+    fn formats_entity_list_with_one_line_shape() {
+        let rendered = format_entity_list(&[
+            sample_entity(),
+            Entity {
+                entity_id: 99,
+                name: "teacher".into(),
+                r#ref: None,
+                description: Some("An instructor".into()),
+                created_at: "1".into(),
+                updated_at: "2".into(),
+            },
+        ]);
+        assert!(rendered.contains("42 student - \"A learner\" (./docs/student.md)"));
+        assert!(rendered.contains("99 teacher - \"An instructor\""));
     }
 
     #[test]

@@ -13,7 +13,7 @@ fn init_creates_workspace_files() {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("Initialized empty tep workspace"))
-        .stdout(predicate::str::contains("Schema version: 2"));
+        .stdout(predicate::str::contains("Schema version: 3"));
 
     temp.child(".tep").assert(predicates::path::is_dir());
     temp.child(".tep/tep.db")
@@ -56,5 +56,5 @@ fn legacy_workspace_db_is_migrated_on_access() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("schema version should be readable");
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
 }

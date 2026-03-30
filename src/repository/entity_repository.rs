@@ -4,7 +4,10 @@
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::entity::{Entity, EntityLink, EntityLookup, NewEntity, UpdateEntity, validate_name};
+use crate::entity::{
+    Entity, EntityLink, EntityLookup, NewEntity, UpdateEntity, normalize_description, normalize_name,
+    validate_name,
+};
 use crate::utils::time::now_utc;
 
 pub struct EntityRepository<'a> {
@@ -18,11 +21,13 @@ impl<'a> EntityRepository<'a> {
 
     pub fn create(&self, new_entity: &NewEntity) -> Result<Entity> {
         validate_name(&new_entity.name).map_err(anyhow::Error::msg)?;
+        let normalized_name = normalize_name(&new_entity.name);
+        let normalized_description = normalize_description(new_entity.description.clone()).map_err(anyhow::Error::msg)?;
 
         let now = now_utc();
         self.conn.execute(
             "INSERT INTO entities (name, ref, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![new_entity.name, new_entity.r#ref, new_entity.description, now, now],
+            params![normalized_name, new_entity.r#ref, normalized_description, now, now],
         )
         .with_context(|| format!("failed to create entity {}", new_entity.name))?;
 
@@ -33,12 +38,17 @@ impl<'a> EntityRepository<'a> {
 
     pub fn ensure(&self, new_entity: &NewEntity) -> Result<Entity> {
         validate_name(&new_entity.name).map_err(anyhow::Error::msg)?;
+        let normalized_name = normalize_name(&new_entity.name);
 
-        if let Some(existing) = self.find(&EntityLookup::Name(new_entity.name.clone()))? {
+        if let Some(existing) = self.find(&EntityLookup::Name(normalized_name.clone()))? {
             return Ok(existing);
         }
 
-        self.create(new_entity)
+        self.create(&NewEntity {
+            name: normalized_name,
+            r#ref: new_entity.r#ref.clone(),
+            description: new_entity.description.clone(),
+        })
     }
 
     pub fn find(&self, lookup: &EntityLookup) -> Result<Option<Entity>> {
@@ -49,7 +59,7 @@ impl<'a> EntityRepository<'a> {
             ),
             EntityLookup::Name(name) => (
                 "SELECT entity_id, name, ref, description, created_at, updated_at FROM entities WHERE name = ?1",
-                vec![name.clone()],
+                vec![normalize_name(name)],
             ),
         };
 
@@ -67,14 +77,19 @@ impl<'a> EntityRepository<'a> {
 
         let next_name = update.name.clone().unwrap_or(existing.name.clone());
         validate_name(&next_name).map_err(anyhow::Error::msg)?;
+        let normalized_name = normalize_name(&next_name);
 
         let next_ref = update.r#ref.clone().or(existing.r#ref.clone());
-        let next_description = update.description.clone().or(existing.description.clone());
+        let next_description = match update.description.clone() {
+            Some(description) => Some(description),
+            None => existing.description.clone(),
+        };
+        let normalized_description = normalize_description(next_description).map_err(anyhow::Error::msg)?;
         let now = now_utc();
 
         self.conn.execute(
             "UPDATE entities SET name = ?1, ref = ?2, description = ?3, updated_at = ?4 WHERE entity_id = ?5",
-            params![next_name, next_ref, next_description, now, existing.entity_id],
+            params![normalized_name, next_ref, normalized_description, now, existing.entity_id],
         )?;
 
         self.find(&EntityLookup::Id(existing.entity_id))?
@@ -229,7 +244,7 @@ mod tests {
     fn create_persists_entity() {
         let repo = setup_repo();
         let entity = repo.create(&NewEntity {
-            name: "student".into(),
+            name: "Student".into(),
             r#ref: Some("./docs/student.md".into()),
             description: Some("A learner".into()),
         }).expect("create should succeed");
@@ -240,7 +255,7 @@ mod tests {
     }
 
     #[test]
-    fn ensure_returns_existing_entity() {
+    fn ensure_returns_existing_entity_case_insensitively() {
         let repo = setup_repo();
         let first = repo.ensure(&NewEntity {
             name: "student".into(),
@@ -248,7 +263,7 @@ mod tests {
             description: None,
         }).unwrap();
         let second = repo.ensure(&NewEntity {
-            name: "student".into(),
+            name: "Student".into(),
             r#ref: Some("./ignored.md".into()),
             description: Some("ignored".into()),
         }).unwrap();
@@ -256,7 +271,18 @@ mod tests {
     }
 
     #[test]
-    fn update_changes_fields() {
+    fn create_accepts_uppercase_name_input_and_stores_lowercase() {
+        let repo = setup_repo();
+        let entity = repo.create(&NewEntity {
+            name: "STUDENT".into(),
+            r#ref: None,
+            description: None,
+        }).unwrap();
+        assert_eq!(entity.name, "student");
+    }
+
+    #[test]
+    fn update_changes_fields_and_normalizes_name() {
         let repo = setup_repo();
         let entity = repo.create(&NewEntity {
             name: "student".into(),
@@ -266,7 +292,7 @@ mod tests {
         let updated = repo.update(
             &EntityLookup::Id(entity.entity_id),
             &UpdateEntity {
-                name: Some("student.profile".into()),
+                name: Some("Student.Profile".into()),
                 r#ref: Some("./docs/profile.md".into()),
                 description: Some("Profile entity".into()),
             },
@@ -286,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn link_and_list_outgoing_links_work() {
+    fn link_and_list_outgoing_links_work_case_insensitively() {
         let repo = setup_repo();
         repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
         repo.create(&NewEntity { name: "Subject".into(), r#ref: None, description: None }).unwrap();
@@ -296,10 +322,10 @@ mod tests {
             "student has subjects assigned to him each semester",
         ).unwrap();
         assert_eq!(link.relation, "student has subjects assigned to him each semester");
-        let student = repo.find(&EntityLookup::Name("Student".into())).unwrap().unwrap();
+        let student = repo.find(&EntityLookup::Name("student".into())).unwrap().unwrap();
         let outgoing = repo.list_outgoing_links(student.entity_id).unwrap();
         assert_eq!(outgoing.len(), 1);
-        assert_eq!(outgoing[0].1.name, "Subject");
+        assert_eq!(outgoing[0].1.name, "subject");
     }
 
     #[test]
@@ -312,10 +338,10 @@ mod tests {
             &EntityLookup::Name("Subject".into()),
             "student has subjects assigned",
         ).unwrap();
-        let subject = repo.find(&EntityLookup::Name("Subject".into())).unwrap().unwrap();
+        let subject = repo.find(&EntityLookup::Name("subject".into())).unwrap().unwrap();
         let incoming = repo.list_incoming_links(subject.entity_id).unwrap();
         assert_eq!(incoming.len(), 1);
-        assert_eq!(incoming[0].1.name, "Student");
+        assert_eq!(incoming[0].1.name, "student");
     }
 
     #[test]
@@ -332,7 +358,7 @@ mod tests {
             &EntityLookup::Name("Student".into()),
             &EntityLookup::Name("Subject".into()),
         ).unwrap();
-        let student = repo.find(&EntityLookup::Name("Student".into())).unwrap().unwrap();
+        let student = repo.find(&EntityLookup::Name("student".into())).unwrap().unwrap();
         let outgoing = repo.list_outgoing_links(student.entity_id).unwrap();
         assert!(outgoing.is_empty());
     }
@@ -365,6 +391,28 @@ mod tests {
             },
         ).expect_err("numeric name should fail");
         assert!(err.to_string().contains("entity name cannot be purely numeric"));
+    }
+
+    #[test]
+    fn create_rejects_name_with_dash() {
+        let repo = setup_repo();
+        let err = repo.create(&NewEntity {
+            name: "student-profile".into(),
+            r#ref: None,
+            description: None,
+        }).expect_err("dash should fail");
+        assert!(err.to_string().contains("entity name may only contain lowercase letters, numbers, dots, and underscores"));
+    }
+
+    #[test]
+    fn create_rejects_description_with_quotes() {
+        let repo = setup_repo();
+        let err = repo.create(&NewEntity {
+            name: "student".into(),
+            r#ref: None,
+            description: Some("A \"learner\"".into()),
+        }).expect_err("quoted description should fail");
+        assert!(err.to_string().contains("entity description cannot contain quotes"));
     }
 
     #[test]

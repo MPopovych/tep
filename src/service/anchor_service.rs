@@ -321,7 +321,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
         let file = temp.path().join("note.txt");
-        std::fs::write(&file, "[#!#tep:](student,basic-user)").expect("should write file");
+        std::fs::write(&file, "[#!#tep:](student,basic_user)").expect("should write file");
 
         let result = service
             .sync_paths(&["./note.txt".into()])

@@ -384,6 +384,7 @@ mod tests {
         let anchor = Anchor {
             anchor_id: 1,
             version: 1,
+            name: None,
             file_path: "./docs/a.md".into(),
             line: Some(1),
             shift: Some(0),
@@ -428,9 +429,9 @@ mod tests {
         service.link("Teacher", "Student", "teacher mentors student").unwrap();
         let result = service.show("Student").unwrap();
         assert_eq!(result.outgoing_links.len(), 1);
-        assert_eq!(result.outgoing_links[0].1.name, "Subject");
+        assert_eq!(result.outgoing_links[0].1.name, "subject");
         assert_eq!(result.incoming_links.len(), 1);
-        assert_eq!(result.incoming_links[0].1.name, "Teacher");
+        assert_eq!(result.incoming_links[0].1.name, "teacher");
     }
 
     #[test]

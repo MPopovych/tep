@@ -7,7 +7,7 @@ This document captures the planned first implementation of directional entity-to
 Entity links should let `tep` describe semantic relationships between entities directly.
 
 Example intent:
-- `Student -> Subject`
+- `student -> subject`
 - relation: `student has subjects assigned to him each semester`
 
 The link should be:
@@ -29,7 +29,7 @@ Proposed table:
 n`from_entity_id -> to_entity_id` is directional.
 
 That means:
-- `Student -> Subject` is not the same as `Subject -> Student`
+- `student -> subject` is not the same as `subject -> student`
 
 ## Relation field
 
@@ -55,7 +55,7 @@ If multiple relations between the same pair become necessary later, the schema c
 
 ### Create or upsert link
 ```bash
-tep entity link Student Subject --relation "student has subjects assigned to him each semester"
+tep entity link student subject --relation "student has subjects assigned to him each semester"
 ```
 
 Behavior:
@@ -65,7 +65,7 @@ Behavior:
 
 ### Remove link
 ```bash
-tep entity unlink Student Subject
+tep entity unlink student subject
 ```
 
 Behavior:
@@ -78,8 +78,8 @@ Behavior:
 Example:
 ```txt
 linked
-from: Student
-to: Subject
+from: student
+to: subject
 relation: student has subjects assigned to him each semester
 ```
 
@@ -87,8 +87,8 @@ relation: student has subjects assigned to him each semester
 Example:
 ```txt
 unlinked
-from: Student
-to: Subject
+from: student
+to: subject
 ```
 
 ## Interaction with entity show

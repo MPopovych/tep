@@ -29,7 +29,7 @@ Materialized anchor tags contain the anchor ID.
 Examples:
 ```txt
 [#!#1#tep:123](student)
-[#!#1#tep:124](student,basic-user)
+[#!#1#tep:124](student,basic_user)
 ```
 
 Rules:

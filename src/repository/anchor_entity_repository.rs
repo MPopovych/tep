@@ -140,7 +140,7 @@ mod tests {
         let entity_repo = EntityRepository::new(conn);
         let other = entity_repo
             .create(&NewEntity {
-                name: "basic-user".into(),
+                name: "basic_user".into(),
                 r#ref: None,
                 description: None,
             })

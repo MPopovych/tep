@@ -74,7 +74,7 @@ Behavior:
 - scan targeted files for entity declaration tags
 - declaration syntax:
   ```txt
-  (#!#tep:Student)
+  (#!#tep:student)
   ```
 - ensure the declared entity exists
 - if the entity has no `ref`, fill it with the declaring file path
@@ -82,7 +82,7 @@ Behavior:
 - attach the entity to that anchor
 - rewrite the declaration to versioned form:
   ```txt
-  (#!#1#tep:Student)
+  (#!#1#tep:student)
   ```
 - do not overwrite an existing non-null `ref`
 - already-versioned declarations reuse the existing related anchor in the same file
@@ -136,7 +136,7 @@ Behavior:
 
 ### Link
 ```bash
-tep entity link Student Subject --relation "student has subjects assigned to him each semester"
+tep entity link student subject --relation "student has subjects assigned to him each semester"
 ```
 
 Behavior:
@@ -147,7 +147,7 @@ Behavior:
 
 ### Unlink
 ```bash
-tep entity unlink Student Subject
+tep entity unlink student subject
 ```
 
 Behavior:

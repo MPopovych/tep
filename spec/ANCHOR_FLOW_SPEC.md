@@ -39,7 +39,7 @@ Examples:
 
 ```txt
 [#!#tep:](student)
-[#!#tep:](student,basic-user)
+[#!#tep:](student,basic_user)
 [#!#tep:]
 ```
 
@@ -56,7 +56,7 @@ Examples:
 
 ```txt
 [#!#1#tep:123](student)
-[#!#1#tep:124](student,basic-user)
+[#!#1#tep:124](student,basic_user)
 [#!#1#tep:125]
 ```
 
@@ -104,7 +104,7 @@ Those belong to `tep entity auto`.
 Entity declarations use parentheses, for example:
 
 ```txt
-(#!#tep:Student)
+(#!#tep:student)
 ```
 
 ## Anchor show

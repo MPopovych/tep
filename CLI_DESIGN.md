@@ -116,8 +116,8 @@ tep detach <entity-id-or-name> <anchor-id>
 
 ### Entity declaration tag
 ```txt
-(#!#tep:Student) #tepignore
-(#!#1#tep:Student) #tepignore
+(#!#tep:student) #tepignore
+(#!#1#tep:student) #tepignore
 ```
 
 Bracket type decides the role:

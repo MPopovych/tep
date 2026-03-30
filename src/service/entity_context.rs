@@ -74,6 +74,7 @@ mod tests {
         Anchor {
             anchor_id: 1,
             version: 1,
+            name: None,
             file_path,
             line: Some(1),
             shift: Some(0),

@@ -20,7 +20,7 @@ fn entity_create_prints_created_entity() {
         .args([
             "entity",
             "create",
-            "student",
+            "Student",
             "--ref",
             "./docs/student.md",
             "--description",
@@ -48,6 +48,35 @@ fn entity_command_fails_cleanly_outside_workspace() {
         .failure()
         .stderr(predicate::str::contains("no tep workspace found"))
         .stderr(predicate::str::contains("tep init"));
+}
+
+#[test]
+fn entity_list_shows_one_line_intro_format() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "Student", "--ref", "./docs/student.md", "--description", "A learner"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "Teacher", "--description", "An instructor"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("1 student - \"A learner\" (./docs/student.md)"))
+        .stdout(predicate::str::contains("2 teacher - \"An instructor\""));
 }
 
 #[test]
@@ -81,13 +110,13 @@ fn entity_show_includes_incoming_and_outgoing_links() {
     Command::cargo_bin("tep")
         .unwrap()
         .current_dir(temp.path())
-        .args(["entity", "show", "Student"])
+        .args(["entity", "show", "student"])
         .assert()
         .success()
         .stdout(predicate::str::contains("outgoing links:"))
         .stdout(predicate::str::contains("incoming links:"))
-        .stdout(predicate::str::contains("Subject"))
-        .stdout(predicate::str::contains("Teacher"))
+        .stdout(predicate::str::contains("subject"))
+        .stdout(predicate::str::contains("teacher"))
         .stdout(predicate::str::contains("student has subjects assigned to him each semester"))
         .stdout(predicate::str::contains("teacher mentors student"));
 }
@@ -162,6 +191,34 @@ fn entity_create_rejects_empty_name() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("entity name cannot be empty"));
+}
+
+#[test]
+fn entity_create_rejects_invalid_name_characters() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "basic-user"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("entity name may only contain lowercase letters, numbers, dots, and underscores"));
+}
+
+#[test]
+fn entity_create_rejects_description_quotes() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "student", "--description", "A \"learner\""])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("entity description cannot contain quotes"));
 }
 
 #[test]

@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 pub const DEFAULT_TEP_DIR: &str = ".tep";
 pub const DEFAULT_DB_FILE: &str = ".tep/tep.db";
 pub const DEFAULT_IGNORE_FILE: &str = ".tep_ignore";
-pub const CURRENT_SCHEMA_VERSION: i64 = 2;
+pub const CURRENT_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePaths {
@@ -84,6 +84,10 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
         migrate_to_v2(conn)?;
         version = 2;
     }
+    if version < 3 {
+        migrate_to_v3(conn)?;
+        version = 3;
+    }
 
     set_schema_version(conn, version.max(CURRENT_SCHEMA_VERSION))?;
     Ok(())
@@ -110,6 +114,7 @@ fn base_schema_sql() -> &'static str {
     CREATE TABLE IF NOT EXISTS anchors (
         anchor_id INTEGER PRIMARY KEY,
         version INTEGER NOT NULL,
+        name TEXT UNIQUE,
         file_path TEXT NOT NULL,
         line INTEGER,
         shift INTEGER,
@@ -173,14 +178,30 @@ fn migrate_to_v2(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn migrate_to_v3(conn: &Connection) -> Result<()> {
+    if !column_exists(conn, "anchors", "name")? {
+        conn.execute("ALTER TABLE anchors ADD COLUMN name TEXT", [])
+            .context("failed to add name column to anchors")?;
+    }
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_anchors_name_unique ON anchors(name) WHERE name IS NOT NULL",
+        [],
+    )
+    .context("failed to create unique index on anchors(name)")?;
+    Ok(())
+}
+
 fn detect_schema_version(conn: &Connection) -> Result<i64> {
     if !table_exists(conn, "entities")? {
         return Ok(0);
     }
-    if column_exists(conn, "entities", "description")? {
-        return Ok(2);
+    if !column_exists(conn, "entities", "description")? {
+        return Ok(1);
     }
-    Ok(1)
+    if column_exists(conn, "anchors", "name")? {
+        return Ok(3);
+    }
+    Ok(2)
 }
 
 fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
@@ -263,6 +284,53 @@ mod tests {
 
         let found = find_workspace_root(&nested).expect("workspace should be found");
         assert_eq!(found, root);
+    }
+
+    #[test]
+    fn migrates_v2_anchors_table_to_v3() {
+        let conn = open_in_memory().expect("in-memory db should open");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE entities (
+                entity_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                ref TEXT,
+                description TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE anchors (
+                anchor_id INTEGER PRIMARY KEY,
+                version INTEGER NOT NULL,
+                file_path TEXT NOT NULL,
+                line INTEGER,
+                shift INTEGER,
+                offset INTEGER,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE anchor_entities (
+                anchor_id INTEGER NOT NULL,
+                entity_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (anchor_id, entity_id)
+            );
+            CREATE TABLE entity_links (
+                from_entity_id INTEGER NOT NULL,
+                to_entity_id INTEGER NOT NULL,
+                relation TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (from_entity_id, to_entity_id)
+            );
+            "#,
+        )
+        .unwrap();
+        set_schema_version(&conn, 2).unwrap();
+
+        ensure_schema(&conn).expect("migration should succeed");
+        assert!(column_exists(&conn, "anchors", "name").unwrap());
+        assert_eq!(schema_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
     }
 
     #[test]

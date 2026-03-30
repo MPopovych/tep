@@ -89,17 +89,17 @@ Entity declaration tags use parentheses.
 
 Incomplete declaration:
 ```txt
-(#!#tep:Student) #tepignore
+(#!#tep:student) #tepignore
 ```
 
 Materialized declaration:
 ```txt
-(#!#1#tep:Student) #tepignore
+(#!#1#tep:student) #tepignore
 ```
 
 Meaning:
 - parentheses identify an entity declaration marker
-- `Student` is the entity name
+- `student` is the entity name
 - `tep entity auto` ensures the entity exists
 - if the entity has no `ref`, the declaring file path is stored in `ref`
 - a backing anchor relation is created for that declaration location

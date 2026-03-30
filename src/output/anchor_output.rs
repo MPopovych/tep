@@ -130,6 +130,7 @@ mod tests {
             anchor: Anchor {
                 anchor_id: 7,
                 version: 1,
+                name: Some("student_processor".into()),
                 file_path: "./file.md".into(),
                 line: Some(3),
                 shift: Some(4),
@@ -147,8 +148,9 @@ mod tests {
             }],
         });
 
-        assert!(rendered.contains("7"));
+        assert!(rendered.contains("7 (student_processor)"));
         assert!(rendered.contains("./file.md"));
+        assert!(rendered.contains("student_processor"));
         assert!(rendered.contains("\x1b[36m"));
         assert!(rendered.contains("\x1b[32m3\x1b[0m"));
         assert!(rendered.contains("\x1b[35m4\x1b[0m"));

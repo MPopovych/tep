@@ -105,7 +105,7 @@ One anchor can connect to several entities.
 This is useful when one place in code or docs is genuinely relevant to multiple concepts.
 
 Example:
-- a conversion method may connect to `student`, `basic-user`, and `user-conversion`
+- a conversion method may connect to `student`, `basic_user`, and `user-conversion`
 - without requiring several stacked anchor tags at the same location
 
 This reduces visual clutter while keeping the graph expressive.

@@ -10,6 +10,7 @@ pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
 pub struct Anchor {
     pub anchor_id: i64,
     pub version: i64,
+    pub name: Option<String>,
     pub file_path: String,
     pub line: Option<i64>,
     pub shift: Option<i64>,
@@ -35,6 +36,12 @@ pub enum AnchorKind {
     Materialized,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnchorTarget {
+    Id(i64),
+    Name(String),
+}
+
 impl ParsedAnchor {
     pub fn kind(&self) -> AnchorKind {
         if self.anchor_id.is_some() && self.version.is_some() {
@@ -42,6 +49,14 @@ impl ParsedAnchor {
         } else {
             AnchorKind::Incomplete
         }
+    }
+}
+
+pub fn parse_anchor_target(input: &str) -> AnchorTarget {
+    if let Ok(id) = input.parse::<i64>() {
+        AnchorTarget::Id(id)
+    } else {
+        AnchorTarget::Name(input.to_string())
     }
 }
 
@@ -172,6 +187,21 @@ mod tests {
         assert_eq!(parsed[0].kind(), AnchorKind::Materialized);
         assert_eq!(parsed[0].version, Some(1));
         assert_eq!(parsed[0].anchor_id, Some(123));
+    }
+
+    #[test]
+    fn parse_anchor_target_uses_id_for_numeric_input() {
+        assert_eq!(parse_anchor_target("42"), AnchorTarget::Id(42));
+    }
+
+    #[test]
+    fn parse_anchor_target_uses_name_for_non_numeric_input() {
+        assert_eq!(parse_anchor_target("student_processor"), AnchorTarget::Name("student_processor".into()));
+    }
+
+    #[test]
+    fn parse_anchor_target_preserves_whitespace_non_numeric_input_as_name() {
+        assert_eq!(parse_anchor_target(" 42 "), AnchorTarget::Name(" 42 ".into()));
     }
 
     #[test]

@@ -34,7 +34,7 @@ impl<'a> AnchorRepository<'a> {
         let now = now_utc();
         let normalized = self.normalize_path(file_path);
         self.conn.execute(
-            "INSERT INTO anchors (version, file_path, line, shift, offset, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO anchors (version, name, file_path, line, shift, offset, created_at, updated_at) VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![version, normalized, line, shift, offset, now, now],
         )
         .with_context(|| format!("failed to create anchor for file {}", file_path))?;
@@ -79,7 +79,7 @@ impl<'a> AnchorRepository<'a> {
 
     pub fn find_by_id(&self, anchor_id: i64) -> Result<Option<Anchor>> {
         let mut stmt = self.conn.prepare(
-            "SELECT anchor_id, version, file_path, line, shift, offset, created_at, updated_at FROM anchors WHERE anchor_id = ?1",
+            "SELECT anchor_id, version, name, file_path, line, shift, offset, created_at, updated_at FROM anchors WHERE anchor_id = ?1",
         )?;
         let anchor = stmt.query_row(params![anchor_id], map_anchor_row).optional()?;
         Ok(anchor)
@@ -101,7 +101,7 @@ impl<'a> AnchorRepository<'a> {
 
     pub fn list_for_entity(&self, entity_id: i64) -> Result<Vec<Anchor>> {
         let mut stmt = self.conn.prepare(
-            "SELECT a.anchor_id, a.version, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
+            "SELECT a.anchor_id, a.version, a.name, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
              FROM anchor_entities ae
              JOIN anchors a ON a.anchor_id = ae.anchor_id
              WHERE ae.entity_id = ?1
@@ -114,7 +114,7 @@ impl<'a> AnchorRepository<'a> {
 
     pub fn list_all(&self) -> Result<Vec<Anchor>> {
         let mut stmt = self.conn.prepare(
-            "SELECT anchor_id, version, file_path, line, shift, offset, created_at, updated_at
+            "SELECT anchor_id, version, name, file_path, line, shift, offset, created_at, updated_at
              FROM anchors
              ORDER BY anchor_id ASC",
         )?;
@@ -125,7 +125,7 @@ impl<'a> AnchorRepository<'a> {
 
     pub fn list_without_entities(&self) -> Result<Vec<Anchor>> {
         let mut stmt = self.conn.prepare(
-            "SELECT a.anchor_id, a.version, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
+            "SELECT a.anchor_id, a.version, a.name, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
              FROM anchors a
              LEFT JOIN anchor_entities ae ON ae.anchor_id = a.anchor_id
              WHERE ae.anchor_id IS NULL
@@ -139,7 +139,7 @@ impl<'a> AnchorRepository<'a> {
     pub fn find_latest_for_entity_in_file(&self, entity_id: i64, file_path: &str) -> Result<Option<Anchor>> {
         let normalized = self.normalize_path(file_path);
         let mut stmt = self.conn.prepare(
-            "SELECT a.anchor_id, a.version, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
+            "SELECT a.anchor_id, a.version, a.name, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
              FROM anchor_entities ae
              JOIN anchors a ON a.anchor_id = ae.anchor_id
              WHERE ae.entity_id = ?1
@@ -174,12 +174,13 @@ fn map_anchor_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Anchor> {
     Ok(Anchor {
         anchor_id: row.get(0)?,
         version: row.get(1)?,
-        file_path: row.get(2)?,
-        line: row.get(3)?,
-        shift: row.get(4)?,
-        offset: row.get(5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
+        name: row.get(2)?,
+        file_path: row.get(3)?,
+        line: row.get(4)?,
+        shift: row.get(5)?,
+        offset: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
     })
 }
 
@@ -207,6 +208,7 @@ mod tests {
 
         assert!(anchor.anchor_id > 0);
         assert_eq!(anchor.version, 1);
+        assert_eq!(anchor.name, None);
         assert_eq!(anchor.file_path, "./file.txt");
         assert_eq!(anchor.line, Some(2));
         assert_eq!(anchor.shift, Some(3));

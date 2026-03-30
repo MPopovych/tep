@@ -113,7 +113,7 @@ Imagine a method that converts a student into a basic user.
 A single anchor tag may sit near that code location.
 That one anchor may connect to multiple entities such as:
 - `student`
-- `basic-user`
+- `basic_user`
 - `student-conversion`
 
 Separately, the entities may also link to other entities in the graph.
