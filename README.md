@@ -40,13 +40,17 @@ The graph lives in your repo (`.tep/`), works offline, and stays under your cont
 ## Current capabilities
 
 - Initialize and auto-migrate local workspaces
-- Create, edit, list, and query entities with descriptions
-- Materialize anchor tags in files (`[#!#1#tep:123](student)`)
+- Create, edit, list, and query entities with names, descriptions, and refs
+- Enforce entity name normalization (`student`, not `Student` — lowercase, `[a-z0-9._]`)
+- Materialize anchor tags in files — numeric (`[#!#1#tep:42]`) or named (`[#!#1#tep:student_processor]`)
+- Named anchors: assign human-readable names to anchors, look them up by name, edit them via CLI
 - Auto-declare entities from declaration markers (`(#!#tep:student)`)
-- Attach/detach entities to anchors
+- Attach/detach entities to anchors by entity name or id, anchor name or id
 - Directional entity-to-entity links with free-text relations
-- Assemble retrieval-oriented context bundles for entities
+- Assemble retrieval-oriented context bundles for entities (`entity context`)
+- Bounded link traversal (`--link-depth`)
 - Audit anchor health and auto-repair metadata
+- List all anchors in the workspace (`anchor list`)
 - Respect `.tep_ignore` for test fixtures and examples
 
 ---
@@ -95,19 +99,26 @@ Current behavior:
 
 Anchor tags use square brackets.
 
-Incomplete anchor:
+Incomplete (anonymous):
 ```txt
 [#!#tep:](student) #tepignore
 ```
 
-Materialized anchor:
+Materialized (numeric id):
 ```txt
-[#!#1#tep:123](student) #tepignore
+[#!#1#tep:42](student) #tepignore
+```
+
+Materialized (named):
+```txt
+[#!#1#tep:student_processor](student) #tepignore
 ```
 
 Meaning:
 - square brackets identify an anchor tag
-- the value after `tep:` is the durable anchor ID once materialized
+- the value after `tep:` is either a numeric anchor ID or a human-readable name
+- numeric IDs are assigned automatically by `anchor auto`
+- names are either set in the file directly or assigned via `anchor edit <id> --name <name>`
 - the optional `( ... )` suffix is an entity reference instruction list
 
 ### Entity declaration tags
@@ -203,7 +214,9 @@ tep e ...
 ### Anchors
 ```bash
 tep anchor auto <pathspec...>
-tep anchor show <anchor-id>
+tep anchor show <anchor-id-or-name>
+tep anchor edit <anchor-id> --name <name>
+tep anchor list
 ```
 
 Shorthand:
@@ -213,8 +226,8 @@ tep a ...
 
 ### Manual relations
 ```bash
-tep attach <entity-id-or-name> <anchor-id>
-tep detach <entity-id-or-name> <anchor-id>
+tep attach <entity-id-or-name> <anchor-id-or-name>
+tep detach <entity-id-or-name> <anchor-id-or-name>
 ```
 
 ## Health and root repair
@@ -262,26 +275,24 @@ Anchor identity is the anchor ID.
 ## Notes
 
 - entity IDs are integer-only
-- entity names are unique and cannot be purely numeric
+- entity names are unique, normalized to lowercase, charset `[a-z0-9._]`
+- entity names cannot be purely numeric
 - entity metadata includes `ref` and `description`
 - entity links are directional in storage
+- anchor names are optional, unique, same charset as entity names (`[a-z0-9._]`)
+- anchor names cannot be purely numeric
+- `anchor show`, `attach`, and `detach` accept either id or name
+- `anchor edit <id> --name <name>` assigns/renames and rewrites the file tag in-place
 - `entity context` always includes linked entities by default
-- `.tep_ignore` is respected
-- `.gitignore` is not
-- `line`, `shift`, and `offset` are refreshable metadata only
+- `.tep_ignore` is respected; `.gitignore` is not
+- `line`, `shift`, and `offset` are refreshable metadata only; anchor identity is the id or name in the tag
 - `shift` and `offset` are byte-oriented in practice
-- current codebase internals now centralize shared path/time utilities and shared output rendering helpers
-- current source indexing uses hidden code anchors/comments plus targeted ignore controls to keep tests/fixtures out of the canonical graph
 
 ## Repo self-check
 
-The `tep` repo itself currently has a clean canonical docs+code graph.
-At the time of this update, `tep health` in the repo root reports:
-- `anchors_healthy: 25`
-- `anchors_moved: 0`
-- `anchors_missing: 0`
-- `duplicate_anchor_ids: 0`
-- `unknown_anchor_ids: 0`
+The `tep` repo uses `tep` to track its own entities and anchors.
+`tep health` in the repo root reports clean for all source and doc files.
+The README contains example anchor tags that are intentionally excluded via `#tepignore`.
 
 ## Documentation map
 

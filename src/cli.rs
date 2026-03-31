@@ -1,8 +1,8 @@
 use clap::{Args, Parser, Subcommand};
 
-const ABOUT: &str = "text entity pointers";
-const ENTITY_ABOUT: &str = "Work with entities and directional links";
-const ANCHOR_ABOUT: &str = "Work with anchors and anchor-entity attachments";
+const ABOUT: &str = "text entity pointers — connect concepts to locations in your codebase and docs";
+const ENTITY_ABOUT: &str = "Work with entities, descriptions, refs, and directional links";
+const ANCHOR_ABOUT: &str = "Work with anchors, names, and anchor-entity attachments";
 
 #[derive(Debug, Parser)]
 #[command(name = "tep")]
@@ -72,7 +72,7 @@ pub enum AnchorCommands {
         #[arg(help = "Anchor id or name")]
         target: String,
     },
-    #[command(about = "Edit an anchor (set or rename its name)")]
+    #[command(about = "Set or rename the name of an anchor (rewrites the file tag)")]
     Edit(EditAnchorArgs),
     #[command(about = "List all anchors in the workspace")]
     List,
@@ -86,9 +86,9 @@ pub struct AnchorAutoArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct EditAnchorArgs {
-    #[arg(help = "Anchor id")]
+    #[arg(help = "Anchor id (numeric)")]
     pub anchor_id: i64,
-    #[arg(long, help = "Set or rename the anchor's name")]
+    #[arg(long, help = "Assign or rename the anchor name (lowercase, [a-z0-9._], rewrites the file tag)")]
     pub name: String,
 }
 
