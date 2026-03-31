@@ -24,6 +24,7 @@ pub struct ParsedAnchor {
     pub raw: String,
     pub version: Option<i64>,
     pub anchor_id: Option<i64>,
+    pub anchor_name: Option<String>,
     pub entity_refs: Vec<String>,
     pub start_offset: usize,
     pub line: i64,
@@ -44,7 +45,7 @@ pub enum AnchorTarget {
 
 impl ParsedAnchor {
     pub fn kind(&self) -> AnchorKind {
-        if self.anchor_id.is_some() && self.version.is_some() {
+        if self.version.is_some() && (self.anchor_id.is_some() || self.anchor_name.is_some()) {
             AnchorKind::Materialized
         } else {
             AnchorKind::Incomplete
@@ -52,11 +53,32 @@ impl ParsedAnchor {
     }
 }
 
+pub fn normalize_anchor_name(input: &str) -> String {
+    input.trim().to_ascii_lowercase()
+}
+
+pub fn validate_anchor_name(name: &str) -> Result<(), &'static str> {
+    let normalized = normalize_anchor_name(name);
+    if normalized.is_empty() {
+        return Err("anchor name cannot be empty");
+    }
+    if normalized.chars().all(|c| c.is_ascii_digit()) {
+        return Err("anchor name cannot be purely numeric");
+    }
+    if !normalized
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '_')
+    {
+        return Err("anchor name may only contain lowercase letters, numbers, dots, and underscores");
+    }
+    Ok(())
+}
+
 pub fn parse_anchor_target(input: &str) -> AnchorTarget {
     if let Ok(id) = input.parse::<i64>() {
         AnchorTarget::Id(id)
     } else {
-        AnchorTarget::Name(input.to_string())
+        AnchorTarget::Name(normalize_anchor_name(input))
     }
 }
 
@@ -111,7 +133,7 @@ fn try_parse_anchor(input: &str, start: usize) -> Option<ParsedAnchor> {
     };
 
     let raw = format!("{}{}", head, &after_head[..suffix_len]);
-    let (version, anchor_id) = parse_anchor_head(head)?;
+    let (version, anchor_id, anchor_name) = parse_anchor_head(head)?;
 
     let prefix = &input[..start];
     let line = prefix.bytes().filter(|b| *b == b'\n').count() as i64 + 1;
@@ -126,6 +148,7 @@ fn try_parse_anchor(input: &str, start: usize) -> Option<ParsedAnchor> {
         raw,
         version,
         anchor_id,
+        anchor_name,
         entity_refs,
         start_offset: start,
         line,
@@ -133,21 +156,35 @@ fn try_parse_anchor(input: &str, start: usize) -> Option<ParsedAnchor> {
     })
 }
 
-fn parse_anchor_head(head: &str) -> Option<(Option<i64>, Option<i64>)> {
+/// Returns (version, anchor_id, anchor_name).
+/// For incomplete tags: all None.
+/// For materialized numeric: (Some(v), Some(id), None).
+/// For materialized named: (Some(v), None, Some(name)).
+fn parse_anchor_head(head: &str) -> Option<(Option<i64>, Option<i64>, Option<String>)> {
     if head == "[#!#tep:]" {
-        return Some((None, None));
+        return Some((None, None, None));
     }
     parse_materialized_head(head)
 }
 
-fn parse_materialized_head(head: &str) -> Option<(Option<i64>, Option<i64>)> {
+fn parse_materialized_head(head: &str) -> Option<(Option<i64>, Option<i64>, Option<String>)> {
     let body = head.strip_prefix("[#!#")?.strip_suffix(']')?;
     let (version_str, rest) = body.split_once("#tep:")?;
     let version = version_str.parse::<i64>().ok()?;
-    let anchor_id = rest.parse::<i64>().ok()?;
-    Some((Some(version), Some(anchor_id)))
+    if rest.is_empty() {
+        // [#!#1#tep:] — treat as incomplete with a version hint; reject
+        return None;
+    }
+    if let Ok(id) = rest.parse::<i64>() {
+        return Some((Some(version), Some(id), None));
+    }
+    // non-numeric: a name hint or materialized name
+    let name = normalize_anchor_name(rest);
+    validate_anchor_name(&name).ok()?;
+    Some((Some(version), None, Some(name)))
 }
 
+/// Materialize an incomplete anchor using a numeric id.
 pub fn materialize_anchor(parsed: &ParsedAnchor, new_anchor_id: i64, version: i64) -> String {
     if parsed.entity_refs.is_empty() {
         format!("[#!#{}#tep:{}]", version, new_anchor_id)
@@ -156,6 +193,20 @@ pub fn materialize_anchor(parsed: &ParsedAnchor, new_anchor_id: i64, version: i6
             "[#!#{}#tep:{}]({})",
             version,
             new_anchor_id,
+            parsed.entity_refs.join(",")
+        )
+    }
+}
+
+/// Materialize an incomplete anchor using a name.
+pub fn materialize_anchor_named(parsed: &ParsedAnchor, name: &str, version: i64) -> String {
+    if parsed.entity_refs.is_empty() {
+        format!("[#!#{}#tep:{}]", version, name)
+    } else {
+        format!(
+            "[#!#{}#tep:{}]({})",
+            version,
+            name,
             parsed.entity_refs.join(",")
         )
     }
@@ -171,6 +222,7 @@ mod tests {
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].kind(), AnchorKind::Incomplete);
         assert!(parsed[0].entity_refs.is_empty());
+        assert_eq!(parsed[0].anchor_name, None);
     }
 
     #[test]
@@ -187,21 +239,37 @@ mod tests {
         assert_eq!(parsed[0].kind(), AnchorKind::Materialized);
         assert_eq!(parsed[0].version, Some(1));
         assert_eq!(parsed[0].anchor_id, Some(123));
+        assert_eq!(parsed[0].anchor_name, None);
     }
 
     #[test]
-    fn parse_anchor_target_uses_id_for_numeric_input() {
-        assert_eq!(parse_anchor_target("42"), AnchorTarget::Id(42));
+    fn parses_named_anchor() {
+        let parsed = parse_anchors("[#!#1#tep:student_processor](student)");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].kind(), AnchorKind::Materialized);
+        assert_eq!(parsed[0].anchor_id, None);
+        assert_eq!(parsed[0].anchor_name, Some("student_processor".into()));
+        assert_eq!(parsed[0].entity_refs, vec!["student"]);
     }
 
     #[test]
-    fn parse_anchor_target_uses_name_for_non_numeric_input() {
-        assert_eq!(parse_anchor_target("student_processor"), AnchorTarget::Name("student_processor".into()));
+    fn parses_named_anchor_normalizes_case() {
+        let parsed = parse_anchors("[#!#1#tep:Student_Processor]");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].anchor_name, Some("student_processor".into()));
     }
 
     #[test]
-    fn parse_anchor_target_preserves_whitespace_non_numeric_input_as_name() {
-        assert_eq!(parse_anchor_target(" 42 "), AnchorTarget::Name(" 42 ".into()));
+    fn ignores_named_anchor_with_invalid_charset() {
+        let parsed = parse_anchors("[#!#1#tep:student-processor]");
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn parses_short_alpha_name_as_named_anchor() {
+        let parsed = parse_anchors("[#!#1#tep:abc](student)");
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].anchor_name, Some("abc".into()));
     }
 
     #[test]
@@ -221,6 +289,13 @@ mod tests {
     }
 
     #[test]
+    fn materializes_anchor_with_name() {
+        let parsed = parse_anchors("[#!#tep:](student)");
+        let out = materialize_anchor_named(&parsed[0], "student_processor", 1);
+        assert_eq!(out, "[#!#1#tep:student_processor](student)");
+    }
+
+    #[test]
     fn parses_anchor_after_unicode_text_without_panicking() {
         let input = "żółw 🐢\n[#!#tep:](student)";
         let parsed = parse_anchors(input);
@@ -236,12 +311,6 @@ mod tests {
         let expected = input.find("[#!#tep:]").expect("anchor should exist");
         assert_eq!(parsed[0].start_offset, expected);
         assert_eq!(parsed[0].shift as usize, expected);
-    }
-
-    #[test]
-    fn ignores_malformed_materialized_anchor() {
-        let parsed = parse_anchors("[#!#1#tep:abc](student)");
-        assert!(parsed.is_empty());
     }
 
     #[test]
@@ -267,5 +336,45 @@ mod tests {
         let parsed = parse_anchors("[#!#tep:](student)\n#tepignoreafter\n[#!#tep:](teacher)");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].entity_refs, vec!["student"]);
+    }
+
+    #[test]
+    fn parse_anchor_target_uses_id_for_numeric_input() {
+        assert_eq!(parse_anchor_target("42"), AnchorTarget::Id(42));
+    }
+
+    #[test]
+    fn parse_anchor_target_uses_name_for_non_numeric_input() {
+        assert_eq!(parse_anchor_target("student_processor"), AnchorTarget::Name("student_processor".into()));
+    }
+
+    #[test]
+    fn parse_anchor_target_normalizes_name() {
+        assert_eq!(parse_anchor_target("Student_Processor"), AnchorTarget::Name("student_processor".into()));
+    }
+
+    #[test]
+    fn parse_anchor_target_trims_whitespace_as_name() {
+        assert_eq!(parse_anchor_target(" 42a "), AnchorTarget::Name("42a".into()));
+    }
+
+    #[test]
+    fn validate_anchor_name_rejects_empty() {
+        assert!(validate_anchor_name("").is_err());
+    }
+
+    #[test]
+    fn validate_anchor_name_rejects_purely_numeric() {
+        assert!(validate_anchor_name("123").is_err());
+    }
+
+    #[test]
+    fn validate_anchor_name_rejects_dash() {
+        assert!(validate_anchor_name("student-processor").is_err());
+    }
+
+    #[test]
+    fn validate_anchor_name_accepts_underscore_and_dot() {
+        assert!(validate_anchor_name("student.processor_v2").is_ok());
     }
 }

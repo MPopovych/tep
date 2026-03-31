@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
-use crate::anchor::{Anchor, AnchorKind, ParsedAnchor, materialize_anchor, parse_anchors};
+use crate::anchor::{Anchor, AnchorKind, AnchorTarget, ParsedAnchor, materialize_anchor, normalize_anchor_name, parse_anchor_target, parse_anchors, validate_anchor_name};
 use crate::entity::{Entity, parse_lookup};
 use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
@@ -77,23 +77,98 @@ impl<'a> AnchorService<'a> {
         Ok(result)
     }
 
-    pub fn show(&self, anchor_id: i64) -> Result<AnchorShowResult> {
-        let anchor = self
-            .anchor_repo
-            .find_by_id(anchor_id)?
-            .with_context(|| format!("anchor not found: {anchor_id}"))?;
-        let entities = self.anchor_entity_repo.list_entities_for_anchor(anchor_id)?;
+    pub fn show(&self, target: &str) -> Result<AnchorShowResult> {
+        let anchor = self.resolve_anchor_reference(target)?;
+        let entities = self.anchor_entity_repo.list_entities_for_anchor(anchor.anchor_id)?;
         Ok(AnchorShowResult { anchor, entities })
     }
 
-    pub fn attach_entity(&self, anchor_id: i64, entity_target: &str) -> Result<()> {
+    pub fn attach_entity(&self, anchor_target: &str, entity_target: &str) -> Result<()> {
+        let anchor = self.resolve_anchor_reference(anchor_target)?;
         let entity = self.resolve_entity_reference(entity_target)?;
-        self.anchor_entity_repo.attach(anchor_id, entity.entity_id)
+        self.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id)
     }
 
-    pub fn detach_entity(&self, anchor_id: i64, entity_target: &str) -> Result<()> {
+    pub fn detach_entity(&self, anchor_target: &str, entity_target: &str) -> Result<()> {
+        let anchor = self.resolve_anchor_reference(anchor_target)?;
         let entity = self.resolve_entity_reference(entity_target)?;
-        self.anchor_entity_repo.detach(anchor_id, entity.entity_id)
+        self.anchor_entity_repo.detach(anchor.anchor_id, entity.entity_id)
+    }
+
+    pub fn edit_name(&self, anchor_id: i64, new_name: &str, rewrite_file: bool) -> Result<Anchor> {
+        let normalized = normalize_anchor_name(new_name);
+        validate_anchor_name(&normalized).map_err(anyhow::Error::msg)?;
+
+        // collision check with a clean error
+        if let Some(existing) = self.anchor_repo.find_by_name(&normalized)? {
+            if existing.anchor_id != anchor_id {
+                anyhow::bail!("anchor name '{}' is already used by anchor {}", normalized, existing.anchor_id);
+            }
+        }
+
+        let old_anchor = self
+            .anchor_repo
+            .find_by_id(anchor_id)?
+            .with_context(|| format!("anchor not found: {anchor_id}"))?;
+
+        let updated = self.anchor_repo.update_name(anchor_id, &normalized)?;
+
+        if rewrite_file {
+            self.rewrite_anchor_tag_in_file(&old_anchor, &updated)?;
+        }
+
+        Ok(updated)
+    }
+
+    pub fn list_all(&self) -> Result<Vec<Anchor>> {
+        self.anchor_repo.list_all()
+    }
+
+    fn resolve_anchor_reference(&self, target: &str) -> Result<Anchor> {
+        match parse_anchor_target(target) {
+            AnchorTarget::Id(id) => self
+                .anchor_repo
+                .find_by_id(id)?
+                .with_context(|| format!("anchor not found: {target}")),
+            AnchorTarget::Name(name) => self
+                .anchor_repo
+                .find_by_name(&name)?
+                .with_context(|| format!("anchor not found: {target}")),
+        }
+    }
+
+    fn rewrite_anchor_tag_in_file(&self, old_anchor: &Anchor, updated_anchor: &Anchor) -> Result<()> {
+        let abs_path = resolve_from_workspace(
+            std::path::Path::new(&old_anchor.file_path),
+            &self.workspace_root,
+        );
+        if !abs_path.is_file() {
+            return Ok(()); // file gone — skip silently
+        }
+        let content = fs::read_to_string(&abs_path)
+            .with_context(|| format!("failed to read {}", abs_path.display()))?;
+
+        let old_tag_numeric = format!("[#!#{}#tep:{}]", old_anchor.version, old_anchor.anchor_id);
+        let old_tag_named = old_anchor.name.as_ref().map(|n| format!("[#!#{}#tep:{}]", old_anchor.version, n));
+        let new_tag = format!("[#!#{}#tep:{}]", updated_anchor.version, updated_anchor.name.as_deref().unwrap_or(""));
+
+        let rewritten = if content.contains(&old_tag_numeric) {
+            content.replace(&old_tag_numeric, &new_tag)
+        } else if let Some(ref old_named) = old_tag_named {
+            if content.contains(old_named.as_str()) {
+                content.replace(old_named.as_str(), &new_tag)
+            } else {
+                return Ok(());
+            }
+        } else {
+            return Ok(());
+        };
+
+        if rewritten != content {
+            fs::write(&abs_path, rewritten)
+                .with_context(|| format!("failed to rewrite {}", abs_path.display()))?;
+        }
+        Ok(())
     }
 
     fn collect_workspace_files(&self, paths: &[String]) -> Result<Vec<ParsedFile>> {
@@ -168,17 +243,52 @@ impl<'a> AnchorService<'a> {
                 Ok(materialize_anchor(anchor, created.anchor_id, 1))
             }
             AnchorKind::Materialized => {
-                let anchor_id = anchor.anchor_id.expect("materialized anchor should have id");
-                seen_materialized_ids.insert(anchor_id);
-                self.anchor_repo.update_location(
-                    anchor_id,
-                    &file_path,
-                    Some(anchor.line),
-                    Some(anchor.shift),
-                    Some(anchor.start_offset as i64),
-                )?;
-                self.sync_entity_relations(anchor_id, &anchor.entity_refs, result)?;
-                Ok(anchor.raw.clone())
+                if let Some(anchor_id) = anchor.anchor_id {
+                    // numeric materialized
+                    seen_materialized_ids.insert(anchor_id);
+                    self.anchor_repo.update_location(
+                        anchor_id,
+                        &file_path,
+                        Some(anchor.line),
+                        Some(anchor.shift),
+                        Some(anchor.start_offset as i64),
+                    )?;
+                    self.sync_entity_relations(anchor_id, &anchor.entity_refs, result)?;
+                    Ok(anchor.raw.clone())
+                } else if let Some(ref name) = anchor.anchor_name {
+                    // named materialized
+                    match self.anchor_repo.find_by_name(name)? {
+                        Some(existing) => {
+                            seen_materialized_ids.insert(existing.anchor_id);
+                            self.anchor_repo.update_location(
+                                existing.anchor_id,
+                                &file_path,
+                                Some(anchor.line),
+                                Some(anchor.shift),
+                                Some(anchor.start_offset as i64),
+                            )?;
+                            self.sync_entity_relations(existing.anchor_id, &anchor.entity_refs, result)?;
+                            Ok(anchor.raw.clone())
+                        }
+                        None => {
+                            // Name not in DB: treat as new — create record with this name
+                            let created = self.anchor_repo.create_named(
+                                name,
+                                1,
+                                &file_path,
+                                Some(anchor.line),
+                                Some(anchor.shift),
+                                Some(anchor.start_offset as i64),
+                            )?;
+                            seen_materialized_ids.insert(created.anchor_id);
+                            self.sync_entity_relations(created.anchor_id, &anchor.entity_refs, result)?;
+                            result.anchors_created += 1;
+                            Ok(anchor.raw.clone())
+                        }
+                    }
+                } else {
+                    unreachable!("materialized anchor must have id or name")
+                }
             }
         }
     }
@@ -220,11 +330,17 @@ impl<'a> AnchorService<'a> {
     }
 
     fn ensure_no_duplicate_materialized_ids(&self, parsed: &[ParsedAnchor]) -> Result<()> {
-        let mut seen = HashSet::new();
+        let mut seen_ids: HashSet<i64> = HashSet::new();
+        let mut seen_names: HashSet<String> = HashSet::new();
         for anchor in parsed {
             if let Some(anchor_id) = anchor.anchor_id {
-                if !seen.insert(anchor_id) {
+                if !seen_ids.insert(anchor_id) {
                     bail!("duplicate materialized anchor {} found in the same file", anchor_id);
+                }
+            }
+            if let Some(ref name) = anchor.anchor_name {
+                if !seen_names.insert(name.clone()) {
+                    bail!("duplicate named anchor '{}' found in the same file", name);
                 }
             }
         }
@@ -300,7 +416,7 @@ mod tests {
         let entity = service.entity_repo.ensure(&crate::entity::NewEntity { name: "student".into(), r#ref: None, description: None }).unwrap();
         service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
-        let result = service.show(anchor.anchor_id).unwrap();
+        let result = service.show(&anchor.anchor_id.to_string()).unwrap();
         assert_eq!(result.anchor.anchor_id, anchor.anchor_id);
         assert_eq!(result.entities.len(), 1);
         assert_eq!(result.entities[0].name, "student");

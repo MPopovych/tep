@@ -17,12 +17,10 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Entity { command } | Commands::E { command } => entity::run(command),
         Commands::Anchor { command } | Commands::A { command } => anchor::run(command),
         Commands::Attach { entity_id, anchor_id } => {
-            let anchor_id = anchor_id.parse::<i64>()?;
-            anchor::attach(anchor_id, &entity_id)
+            anchor::attach(&anchor_id, &entity_id)
         }
         Commands::Detach { entity_id, anchor_id } => {
-            let anchor_id = anchor_id.parse::<i64>()?;
-            anchor::detach(anchor_id, &entity_id)
+            anchor::detach(&anchor_id, &entity_id)
         }
     }
 }

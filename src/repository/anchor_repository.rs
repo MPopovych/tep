@@ -77,12 +77,58 @@ impl<'a> AnchorRepository<'a> {
             .context("updated anchor could not be reloaded")
     }
 
+    pub fn create_named(
+        &self,
+        name: &str,
+        version: i64,
+        file_path: &str,
+        line: Option<i64>,
+        shift: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Anchor> {
+        let now = now_utc();
+        let normalized = self.normalize_path(file_path);
+        self.conn.execute(
+            "INSERT INTO anchors (version, name, file_path, line, shift, offset, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![version, name, normalized, line, shift, offset, now, now],
+        )
+        .with_context(|| format!("failed to create named anchor '{}' for file {}", name, file_path))?;
+
+        let anchor_id = self.conn.last_insert_rowid();
+        self.find_by_id(anchor_id)?
+            .context("created named anchor could not be reloaded")
+    }
+
     pub fn find_by_id(&self, anchor_id: i64) -> Result<Option<Anchor>> {
         let mut stmt = self.conn.prepare(
             "SELECT anchor_id, version, name, file_path, line, shift, offset, created_at, updated_at FROM anchors WHERE anchor_id = ?1",
         )?;
         let anchor = stmt.query_row(params![anchor_id], map_anchor_row).optional()?;
         Ok(anchor)
+    }
+
+    pub fn find_by_name(&self, name: &str) -> Result<Option<Anchor>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT anchor_id, version, name, file_path, line, shift, offset, created_at, updated_at FROM anchors WHERE name = ?1",
+        )?;
+        let anchor = stmt.query_row(params![name], map_anchor_row).optional()?;
+        Ok(anchor)
+    }
+
+    pub fn update_name(&self, anchor_id: i64, name: &str) -> Result<Anchor> {
+        let _existing = self
+            .find_by_id(anchor_id)?
+            .with_context(|| format!("anchor not found: {anchor_id}"))?;
+
+        let now = now_utc();
+        self.conn.execute(
+            "UPDATE anchors SET name = ?1, updated_at = ?2 WHERE anchor_id = ?3",
+            params![name, now, anchor_id],
+        )
+        .with_context(|| format!("failed to update name for anchor {}", anchor_id))?;
+
+        self.find_by_id(anchor_id)?
+            .context("anchor could not be reloaded after name update")
     }
 
     pub fn list_ids_for_file(&self, file_path: &str) -> Result<Vec<i64>> {

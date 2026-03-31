@@ -1,26 +1,55 @@
 # tep
 
-`tep` is a local-first CLI for **text entity pointers**.
+> ⚠️ **Fully agent-coded.** This project was built entirely by an AI coding agent (Makki) with human direction. The code, tests, docs, and this README were written by the agent.
 
-It connects logical entities to anchor points in text and keeps the graph in a local SQLite workspace.
+---
 
-## What `tep` does today
+## What is tep?
 
-Current implemented areas:
-- initialize a local workspace
-- auto-migrate older workspace databases on open
-- track DB schema version
-- create and manage entities
-- add entity descriptions
-- create directional entity-to-entity links
-- auto-declare entities from files
-- materialize anchors in files
-- attach entities to anchors
-- show entities with related anchors and links
-- assemble retrieval-oriented entity context bundles
-- audit anchor health across a workspace
-- auto-fix anchor metadata/state from the workspace root
-- index canonical source code alongside docs
+`tep` is a local-first CLI for **text entity pointers** — a lightweight way to connect concepts to locations in your codebase and docs.
+
+It maintains a local SQLite graph of **entities** (things you care about), **anchors** (tagged locations in files), and **links** (relationships between entities).
+
+---
+
+## Why tep?
+
+Codebases grow. Concepts scatter across files. Documentation drifts from implementation.
+
+**tep solves this by giving concepts a durable identity.**
+
+Instead of grepping for "student" and hoping you find the right places, you:
+
+1. **Tag locations** — drop anchor markers in code, docs, configs
+2. **Name concepts** — create entities like `student`, `auth_flow`, `pricing_model`
+3. **Connect them** — attach entities to anchors, link entities to each other
+4. **Query the graph** — ask "where does `student` appear?" or "what's related to `auth_flow`?"
+
+**Use cases:**
+
+- **Onboarding** — new devs can trace concepts across the codebase
+- **Refactoring** — see everywhere a concept touches before changing it
+- **Documentation** — keep docs linked to the actual code locations
+- **AI context** — feed precise, relevant code slices to LLMs instead of dumping entire files
+- **Architecture** — map how logical concepts relate to each other
+
+The graph lives in your repo (`.tep/`), works offline, and stays under your control.
+
+---
+
+## Current capabilities
+
+- Initialize and auto-migrate local workspaces
+- Create, edit, list, and query entities with descriptions
+- Materialize anchor tags in files (`[#!#1#tep:123](student)`)
+- Auto-declare entities from declaration markers (`(#!#tep:student)`)
+- Attach/detach entities to anchors
+- Directional entity-to-entity links with free-text relations
+- Assemble retrieval-oriented context bundles for entities
+- Audit anchor health and auto-repair metadata
+- Respect `.tep_ignore` for test fixtures and examples
+
+---
 
 ## Workspace model
 

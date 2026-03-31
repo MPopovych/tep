@@ -45,14 +45,14 @@ pub enum Commands {
     Attach {
         #[arg(help = "Entity name or id")]
         entity_id: String,
-        #[arg(help = "Anchor id")]
+        #[arg(help = "Anchor id or name")]
         anchor_id: String,
     },
     #[command(about = "Detach an entity from an anchor")]
     Detach {
         #[arg(help = "Entity name or id")]
         entity_id: String,
-        #[arg(help = "Anchor id")]
+        #[arg(help = "Anchor id or name")]
         anchor_id: String,
     },
 }
@@ -69,15 +69,27 @@ pub enum AnchorCommands {
     Auto(AnchorAutoArgs),
     #[command(about = "Show one anchor and its related entities")]
     Show {
-        #[arg(help = "Anchor id")]
-        anchor_id: i64,
+        #[arg(help = "Anchor id or name")]
+        target: String,
     },
+    #[command(about = "Edit an anchor (set or rename its name)")]
+    Edit(EditAnchorArgs),
+    #[command(about = "List all anchors in the workspace")]
+    List,
 }
 
 #[derive(Debug, Args, Clone)]
 pub struct AnchorAutoArgs {
     #[arg(required = true, help = "Files or directories to scan")]
     pub paths: Vec<String>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct EditAnchorArgs {
+    #[arg(help = "Anchor id")]
+    pub anchor_id: i64,
+    #[arg(long, help = "Set or rename the anchor's name")]
+    pub name: String,
 }
 
 #[derive(Debug, Subcommand)]

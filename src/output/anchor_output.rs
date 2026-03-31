@@ -37,8 +37,20 @@ pub fn format_anchor_health_result(report: &HealthReport) -> String {
     out
 }
 
-pub fn format_anchor_relation_result(prefix: &str, anchor_id: i64, entity_target: &str) -> String {
-    format!("{prefix}\nanchor_id: {anchor_id}\nentity: {entity_target}\n")
+pub fn format_anchor_relation_result(prefix: &str, anchor_target: &str, entity_target: &str) -> String {
+    format!("{prefix}\nanchor: {anchor_target}\nentity: {entity_target}\n")
+}
+
+pub fn format_anchor_list(anchors: &[crate::anchor::Anchor]) -> String {
+    use crate::output::anchor_format::format_anchor_compact;
+    if anchors.is_empty() {
+        return String::new();
+    }
+    let mut out = String::new();
+    for anchor in anchors {
+        out.push_str(&format_anchor_compact(anchor));
+    }
+    out
 }
 
 pub fn format_anchor_show(result: &AnchorShowResult) -> String {
@@ -118,10 +130,49 @@ mod tests {
 
     #[test]
     fn formats_anchor_relation_result() {
-        let rendered = format_anchor_relation_result("attached", 42, "student");
+        let rendered = format_anchor_relation_result("attached", "42", "student");
         assert!(rendered.contains("attached"));
-        assert!(rendered.contains("anchor_id: 42"));
+        assert!(rendered.contains("anchor: 42"));
         assert!(rendered.contains("entity: student"));
+    }
+
+    #[test]
+    fn formats_anchor_list_empty() {
+        assert_eq!(format_anchor_list(&[]), "");
+    }
+
+    #[test]
+    fn formats_anchor_list_with_anchors() {
+        use crate::anchor::Anchor;
+        let anchors = vec![
+            Anchor {
+                anchor_id: 1,
+                version: 1,
+                name: Some("student_processor".into()),
+                file_path: "./src/student.rs".into(),
+                line: Some(10),
+                shift: Some(0),
+                offset: Some(100),
+                created_at: "1".into(),
+                updated_at: "2".into(),
+            },
+            Anchor {
+                anchor_id: 2,
+                version: 1,
+                name: None,
+                file_path: "./src/teacher.rs".into(),
+                line: Some(5),
+                shift: Some(0),
+                offset: Some(50),
+                created_at: "1".into(),
+                updated_at: "2".into(),
+            },
+        ];
+        let rendered = format_anchor_list(&anchors);
+        assert!(rendered.contains("1 (student_processor)"));
+        assert!(rendered.contains("./src/student.rs"));
+        assert!(rendered.contains("2\n"));
+        assert!(rendered.contains("./src/teacher.rs"));
     }
 
     #[test]

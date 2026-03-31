@@ -233,7 +233,8 @@ fn anchor_auto_handles_unicode_prefix_text() {
 fn anchor_auto_ignores_malformed_anchor_like_text() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     let path = temp.path().join("malformed.txt");
-    std::fs::write(&path, "[#!#1#tep:abc](student)\n[#!#tep:](student\n")
+    // dash in name is invalid; unclosed entity ref is also invalid
+    std::fs::write(&path, "[#!#1#tep:abc-def](student)\n[#!#tep:](student\n")
         .expect("should write file");
 
     Command::cargo_bin("tep")
@@ -253,7 +254,7 @@ fn anchor_auto_ignores_malformed_anchor_like_text() {
         .stdout(predicate::str::contains("anchors_created: 0"));
 
     let updated = std::fs::read_to_string(&path).expect("should read file");
-    assert_eq!(updated, "[#!#1#tep:abc](student)\n[#!#tep:](student\n");
+    assert_eq!(updated, "[#!#1#tep:abc-def](student)\n[#!#tep:](student\n");
 }
 
 #[test]
@@ -399,7 +400,7 @@ fn attach_reports_missing_anchor_after_workspace_init() {
         .args(["attach", "student", "999"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("anchor 999"));
+        .stderr(predicate::str::contains("anchor not found: 999"));
 }
 
 #[test]
@@ -463,6 +464,174 @@ fn health_reports_missing_anchor_when_tag_removed_from_file() {
         .assert()
         .success()
         .stdout(predicate::str::contains("anchors_missing: 1"));
+}
+
+#[test]
+fn anchor_auto_materializes_named_anchor_from_file() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "[#!#1#tep:student_processor](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 1"));
+
+    // idempotent on re-run
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 0"));
+}
+
+#[test]
+fn anchor_show_resolves_by_name() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "[#!#1#tep:student_processor](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "show", "student_processor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("student_processor"))
+        .stdout(predicate::str::contains("note.txt"));
+}
+
+#[test]
+fn anchor_edit_sets_name_and_rewrites_file() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "hello [#!#tep:](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"]).assert().success();
+
+    // find the assigned numeric id from the materialized file
+    let materialized = std::fs::read_to_string(temp.path().join("note.txt")).unwrap();
+    let id_start = materialized.find("tep:").unwrap() + 4;
+    let id_end = materialized[id_start..].find(']').unwrap() + id_start;
+    let anchor_id = &materialized[id_start..id_end];
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "edit", anchor_id, "--name", "student_processor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("student_processor"));
+
+    let updated = std::fs::read_to_string(temp.path().join("note.txt")).unwrap();
+    assert!(updated.contains("[#!#1#tep:student_processor]"), "file should contain named tag, got: {}", updated);
+}
+
+#[test]
+fn anchor_edit_rejects_name_collision() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("a.txt"), "[#!#1#tep:proc_a](student)")
+        .expect("should write file");
+    std::fs::write(temp.path().join("b.txt"), "[#!#tep:](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+        .args(["anchor", "auto", "./a.txt"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+        .args(["anchor", "auto", "./b.txt"]).assert().success();
+
+    let materialized = std::fs::read_to_string(temp.path().join("b.txt")).unwrap();
+    let id_start = materialized.find("tep:").unwrap() + 4;
+    let id_end = materialized[id_start..].find(']').unwrap() + id_start;
+    let anchor_id_b = &materialized[id_start..id_end];
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "edit", anchor_id_b, "--name", "proc_a"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("proc_a"));
+}
+
+#[test]
+fn attach_resolves_anchor_by_name() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "[#!#1#tep:student_processor]")
+        .expect("should write file");
+
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+        .args(["entity", "create", "student"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["attach", "student", "student_processor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("attached"))
+        .stdout(predicate::str::contains("student_processor"));
+}
+
+#[test]
+fn anchor_list_shows_all_anchors() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("a.txt"), "[#!#1#tep:proc_a](student)")
+        .expect("should write file");
+    std::fs::write(temp.path().join("b.txt"), "[#!#tep:](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+        .args(["anchor", "auto", "./a.txt"]).assert().success();
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+        .args(["anchor", "auto", "./b.txt"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("proc_a"))
+        .stdout(predicate::str::contains("a.txt"))
+        .stdout(predicate::str::contains("b.txt"));
+}
+
+#[test]
+fn anchor_list_is_empty_on_fresh_workspace() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
 }
 
 #[test]
