@@ -403,6 +403,69 @@ fn attach_reports_missing_anchor_after_workspace_init() {
 }
 
 #[test]
+fn anchor_auto_is_idempotent() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(temp.path().join("note.txt"), "[#!#tep:](student)")
+        .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 1"));
+
+    // second run on the already-materialized file should create nothing new
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_created: 0"));
+}
+
+#[test]
+fn health_reports_missing_anchor_when_tag_removed_from_file() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    let path = temp.path().join("note.txt");
+    std::fs::write(&path, "[#!#tep:](student)").expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["anchor", "auto", "./note.txt"])
+        .assert()
+        .success();
+
+    // overwrite the file without the anchor tag so the ID disappears
+    std::fs::write(&path, "no anchors here\n").expect("should overwrite file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["health"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("anchors_missing: 1"));
+}
+
+#[test]
 fn anchor_auto_fails_for_cross_file_anchor_id_conflict() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(temp.path().join("one.txt"), "[#!#tep:]").expect("should write file");
