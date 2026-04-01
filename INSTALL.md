@@ -97,6 +97,10 @@ Windows support is not tested but may work. Contributions welcome.
 
 ---
 
+## License
+
+Public domain — [Unlicense](./LICENSE). No strings attached, no warranty.
+
 ## Uninstall
 
 ```bash
