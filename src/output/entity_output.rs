@@ -14,13 +14,11 @@ pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
 
 pub fn format_entity_auto_result(result: &EntityAutoResult) -> String {
     format!(
-        "entity auto complete\nfiles_processed: {}\ndeclarations_seen: {}\nentities_ensured: {}\nrefs_filled: {}\nanchors_created: {}\nrelations_synced: {}\n",
+        "entity auto complete\nfiles_processed: {}\ndeclarations_seen: {}\nentities_ensured: {}\nrefs_filled: {}\n",
         result.files_processed,
         result.declarations_seen,
         result.entities_ensured,
         result.refs_filled,
-        result.anchors_created,
-        result.relations_synced
     )
 }
 
@@ -158,8 +156,6 @@ mod tests {
             declarations_seen: 2,
             entities_ensured: 2,
             refs_filled: 1,
-            anchors_created: 2,
-            relations_synced: 2,
         });
         assert!(rendered.contains("entity auto complete"));
         assert!(rendered.contains("declarations_seen: 2"));

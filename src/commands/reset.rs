@@ -36,12 +36,7 @@ fn format_reset_result(result: &ResetResult) -> String {
          anchors_seen: {}\n\
          anchors_created: {}\n\
          relations_synced: {}\n",
-        e.files_processed,
-        e.declarations_seen,
-        e.entities_ensured,
-        a.files_processed,
-        a.anchors_seen,
-        a.anchors_created,
-        a.relations_synced,
+        e.files_processed, e.declarations_seen, e.entities_ensured,
+        a.files_processed, a.anchors_seen, a.anchors_created, a.relations_synced,
     )
 }

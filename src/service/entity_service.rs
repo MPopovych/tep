@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
-use crate::anchor::{Anchor, parse_anchors};
+use crate::anchor::Anchor;
 use crate::entity::{Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity, parse_entity_declarations, parse_lookup};
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
@@ -44,8 +44,6 @@ pub struct EntityAutoResult {
     pub declarations_seen: usize,
     pub entities_ensured: usize,
     pub refs_filled: usize,
-    pub anchors_created: usize,
-    pub relations_synced: usize,
 }
 
 pub struct EntityLinkResult {
@@ -209,24 +207,8 @@ impl<'a> EntityService<'a> {
         for declaration in &declarations {
             self.sync_declaration(&file.display_path, declaration, result)?;
         }
-        self.refresh_anchor_locations(&file.display_path, &content)?;
         result.files_processed += 1;
 
-        Ok(())
-    }
-
-    fn refresh_anchor_locations(&self, file_path: &str, text: &str) -> Result<()> {
-        for anchor in parse_anchors(text) {
-            if let Some(existing) = self.anchor_repo.find_by_name(&anchor.anchor_name)? {
-                self.anchor_repo.update_location(
-                    existing.anchor_id,
-                    file_path,
-                    Some(anchor.line),
-                    Some(anchor.shift),
-                    Some(anchor.start_offset as i64),
-                )?;
-            }
-        }
         Ok(())
     }
 
@@ -236,10 +218,7 @@ impl<'a> EntityService<'a> {
         declaration: &ParsedEntityDeclaration,
         result: &mut EntityAutoResult,
     ) -> Result<()> {
-        let entity = self.ensure_entity_for_declaration(declaration, file_path, result)?;
-        let anchor = self.ensure_anchor_for_declaration(file_path, declaration, entity.entity_id, result)?;
-        self.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id)?;
-        result.relations_synced += 1;
+        self.ensure_entity_for_declaration(declaration, file_path, result)?;
         Ok(())
     }
 
@@ -271,33 +250,6 @@ impl<'a> EntityService<'a> {
         Ok(entity)
     }
 
-    fn ensure_anchor_for_declaration(
-        &self,
-        file_path: &str,
-        declaration: &ParsedEntityDeclaration,
-        entity_id: i64,
-        result: &mut EntityAutoResult,
-    ) -> Result<Anchor> {
-        if let Some(existing) = self.anchor_repo.find_latest_for_entity_in_file(entity_id, file_path)? {
-            Ok(self.anchor_repo.update_location(
-                existing.anchor_id,
-                file_path,
-                Some(declaration.line),
-                Some(declaration.shift),
-                Some(declaration.start_offset as i64),
-            )?)
-        } else {
-            let created = self.anchor_repo.create(
-                1,
-                file_path,
-                Some(declaration.line),
-                Some(declaration.shift),
-                Some(declaration.start_offset as i64),
-            )?;
-            result.anchors_created += 1;
-            Ok(created)
-        }
-    }
 }
 
 // #tepignoreafter
