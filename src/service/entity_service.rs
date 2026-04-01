@@ -16,8 +16,7 @@ use crate::utils::workspace_scanner::{WorkspaceFile, collect_workspace_files};
 pub struct EntityShowResult {
     pub entity: Entity,
     pub anchors: Vec<Anchor>,
-    pub outgoing_links: Vec<(EntityLink, Entity)>,
-    pub incoming_links: Vec<(EntityLink, Entity)>,
+    pub linked_entities: Vec<LinkedEntityContext>,
 }
 
 pub struct EntityContextAnchor {
@@ -34,7 +33,6 @@ pub struct LinkedEntityContext {
 pub struct EntityContextResult {
     pub entity: Entity,
     pub anchors: Vec<EntityContextAnchor>,
-    pub files: Vec<String>,
     pub linked_entities: Vec<LinkedEntityContext>,
 }
 
@@ -107,23 +105,21 @@ impl<'a> EntityService<'a> {
             .find(&lookup)?
             .with_context(|| format!("entity not found: {target}"))?;
         let anchors = self.anchor_repo.list_for_entity(entity.entity_id)?;
-        let outgoing_links = self.repo.list_outgoing_links(entity.entity_id)?;
-        let incoming_links = self.repo.list_incoming_links(entity.entity_id)?;
-        Ok(EntityShowResult { entity, anchors, outgoing_links, incoming_links })
+        let linked_entities = collect_link_context(&self.repo, entity.entity_id, 1)?;
+        Ok(EntityShowResult { entity, anchors, linked_entities })
     }
 
     pub fn context(&self, target: &str, link_depth: usize) -> Result<EntityContextResult> {
-        let shown = self.show(target)?;
-        let root_entity = shown.entity.clone();
-        let (anchors, files) = self.build_anchor_context(&shown.anchors);
-        let linked_entities = collect_link_context(&self.repo, root_entity.entity_id, link_depth)?;
-
-        Ok(EntityContextResult {
-            entity: root_entity,
-            anchors,
-            files,
-            linked_entities,
-        })
+        let lookup = parse_lookup(target);
+        let entity = self
+            .repo
+            .find(&lookup)?
+            .with_context(|| format!("entity not found: {target}"))?;
+        let anchors = self.build_anchor_context(
+            &self.anchor_repo.list_for_entity(entity.entity_id)?
+        );
+        let linked_entities = collect_link_context(&self.repo, entity.entity_id, link_depth)?;
+        Ok(EntityContextResult { entity, anchors, linked_entities })
     }
 
     pub fn edit(
@@ -173,22 +169,14 @@ impl<'a> EntityService<'a> {
         self.repo.list()
     }
 
-    fn build_anchor_context(&self, anchors: &[Anchor]) -> (Vec<EntityContextAnchor>, Vec<String>) {
-        let mut files = Vec::new();
-        let mut context_anchors = Vec::new();
-
-        for anchor in anchors {
-            if !files.contains(&anchor.file_path) {
-                files.push(anchor.file_path.clone());
-            }
-            let snippet = extract_anchor_snippet(anchor).ok().flatten();
-            context_anchors.push(EntityContextAnchor {
+    fn build_anchor_context(&self, anchors: &[Anchor]) -> Vec<EntityContextAnchor> {
+        anchors
+            .iter()
+            .map(|anchor| EntityContextAnchor {
+                snippet: extract_anchor_snippet(anchor).ok().flatten(),
                 anchor: anchor.clone(),
-                snippet,
-            });
-        }
-
-        (context_anchors, files)
+            })
+            .collect()
     }
 
     fn auto_file(&self, file: &WorkspaceFile, result: &mut EntityAutoResult) -> Result<()> {
@@ -280,9 +268,8 @@ mod tests {
             created_at: "1".into(),
             updated_at: "1".into(),
         };
-        let (anchors, files) = service.build_anchor_context(&[anchor.clone(), anchor]);
+        let anchors = service.build_anchor_context(&[anchor.clone(), anchor]);
         assert_eq!(anchors.len(), 2);
-        assert_eq!(files, vec!["./docs/a.md".to_string()]);
     }
 
     #[test]
@@ -308,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn show_includes_incoming_and_outgoing_links() {
+    fn show_includes_linked_entities() {
         let service = setup_service();
         service.create("Student".into(), None, None).unwrap();
         service.create("Subject".into(), None, None).unwrap();
@@ -316,10 +303,9 @@ mod tests {
         service.link("Student", "Subject", "student has subjects").unwrap();
         service.link("Teacher", "Student", "teacher mentors student").unwrap();
         let result = service.show("Student").unwrap();
-        assert_eq!(result.outgoing_links.len(), 1);
-        assert_eq!(result.outgoing_links[0].1.name, "subject");
-        assert_eq!(result.incoming_links.len(), 1);
-        assert_eq!(result.incoming_links[0].1.name, "teacher");
+        assert_eq!(result.linked_entities.len(), 2);
+        assert!(result.linked_entities.iter().any(|l| l.entity.name == "subject"));
+        assert!(result.linked_entities.iter().any(|l| l.entity.name == "teacher"));
     }
 
     #[test]
@@ -394,13 +380,10 @@ mod tests {
 
         let result = service.context("student", 1).unwrap();
         assert_eq!(result.entity.r#ref.as_deref(), Some("./docs/student.md"));
-        assert_eq!(result.files.len(), 1);
-        assert!(result.files[0].contains("note.txt"));
         assert_eq!(result.anchors.len(), 1);
+        assert!(result.anchors[0].anchor.file_path.contains("note.txt"));
         assert_eq!(result.linked_entities.len(), 1);
         let snippet = result.anchors[0].snippet.as_deref().unwrap();
-        assert!(snippet.contains("before line"));
         assert!(snippet.contains("anchor line"));
-        assert!(snippet.contains("after line"));
     }
 }

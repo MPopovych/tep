@@ -1,6 +1,6 @@
 use crate::entity::Entity;
-use crate::output::anchor_format::{format_anchor_compact, format_anchor_location};
-use crate::output::render::{append_context_link_block, append_entity_metadata, append_files_block, append_show_link_block, render_entity_header};
+use crate::output::anchor_format::format_anchor_line;
+use crate::output::render::{append_entity_metadata, append_link_block, render_entity_header};
 use crate::service::entity_service::{EntityAutoResult, EntityContextResult, EntityLinkResult, EntityShowResult};
 
 pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
@@ -26,39 +26,41 @@ pub fn format_entity_show(result: &EntityShowResult) -> String {
     let mut out = render_entity_header(&result.entity);
     append_entity_metadata(&mut out, &result.entity);
     for anchor in &result.anchors {
-        out.push_str(&format_anchor_compact(anchor));
+        out.push_str(&format_anchor_line(anchor));
     }
-    append_show_link_block(&mut out, "outgoing links:", &result.outgoing_links, true);
-    append_show_link_block(&mut out, "incoming links:", &result.incoming_links, false);
+    append_link_block(&mut out, result.entity.entity_id, &result.linked_entities);
     out
 }
 
 pub fn format_entity_context(result: &EntityContextResult) -> String {
     let mut out = render_entity_header(&result.entity);
     append_entity_metadata(&mut out, &result.entity);
-    out.push('\n');
-
-    for item in &result.anchors {
-        out.push_str(&format!("anchor {}\n", item.anchor.anchor_id));
-        out.push_str(&format_anchor_location(&item.anchor));
-        if let Some(snippet) = &item.snippet {
-            out.push_str("snippet:\n");
-            out.push_str(snippet);
-            out.push('\n');
-        }
+    if !result.anchors.is_empty() {
         out.push('\n');
+        for item in &result.anchors {
+            out.push_str(&format_anchor_line(&item.anchor));
+            if let Some(snippet) = &item.snippet {
+                for line in snippet.lines() {
+                    out.push_str(&format!("  {}\n", line));
+                }
+                out.push('\n');
+            }
+        }
     }
-
-    append_files_block(&mut out, &result.files);
-    append_context_link_block(&mut out, &result.linked_entities);
+    append_link_block(&mut out, result.entity.entity_id, &result.linked_entities);
     out
 }
 
 pub fn format_entity_context_files_only(result: &EntityContextResult) -> String {
     let mut out = render_entity_header(&result.entity);
     append_entity_metadata(&mut out, &result.entity);
-    append_files_block(&mut out, &result.files);
-    append_context_link_block(&mut out, &result.linked_entities);
+    if !result.anchors.is_empty() {
+        out.push('\n');
+        for item in &result.anchors {
+            out.push_str(&format_anchor_line(&item.anchor));
+        }
+    }
+    append_link_block(&mut out, result.entity.entity_id, &result.linked_entities);
     out
 }
 
@@ -163,53 +165,57 @@ mod tests {
     }
 
     #[test]
-    fn formats_entity_show_with_incoming_and_outgoing_links() {
+    fn formats_entity_show_with_links() {
         let rendered = format_entity_show(&EntityShowResult {
             entity: sample_entity(),
             anchors: vec![sample_anchor()],
-            outgoing_links: vec![(
-                crate::entity::EntityLink {
-                    from_entity_id: 42,
-                    to_entity_id: 10,
-                    relation: "student has subjects".into(),
-                    created_at: "1".into(),
-                    updated_at: "2".into(),
+            linked_entities: vec![
+                crate::service::entity_service::LinkedEntityContext {
+                    link: crate::entity::EntityLink {
+                        from_entity_id: 42,
+                        to_entity_id: 10,
+                        relation: "student has subjects".into(),
+                        created_at: "1".into(),
+                        updated_at: "2".into(),
+                    },
+                    entity: Entity {
+                        entity_id: 10,
+                        name: "subject".into(),
+                        r#ref: None,
+                        description: None,
+                        created_at: "1".into(),
+                        updated_at: "2".into(),
+                    },
+                    depth: 1,
                 },
-                Entity {
-                    entity_id: 10,
-                    name: "subject".into(),
-                    r#ref: None,
-                    description: None,
-                    created_at: "1".into(),
-                    updated_at: "2".into(),
+                crate::service::entity_service::LinkedEntityContext {
+                    link: crate::entity::EntityLink {
+                        from_entity_id: 5,
+                        to_entity_id: 42,
+                        relation: "teacher mentors student".into(),
+                        created_at: "1".into(),
+                        updated_at: "2".into(),
+                    },
+                    entity: Entity {
+                        entity_id: 5,
+                        name: "teacher".into(),
+                        r#ref: None,
+                        description: None,
+                        created_at: "1".into(),
+                        updated_at: "2".into(),
+                    },
+                    depth: 1,
                 },
-            )],
-            incoming_links: vec![(
-                crate::entity::EntityLink {
-                    from_entity_id: 5,
-                    to_entity_id: 42,
-                    relation: "teacher mentors student".into(),
-                    created_at: "1".into(),
-                    updated_at: "2".into(),
-                },
-                Entity {
-                    entity_id: 5,
-                    name: "teacher".into(),
-                    r#ref: None,
-                    description: None,
-                    created_at: "1".into(),
-                    updated_at: "2".into(),
-                },
-            )],
+            ],
         });
         assert!(rendered.contains("42 (student)"));
         assert!(rendered.contains("description: A learner"));
-        assert!(rendered.contains("7 (student_processor)"));
+        assert!(rendered.contains("anchor:7 student_processor"));
         assert!(rendered.contains("./file.md"));
-        assert!(rendered.contains("student_processor"));
-        assert!(rendered.contains("outgoing links:"));
-        assert!(rendered.contains("incoming links:"));
+        assert!(rendered.contains("links:"));
+        assert!(rendered.contains("-> 10 (subject)"));
         assert!(rendered.contains("student has subjects"));
+        assert!(rendered.contains("<- 5 (teacher)"));
         assert!(rendered.contains("teacher mentors student"));
     }
 
@@ -231,11 +237,10 @@ mod tests {
     }
 
     #[test]
-    fn formats_context_links_with_edge_notation() {
+    fn formats_context_links() {
         let rendered = format_entity_context(&EntityContextResult {
             entity: sample_entity(),
             anchors: vec![],
-            files: vec!["./docs/student.md".into()],
             linked_entities: vec![crate::service::entity_service::LinkedEntityContext {
                 link: crate::entity::EntityLink {
                     from_entity_id: 42,
@@ -255,8 +260,7 @@ mod tests {
                 depth: 2,
             }],
         });
-        assert!(rendered.contains("linked entities:"));
-        assert!(rendered.contains("edge: (42->10)[2] student has subjects"));
-        assert!(rendered.contains("./docs/subject.md"));
+        assert!(rendered.contains("links:"));
+        assert!(rendered.contains("-> 10 (subject) [./docs/subject.md]  student has subjects  [depth:2]"));
     }
 }

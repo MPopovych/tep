@@ -113,8 +113,7 @@ fn entity_show_includes_incoming_and_outgoing_links() {
         .args(["entity", "show", "student"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("outgoing links:"))
-        .stdout(predicate::str::contains("incoming links:"))
+        .stdout(predicate::str::contains("links:"))
         .stdout(predicate::str::contains("subject"))
         .stdout(predicate::str::contains("teacher"))
         .stdout(predicate::str::contains("student has subjects assigned to him each semester"))
@@ -172,11 +171,11 @@ fn entity_context_includes_all_link_directions_by_default() {
         .args(["entity", "context", "student"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("linked entities:"))
-        .stdout(predicate::str::contains("edge: (1->2)[1] student has subjects"))
-        .stdout(predicate::str::contains("edge: (3->1)[1] teacher mentors student"))
-        .stdout(predicate::str::contains("./docs/subject.md"))
-        .stdout(predicate::str::contains("./docs/teacher.md"));
+        .stdout(predicate::str::contains("links:"))
+        .stdout(predicate::str::contains("student has subjects"))
+        .stdout(predicate::str::contains("teacher mentors student"))
+        .stdout(predicate::str::contains("[./docs/subject.md]"))
+        .stdout(predicate::str::contains("[./docs/teacher.md]"));
 }
 
 #[test]
@@ -497,13 +496,12 @@ fn entity_context_can_expand_link_depth() {
         .args(["entity", "context", "student", "--link-depth", "2"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("linked entities:"))
+        .stdout(predicate::str::contains("links:"))
         .stdout(predicate::str::contains("subject"))
         .stdout(predicate::str::contains("semester"))
         .stdout(predicate::str::contains("teacher"))
         .stdout(predicate::str::contains("department"))
-        .stdout(predicate::str::contains("edge: (1->2)[1] student has subjects"))
-        .stdout(predicate::str::contains("edge: (3->1)[1] semester contains student records").or(predicate::str::contains("edge: (4->1)[1] teacher mentors student")))
-        .stdout(predicate::str::contains("[2]"))
-        .stdout(predicate::str::contains("./docs/department.md"));
+        .stdout(predicate::str::contains("student has subjects"))
+        .stdout(predicate::str::contains("[depth:2]"))
+        .stdout(predicate::str::contains("[./docs/department.md]"));
 }

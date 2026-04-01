@@ -1,22 +1,12 @@
 use crate::anchor::Anchor;
 use crate::output::styles::{ANSI_CYAN, ANSI_GREEN, ANSI_MAGENTA, ANSI_YELLOW, paint};
 
-fn format_anchor_name(anchor: &Anchor) -> String {
-    anchor
-        .name
-        .as_ref()
-        .map(|name| format!(" ({})", name))
-        .unwrap_or_default()
-}
-
-pub fn format_anchor_location(anchor: &Anchor) -> String {
+/// Single-line anchor format: `anchor:7 student_processor ./file.md (3:4) [22]`
+pub fn format_anchor_line(anchor: &Anchor) -> String {
+    let name = anchor.name.as_deref().unwrap_or("");
     let file = paint(ANSI_CYAN, &anchor.file_path);
     let line = paint(ANSI_GREEN, anchor.line.unwrap_or(0).to_string());
     let shift = paint(ANSI_MAGENTA, anchor.shift.unwrap_or(0).to_string());
     let offset = paint(ANSI_YELLOW, anchor.offset.unwrap_or(0).to_string());
-    format!("{}{} ({}:{}) [{}]\n", file, format_anchor_name(anchor), line, shift, offset)
-}
-
-pub fn format_anchor_compact(anchor: &Anchor) -> String {
-    format!("{}{}\n{}", anchor.anchor_id, format_anchor_name(anchor), format_anchor_location(anchor))
+    format!("anchor:{} {} {} ({}:{}) [{}]\n", anchor.anchor_id, name, file, line, shift, offset)
 }

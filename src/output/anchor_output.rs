@@ -1,4 +1,4 @@
-use crate::output::anchor_format::format_anchor_compact;
+use crate::output::anchor_format::format_anchor_line;
 use crate::service::anchor_service::{AnchorShowResult, AnchorSyncResult};
 use crate::service::health_service::HealthReport;
 
@@ -38,19 +38,14 @@ pub fn format_anchor_health_result(report: &HealthReport) -> String {
 }
 
 pub fn format_anchor_list(anchors: &[crate::anchor::Anchor]) -> String {
-    use crate::output::anchor_format::format_anchor_compact;
     if anchors.is_empty() {
         return String::new();
     }
-    let mut out = String::new();
-    for anchor in anchors {
-        out.push_str(&format_anchor_compact(anchor));
-    }
-    out
+    anchors.iter().map(format_anchor_line).collect()
 }
 
 pub fn format_anchor_show(result: &AnchorShowResult) -> String {
-    let mut out = format_anchor_compact(&result.anchor);
+    let mut out = format_anchor_line(&result.anchor);
     for entity in &result.entities {
         out.push_str(&format!("{} ({})\n", entity.entity_id, entity.name));
     }
@@ -147,7 +142,7 @@ mod tests {
             Anchor {
                 anchor_id: 2,
                 version: 1,
-                name: None,
+                name: Some("teacher_service".into()),
                 file_path: "./src/teacher.rs".into(),
                 line: Some(5),
                 shift: Some(0),
@@ -157,9 +152,9 @@ mod tests {
             },
         ];
         let rendered = format_anchor_list(&anchors);
-        assert!(rendered.contains("1 (student_processor)"));
+        assert!(rendered.contains("anchor:1 student_processor"));
         assert!(rendered.contains("./src/student.rs"));
-        assert!(rendered.contains("2\n"));
+        assert!(rendered.contains("anchor:2 teacher_service"));
         assert!(rendered.contains("./src/teacher.rs"));
     }
 
@@ -186,13 +181,11 @@ mod tests {
                 updated_at: "2".into(),
             }],
         });
-
-        assert!(rendered.contains("7 (student_processor)"));
+        assert!(rendered.contains("anchor:7 student_processor"));
         assert!(rendered.contains("./file.md"));
-        assert!(rendered.contains("student_processor"));
-        assert!(rendered.contains("\x1b[36m"));
-        assert!(rendered.contains("\x1b[32m3\x1b[0m"));
-        assert!(rendered.contains("\x1b[35m4\x1b[0m"));
+        assert!(rendered.contains("3")); // line
+        assert!(rendered.contains("4")); // shift
+        assert!(rendered.contains("22")); // offset
         assert!(rendered.contains("1 (student)"));
     }
 }

@@ -4,81 +4,65 @@ use anyhow::{Context, Result};
 
 use crate::anchor::Anchor;
 
-const CONTEXT_WINDOW_BYTES: usize = 120;
+pub const SNIPPET_LINES_BEFORE: usize = 3;
+pub const SNIPPET_LINES_AFTER: usize = 6;
+/// Safety cap: max bytes per line before we consider a line "degenerate" and bail
+const MAX_BYTES_PER_LINE: usize = 512;
 
 pub fn extract_anchor_snippet(anchor: &Anchor) -> Result<Option<String>> {
-    let text = fs::read_to_string(&anchor.file_path)
-        .with_context(|| format!("failed to read {}", anchor.file_path))?;
-    let offset = match anchor.offset {
-        Some(value) if value >= 0 => value as usize,
+    let anchor_line = match anchor.line {
+        Some(line) if line >= 1 => line as usize,
         _ => return Ok(None),
     };
-    if offset >= text.len() {
+
+    let text = fs::read_to_string(&anchor.file_path)
+        .with_context(|| format!("failed to read {}", anchor.file_path))?;
+
+    // Safety guard: max bytes we're willing to scan
+    let max_scan = MAX_BYTES_PER_LINE * (SNIPPET_LINES_BEFORE + SNIPPET_LINES_AFTER + 1);
+    let lines: Vec<&str> = text.lines().take(anchor_line + SNIPPET_LINES_AFTER).collect();
+
+    if anchor_line > lines.len() {
         return Ok(None);
     }
 
-    let raw_start = offset.saturating_sub(CONTEXT_WINDOW_BYTES);
-    let raw_end = (offset + CONTEXT_WINDOW_BYTES).min(text.len());
+    let first = anchor_line.saturating_sub(SNIPPET_LINES_BEFORE + 1);
+    let last = (anchor_line + SNIPPET_LINES_AFTER).min(lines.len());
 
-    let start = snap_start_to_line_boundary(&text, raw_start);
-    let end = snap_end_to_line_boundary(&text, raw_end);
-    if start >= end {
-        return Ok(None);
+    let snippet_lines = &lines[first..last];
+
+    // Apply byte budget
+    let mut total_bytes = 0usize;
+    let mut safe_end = 0usize;
+    for (i, line) in snippet_lines.iter().enumerate() {
+        total_bytes += line.len() + 1; // +1 for newline
+        if total_bytes > max_scan {
+            break;
+        }
+        safe_end = i + 1;
     }
 
-    let snippet = text[start..end].trim();
+    let snippet = snippet_lines[..safe_end].join("\n");
     if snippet.is_empty() {
         return Ok(None);
     }
 
-    Ok(Some(snippet.to_string()))
-}
-
-fn floor_char_boundary(text: &str, mut idx: usize) -> usize {
-    idx = idx.min(text.len());
-    while idx > 0 && !text.is_char_boundary(idx) {
-        idx -= 1;
-    }
-    idx
-}
-
-fn ceil_char_boundary(text: &str, mut idx: usize) -> usize {
-    idx = idx.min(text.len());
-    while idx < text.len() && !text.is_char_boundary(idx) {
-        idx += 1;
-    }
-    idx
-}
-
-fn snap_start_to_line_boundary(text: &str, raw_start: usize) -> usize {
-    let start = floor_char_boundary(text, raw_start);
-    match text[..start].rfind('\n') {
-        Some(idx) => idx + 1,
-        None => 0,
-    }
-}
-
-fn snap_end_to_line_boundary(text: &str, raw_end: usize) -> usize {
-    let end = ceil_char_boundary(text, raw_end);
-    match text[end..].find('\n') {
-        Some(idx) => end + idx,
-        None => text.len(),
-    }
+    Ok(Some(snippet))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn anchor(file_path: String, offset: i64) -> Anchor {
+    fn anchor(file_path: String, line: i64) -> Anchor {
         Anchor {
             anchor_id: 1,
             version: 1,
             name: None,
             file_path,
-            line: Some(1),
+            line: Some(line),
             shift: Some(0),
-            offset: Some(offset),
+            offset: Some(0),
             created_at: "1".into(),
             updated_at: "1".into(),
         }
@@ -89,9 +73,8 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("start.txt");
         std::fs::write(&file, "anchor at start\nrest\n").unwrap();
-        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 0)).unwrap().unwrap();
-        assert!(snippet.starts_with("anchor at start"));
-        assert!(!snippet.starts_with('\n'));
+        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 1)).unwrap().unwrap();
+        assert!(snippet.contains("anchor at start"));
     }
 
     #[test]
@@ -99,10 +82,8 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("end.txt");
         std::fs::write(&file, "before\nanchor at end").unwrap();
-        let offset = "before\n".len() as i64;
-        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), offset)).unwrap().unwrap();
-        assert!(snippet.ends_with("anchor at end"));
-        assert!(!snippet.ends_with('\n'));
+        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 2)).unwrap().unwrap();
+        assert!(snippet.contains("anchor at end"));
     }
 
     #[test]
@@ -110,11 +91,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("lines.txt");
         std::fs::write(&file, "one\ntwo anchor target\nthree\n").unwrap();
-        let offset = ("one\n".len() + 4) as i64;
-        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), offset)).unwrap().unwrap();
-        assert!(snippet.starts_with("one\n") || snippet.starts_with("two anchor target"));
-        assert!(snippet.ends_with("three") || snippet.ends_with("two anchor target"));
-        assert!(!snippet.starts_with("ne"));
-        assert!(!snippet.ends_with("thr"));
+        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 2)).unwrap().unwrap();
+        assert!(snippet.contains("two anchor target"));
+        // should not start mid-word
+        assert!(snippet.starts_with("one") || snippet.starts_with("two"));
     }
 }
