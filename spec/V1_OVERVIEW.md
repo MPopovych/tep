@@ -25,7 +25,7 @@ The anchor name in the tag is the durable anchor identity.
 
 Example:
 ```txt
-[#!#tep:student_processor](student)
+[#!#tep:student_processor](student) #tepignore
 ```
 
 The name `student_processor` is the identity. Numeric IDs are internal and shown in list/show output.

@@ -3,6 +3,4 @@
 .git/
 target/
 tests/
-spec/ANCHOR_FLOW_SPEC.md
-spec/MARKER_AND_ANCHOR_SPEC.md
-spec/V1_OVERVIEW.md
+spec/

@@ -17,6 +17,11 @@ pub struct Cli {
 pub enum Commands {
     #[command(about = "Initialize a tep workspace in the current directory")]
     Init,
+    #[command(about = "Reset the tep database and re-index the workspace")]
+    Reset {
+        #[arg(long, help = "Skip confirmation prompt")]
+        yes: bool,
+    },
     #[command(about = "Print the tep version")]
     Version,
     #[command(about = "Audit workspace health and graph integrity")]

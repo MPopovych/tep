@@ -42,8 +42,8 @@ The graph lives in your repo (`.tep/`), works offline, and stays under your cont
 - Initialize and auto-migrate local workspaces
 - Create, edit, list, and query entities with names, descriptions, and refs
 - Enforce entity name normalization (`student`, not `Student` — lowercase, `[a-z0-9._]`)
-- Named anchor tags — place `[#!#tep:name](entity)` in any file; `anchor auto` registers and syncs them
-- Auto-declare entities from declaration markers (`(#!#tep:student)`)
+- Named anchor tags — place `[#!#tep:name](entity)` in any file; `anchor auto` registers and syncs them <!-- #tepignore -->
+- Auto-declare entities from declaration markers (`(#!#tep:student)`) <!-- #tepignore -->
 - Directional entity-to-entity links with free-text relations
 - Assemble retrieval-oriented context bundles for entities (`entity context`)
 - Bounded link traversal (`--link-depth`)

@@ -3,6 +3,8 @@ use std::fs;
 use anyhow::{Context, Result};
 
 use crate::db::{self, CURRENT_SCHEMA_VERSION, DEFAULT_DB_FILE, DEFAULT_IGNORE_FILE, DEFAULT_TEP_DIR};
+use crate::service::anchor_service::{AnchorService, AnchorSyncResult};
+use crate::service::entity_service::{EntityAutoResult, EntityService};
 
 #[derive(Debug, Clone)]
 pub struct InitResult {
@@ -12,9 +14,36 @@ pub struct InitResult {
     pub schema_version: i64,
 }
 
+#[derive(Debug)]
+pub struct ResetResult {
+    pub entity_auto: EntityAutoResult,
+    pub anchor_auto: AnchorSyncResult,
+}
+
 pub struct WorkspaceService;
 
 impl WorkspaceService {
+    pub fn reset() -> Result<ResetResult> {
+        let cwd = std::env::current_dir().context("failed to determine current directory")?;
+        let paths = db::workspace_paths_for(&cwd);
+
+        // Delete existing DB (leave .tep_ignore alone)
+        if paths.db_file.exists() {
+            fs::remove_file(&paths.db_file)
+                .with_context(|| format!("failed to delete {}", paths.db_file.display()))?;
+        }
+
+        // Recreate DB with fresh schema
+        let conn = db::open_workspace_db_in(&cwd)?;
+        db::ensure_schema(&conn).context("failed to apply database schema")?;
+
+        // Re-index: entity auto then anchor auto on the whole workspace
+        let entity_auto = EntityService::new(&conn).auto(&[".".into()])?;
+        let anchor_auto = AnchorService::new(&conn).sync_paths(&[".".into()])?;
+
+        Ok(ResetResult { entity_auto, anchor_auto })
+    }
+
     pub fn init() -> Result<InitResult> {
         let cwd = std::env::current_dir().context("failed to determine current directory")?;
         let paths = db::workspace_paths_for(&cwd);
