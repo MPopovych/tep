@@ -50,7 +50,9 @@ pub fn validate_anchor_name(name: &str) -> Result<(), &'static str> {
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '_')
     {
-        return Err("anchor name may only contain lowercase letters, numbers, dots, and underscores");
+        return Err(
+            "anchor name may only contain lowercase letters, numbers, dots, and underscores",
+        );
     }
     Ok(())
 }
@@ -152,6 +154,7 @@ fn parse_anchor_head(head: &str) -> Option<String> {
     Some(name)
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,7 +279,10 @@ mod tests {
 
     #[test]
     fn parse_anchor_target_trims_whitespace_as_name() {
-        assert_eq!(parse_anchor_target(" 42a "), AnchorTarget::Name("42a".into()));
+        assert_eq!(
+            parse_anchor_target(" 42a "),
+            AnchorTarget::Name("42a".into())
+        );
     }
 
     #[test]

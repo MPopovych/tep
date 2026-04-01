@@ -46,6 +46,7 @@ pub fn display_path(path: &Path) -> String {
     path.to_string_lossy().to_string()
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,19 +61,28 @@ mod tests {
     fn normalize_to_workspace_returns_workspace_relative_path() {
         let workspace = Path::new("/tmp/project");
         let path = Path::new("/tmp/project/./docs/../README.md");
-        assert_eq!(normalize_to_workspace(path, workspace), PathBuf::from("./README.md"));
+        assert_eq!(
+            normalize_to_workspace(path, workspace),
+            PathBuf::from("./README.md")
+        );
     }
 
     #[test]
     fn normalize_to_workspace_keeps_outside_absolute_path() {
         let workspace = Path::new("/tmp/project");
         let path = Path::new("/var/tmp/file.md");
-        assert_eq!(normalize_to_workspace(path, workspace), PathBuf::from("/var/tmp/file.md"));
+        assert_eq!(
+            normalize_to_workspace(path, workspace),
+            PathBuf::from("/var/tmp/file.md")
+        );
     }
 
     #[test]
     fn resolve_from_workspace_joins_relative_path() {
         let workspace = Path::new("/tmp/project");
-        assert_eq!(resolve_from_workspace(Path::new("./docs/a.md"), workspace), PathBuf::from("/tmp/project/./docs/a.md"));
+        assert_eq!(
+            resolve_from_workspace(Path::new("./docs/a.md"), workspace),
+            PathBuf::from("/tmp/project/./docs/a.md")
+        );
     }
 }

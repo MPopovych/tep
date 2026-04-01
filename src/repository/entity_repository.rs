@@ -4,8 +4,8 @@ use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::entity::{
-    Entity, EntityLink, EntityLookup, NewEntity, UpdateEntity, normalize_description, normalize_name,
-    validate_name,
+    Entity, EntityLink, EntityLookup, NewEntity, UpdateEntity, normalize_description,
+    normalize_name, validate_name,
 };
 use crate::utils::time::now_utc;
 
@@ -21,7 +21,8 @@ impl<'a> EntityRepository<'a> {
     pub fn create(&self, new_entity: &NewEntity) -> Result<Entity> {
         validate_name(&new_entity.name).map_err(anyhow::Error::msg)?;
         let normalized_name = normalize_name(&new_entity.name);
-        let normalized_description = normalize_description(new_entity.description.clone()).map_err(anyhow::Error::msg)?;
+        let normalized_description =
+            normalize_description(new_entity.description.clone()).map_err(anyhow::Error::msg)?;
 
         let now = now_utc();
         self.conn.execute(
@@ -70,9 +71,7 @@ impl<'a> EntityRepository<'a> {
     }
 
     pub fn update(&self, lookup: &EntityLookup, update: &UpdateEntity) -> Result<Entity> {
-        let existing = self
-            .find(lookup)?
-            .context("entity not found for update")?;
+        let existing = self.find(lookup)?.context("entity not found for update")?;
 
         let next_name = update.name.clone().unwrap_or(existing.name.clone());
         validate_name(&next_name).map_err(anyhow::Error::msg)?;
@@ -83,7 +82,8 @@ impl<'a> EntityRepository<'a> {
             Some(description) => Some(description),
             None => existing.description.clone(),
         };
-        let normalized_description = normalize_description(next_description).map_err(anyhow::Error::msg)?;
+        let normalized_description =
+            normalize_description(next_description).map_err(anyhow::Error::msg)?;
         let now = now_utc();
 
         self.conn.execute(
@@ -117,7 +117,12 @@ impl<'a> EntityRepository<'a> {
         Ok(entities)
     }
 
-    pub fn link(&self, from: &EntityLookup, to: &EntityLookup, relation: &str) -> Result<EntityLink> {
+    pub fn link(
+        &self,
+        from: &EntityLookup,
+        to: &EntityLookup,
+        relation: &str,
+    ) -> Result<EntityLink> {
         if relation.trim().is_empty() {
             bail!("relation cannot be empty");
         }
@@ -227,6 +232,7 @@ fn map_entity_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Entity> {
     })
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,11 +248,13 @@ mod tests {
     #[test]
     fn create_persists_entity() {
         let repo = setup_repo();
-        let entity = repo.create(&NewEntity {
-            name: "Student".into(),
-            r#ref: Some("./docs/student.md".into()),
-            description: Some("A learner".into()),
-        }).expect("create should succeed");
+        let entity = repo
+            .create(&NewEntity {
+                name: "Student".into(),
+                r#ref: Some("./docs/student.md".into()),
+                description: Some("A learner".into()),
+            })
+            .expect("create should succeed");
         assert!(entity.entity_id > 0);
         assert_eq!(entity.name, "student");
         assert_eq!(entity.r#ref.as_deref(), Some("./docs/student.md"));
@@ -256,46 +264,56 @@ mod tests {
     #[test]
     fn ensure_returns_existing_entity_case_insensitively() {
         let repo = setup_repo();
-        let first = repo.ensure(&NewEntity {
-            name: "student".into(),
-            r#ref: None,
-            description: None,
-        }).unwrap();
-        let second = repo.ensure(&NewEntity {
-            name: "Student".into(),
-            r#ref: Some("./ignored.md".into()),
-            description: Some("ignored".into()),
-        }).unwrap();
+        let first = repo
+            .ensure(&NewEntity {
+                name: "student".into(),
+                r#ref: None,
+                description: None,
+            })
+            .unwrap();
+        let second = repo
+            .ensure(&NewEntity {
+                name: "Student".into(),
+                r#ref: Some("./ignored.md".into()),
+                description: Some("ignored".into()),
+            })
+            .unwrap();
         assert_eq!(first.entity_id, second.entity_id);
     }
 
     #[test]
     fn create_accepts_uppercase_name_input_and_stores_lowercase() {
         let repo = setup_repo();
-        let entity = repo.create(&NewEntity {
-            name: "STUDENT".into(),
-            r#ref: None,
-            description: None,
-        }).unwrap();
+        let entity = repo
+            .create(&NewEntity {
+                name: "STUDENT".into(),
+                r#ref: None,
+                description: None,
+            })
+            .unwrap();
         assert_eq!(entity.name, "student");
     }
 
     #[test]
     fn update_changes_fields_and_normalizes_name() {
         let repo = setup_repo();
-        let entity = repo.create(&NewEntity {
-            name: "student".into(),
-            r#ref: None,
-            description: None,
-        }).unwrap();
-        let updated = repo.update(
-            &EntityLookup::Id(entity.entity_id),
-            &UpdateEntity {
-                name: Some("Student.Profile".into()),
-                r#ref: Some("./docs/profile.md".into()),
-                description: Some("Profile entity".into()),
-            },
-        ).unwrap();
+        let entity = repo
+            .create(&NewEntity {
+                name: "student".into(),
+                r#ref: None,
+                description: None,
+            })
+            .unwrap();
+        let updated = repo
+            .update(
+                &EntityLookup::Id(entity.entity_id),
+                &UpdateEntity {
+                    name: Some("Student.Profile".into()),
+                    r#ref: Some("./docs/profile.md".into()),
+                    description: Some("Profile entity".into()),
+                },
+            )
+            .unwrap();
         assert_eq!(updated.name, "student.profile");
         assert_eq!(updated.r#ref.as_deref(), Some("./docs/profile.md"));
         assert_eq!(updated.description.as_deref(), Some("Profile entity"));
@@ -304,7 +322,12 @@ mod tests {
     #[test]
     fn list_without_anchors_returns_orphan_entities() {
         let repo = setup_repo();
-        repo.create(&NewEntity { name: "orphan.entity".into(), r#ref: None, description: None }).unwrap();
+        repo.create(&NewEntity {
+            name: "orphan.entity".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
         let entities = repo.list_without_anchors().unwrap();
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].name, "orphan.entity");
@@ -313,15 +336,33 @@ mod tests {
     #[test]
     fn link_and_list_outgoing_links_work_case_insensitively() {
         let repo = setup_repo();
-        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
-        repo.create(&NewEntity { name: "Subject".into(), r#ref: None, description: None }).unwrap();
-        let link = repo.link(
-            &EntityLookup::Name("Student".into()),
-            &EntityLookup::Name("Subject".into()),
-            "student has subjects assigned to him each semester",
-        ).unwrap();
-        assert_eq!(link.relation, "student has subjects assigned to him each semester");
-        let student = repo.find(&EntityLookup::Name("student".into())).unwrap().unwrap();
+        repo.create(&NewEntity {
+            name: "Student".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        repo.create(&NewEntity {
+            name: "Subject".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        let link = repo
+            .link(
+                &EntityLookup::Name("Student".into()),
+                &EntityLookup::Name("Subject".into()),
+                "student has subjects assigned to him each semester",
+            )
+            .unwrap();
+        assert_eq!(
+            link.relation,
+            "student has subjects assigned to him each semester"
+        );
+        let student = repo
+            .find(&EntityLookup::Name("student".into()))
+            .unwrap()
+            .unwrap();
         let outgoing = repo.list_outgoing_links(student.entity_id).unwrap();
         assert_eq!(outgoing.len(), 1);
         assert_eq!(outgoing[0].1.name, "subject");
@@ -330,14 +371,28 @@ mod tests {
     #[test]
     fn list_incoming_links_returns_sources() {
         let repo = setup_repo();
-        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
-        repo.create(&NewEntity { name: "Subject".into(), r#ref: None, description: None }).unwrap();
+        repo.create(&NewEntity {
+            name: "Student".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        repo.create(&NewEntity {
+            name: "Subject".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
         repo.link(
             &EntityLookup::Name("Student".into()),
             &EntityLookup::Name("Subject".into()),
             "student has subjects assigned",
-        ).unwrap();
-        let subject = repo.find(&EntityLookup::Name("subject".into())).unwrap().unwrap();
+        )
+        .unwrap();
+        let subject = repo
+            .find(&EntityLookup::Name("subject".into()))
+            .unwrap()
+            .unwrap();
         let incoming = repo.list_incoming_links(subject.entity_id).unwrap();
         assert_eq!(incoming.len(), 1);
         assert_eq!(incoming[0].1.name, "student");
@@ -346,18 +401,33 @@ mod tests {
     #[test]
     fn unlink_removes_directional_link() {
         let repo = setup_repo();
-        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
-        repo.create(&NewEntity { name: "Subject".into(), r#ref: None, description: None }).unwrap();
+        repo.create(&NewEntity {
+            name: "Student".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        repo.create(&NewEntity {
+            name: "Subject".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
         repo.link(
             &EntityLookup::Name("Student".into()),
             &EntityLookup::Name("Subject".into()),
             "student has subjects assigned",
-        ).unwrap();
+        )
+        .unwrap();
         repo.unlink(
             &EntityLookup::Name("Student".into()),
             &EntityLookup::Name("Subject".into()),
-        ).unwrap();
-        let student = repo.find(&EntityLookup::Name("student".into())).unwrap().unwrap();
+        )
+        .unwrap();
+        let student = repo
+            .find(&EntityLookup::Name("student".into()))
+            .unwrap()
+            .unwrap();
         let outgoing = repo.list_outgoing_links(student.entity_id).unwrap();
         assert!(outgoing.is_empty());
     }
@@ -365,88 +435,132 @@ mod tests {
     #[test]
     fn create_rejects_empty_name() {
         let repo = setup_repo();
-        let err = repo.create(&NewEntity {
-            name: "   ".into(),
-            r#ref: None,
-            description: None,
-        }).expect_err("empty name should fail");
+        let err = repo
+            .create(&NewEntity {
+                name: "   ".into(),
+                r#ref: None,
+                description: None,
+            })
+            .expect_err("empty name should fail");
         assert!(err.to_string().contains("entity name cannot be empty"));
     }
 
     #[test]
     fn update_rejects_numeric_name() {
         let repo = setup_repo();
-        let entity = repo.create(&NewEntity {
-            name: "Student".into(),
-            r#ref: None,
-            description: None,
-        }).unwrap();
-        let err = repo.update(
-            &EntityLookup::Id(entity.entity_id),
-            &UpdateEntity {
-                name: Some("123".into()),
+        let entity = repo
+            .create(&NewEntity {
+                name: "Student".into(),
                 r#ref: None,
                 description: None,
-            },
-        ).expect_err("numeric name should fail");
-        assert!(err.to_string().contains("entity name cannot be purely numeric"));
+            })
+            .unwrap();
+        let err = repo
+            .update(
+                &EntityLookup::Id(entity.entity_id),
+                &UpdateEntity {
+                    name: Some("123".into()),
+                    r#ref: None,
+                    description: None,
+                },
+            )
+            .expect_err("numeric name should fail");
+        assert!(
+            err.to_string()
+                .contains("entity name cannot be purely numeric")
+        );
     }
 
     #[test]
     fn create_rejects_name_with_dash() {
         let repo = setup_repo();
-        let err = repo.create(&NewEntity {
-            name: "student-profile".into(),
-            r#ref: None,
-            description: None,
-        }).expect_err("dash should fail");
-        assert!(err.to_string().contains("entity name may only contain lowercase letters, numbers, dots, and underscores"));
+        let err = repo
+            .create(&NewEntity {
+                name: "student-profile".into(),
+                r#ref: None,
+                description: None,
+            })
+            .expect_err("dash should fail");
+        assert!(err.to_string().contains(
+            "entity name may only contain lowercase letters, numbers, dots, and underscores"
+        ));
     }
 
     #[test]
     fn create_rejects_description_with_quotes() {
         let repo = setup_repo();
-        let err = repo.create(&NewEntity {
-            name: "student".into(),
-            r#ref: None,
-            description: Some("A \"learner\"".into()),
-        }).expect_err("quoted description should fail");
-        assert!(err.to_string().contains("entity description cannot contain quotes"));
+        let err = repo
+            .create(&NewEntity {
+                name: "student".into(),
+                r#ref: None,
+                description: Some("A \"learner\"".into()),
+            })
+            .expect_err("quoted description should fail");
+        assert!(
+            err.to_string()
+                .contains("entity description cannot contain quotes")
+        );
     }
 
     #[test]
     fn link_rejects_whitespace_relation() {
         let repo = setup_repo();
-        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
-        repo.create(&NewEntity { name: "Subject".into(), r#ref: None, description: None }).unwrap();
-        let err = repo.link(
-            &EntityLookup::Name("Student".into()),
-            &EntityLookup::Name("Subject".into()),
-            "   ",
-        ).expect_err("empty relation should fail");
+        repo.create(&NewEntity {
+            name: "Student".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        repo.create(&NewEntity {
+            name: "Subject".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        let err = repo
+            .link(
+                &EntityLookup::Name("Student".into()),
+                &EntityLookup::Name("Subject".into()),
+                "   ",
+            )
+            .expect_err("empty relation should fail");
         assert!(err.to_string().contains("relation cannot be empty"));
     }
 
     #[test]
     fn unlink_requires_both_entities_to_exist() {
         let repo = setup_repo();
-        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
-        let err = repo.unlink(
-            &EntityLookup::Name("Student".into()),
-            &EntityLookup::Name("Missing".into()),
-        ).expect_err("missing target should fail");
+        repo.create(&NewEntity {
+            name: "Student".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        let err = repo
+            .unlink(
+                &EntityLookup::Name("Student".into()),
+                &EntityLookup::Name("Missing".into()),
+            )
+            .expect_err("missing target should fail");
         assert!(err.to_string().contains("target entity not found"));
     }
 
     #[test]
     fn link_rejects_self_links() {
         let repo = setup_repo();
-        repo.create(&NewEntity { name: "Student".into(), r#ref: None, description: None }).unwrap();
-        let err = repo.link(
-            &EntityLookup::Name("Student".into()),
-            &EntityLookup::Name("Student".into()),
-            "self link",
-        ).expect_err("self link should fail");
+        repo.create(&NewEntity {
+            name: "Student".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        let err = repo
+            .link(
+                &EntityLookup::Name("Student".into()),
+                &EntityLookup::Name("Student".into()),
+                "self link",
+            )
+            .expect_err("self link should fail");
         assert!(err.to_string().contains("entity cannot link to itself"));
     }
 }

@@ -30,7 +30,15 @@ pub fn collect_link_context(
             continue;
         }
 
-        enqueue_neighbors(repo, entity_id, depth + 1, &root_entity, &mut discovered, &mut queued, &mut queue)?;
+        enqueue_neighbors(
+            repo,
+            entity_id,
+            depth + 1,
+            &root_entity,
+            &mut discovered,
+            &mut queued,
+            &mut queue,
+        )?;
     }
 
     let mut linked_entities = discovered.into_values().collect::<Vec<_>>();
@@ -75,11 +83,13 @@ fn record_link_context(
         return;
     }
 
-    let context = discovered.entry(related.entity_id).or_insert_with(|| LinkedEntityContext {
-        link: link.clone(),
-        entity: related.clone(),
-        depth,
-    });
+    let context = discovered
+        .entry(related.entity_id)
+        .or_insert_with(|| LinkedEntityContext {
+            link: link.clone(),
+            entity: related.clone(),
+            depth,
+        });
 
     if depth < context.depth {
         context.link = link;
@@ -89,7 +99,10 @@ fn record_link_context(
     }
 
     if depth == context.depth {
-        let current_edge = format!("{}->{}", context.link.from_entity_id, context.link.to_entity_id);
+        let current_edge = format!(
+            "{}->{}",
+            context.link.from_entity_id, context.link.to_entity_id
+        );
         let candidate_edge = format!("{}->{}", link.from_entity_id, link.to_entity_id);
         if candidate_edge < current_edge {
             context.link = link;
@@ -98,6 +111,7 @@ fn record_link_context(
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,39 +134,115 @@ mod tests {
     #[test]
     fn traverses_bidirectional_neighborhood_and_dedupes_root() {
         let repo = setup_repo();
-        repo.create(&NewEntity { name: "student".into(), r#ref: None, description: None }).unwrap();
-        repo.create(&NewEntity { name: "subject".into(), r#ref: None, description: None }).unwrap();
-        repo.create(&NewEntity { name: "teacher".into(), r#ref: None, description: None }).unwrap();
-        repo.create(&NewEntity { name: "department".into(), r#ref: None, description: None }).unwrap();
+        repo.create(&NewEntity {
+            name: "student".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        repo.create(&NewEntity {
+            name: "subject".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        repo.create(&NewEntity {
+            name: "teacher".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        repo.create(&NewEntity {
+            name: "department".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
 
-        repo.link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects").unwrap();
-        repo.link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student").unwrap();
-        repo.link(&parse_lookup("department"), &parse_lookup("teacher"), "department employs teacher").unwrap();
+        repo.link(
+            &parse_lookup("student"),
+            &parse_lookup("subject"),
+            "student has subjects",
+        )
+        .unwrap();
+        repo.link(
+            &parse_lookup("teacher"),
+            &parse_lookup("student"),
+            "teacher mentors student",
+        )
+        .unwrap();
+        repo.link(
+            &parse_lookup("department"),
+            &parse_lookup("teacher"),
+            "department employs teacher",
+        )
+        .unwrap();
 
         let student = repo.find(&parse_lookup("student")).unwrap().unwrap();
         let linked = collect_link_context(&repo, student.entity_id, 2).unwrap();
 
         assert_eq!(linked.len(), 3);
-        assert!(linked.iter().any(|item| item.entity.name == "subject" && item.depth == 1));
-        assert!(linked.iter().any(|item| item.entity.name == "teacher" && item.depth == 1));
-        assert!(linked.iter().any(|item| item.entity.name == "department" && item.depth == 2));
+        assert!(
+            linked
+                .iter()
+                .any(|item| item.entity.name == "subject" && item.depth == 1)
+        );
+        assert!(
+            linked
+                .iter()
+                .any(|item| item.entity.name == "teacher" && item.depth == 1)
+        );
+        assert!(
+            linked
+                .iter()
+                .any(|item| item.entity.name == "department" && item.depth == 2)
+        );
         assert!(!linked.iter().any(|item| item.entity.name == "student"));
     }
 
     #[test]
     fn prefers_shallower_path_then_lexical_edge_for_ties() {
         let repo = setup_repo();
-        repo.create(&NewEntity { name: "root".into(), r#ref: None, description: None }).unwrap();
-        repo.create(&NewEntity { name: "alpha".into(), r#ref: None, description: None }).unwrap();
-        repo.create(&NewEntity { name: "beta".into(), r#ref: None, description: None }).unwrap();
+        repo.create(&NewEntity {
+            name: "root".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        repo.create(&NewEntity {
+            name: "alpha".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+        repo.create(&NewEntity {
+            name: "beta".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
 
-        repo.link(&parse_lookup("root"), &parse_lookup("alpha"), "root to alpha").unwrap();
-        repo.link(&parse_lookup("beta"), &parse_lookup("root"), "beta to root").unwrap();
-        repo.link(&parse_lookup("beta"), &parse_lookup("alpha"), "beta to alpha").unwrap();
+        repo.link(
+            &parse_lookup("root"),
+            &parse_lookup("alpha"),
+            "root to alpha",
+        )
+        .unwrap();
+        repo.link(&parse_lookup("beta"), &parse_lookup("root"), "beta to root")
+            .unwrap();
+        repo.link(
+            &parse_lookup("beta"),
+            &parse_lookup("alpha"),
+            "beta to alpha",
+        )
+        .unwrap();
 
         let alpha = repo.find(&parse_lookup("alpha")).unwrap().unwrap();
         let linked = collect_link_context(&repo, alpha.entity_id, 2).unwrap();
-        let root = linked.iter().find(|item| item.entity.name == "root").unwrap();
+        let root = linked
+            .iter()
+            .find(|item| item.entity.name == "root")
+            .unwrap();
         assert_eq!(root.depth, 1);
         assert_eq!((root.link.from_entity_id, root.link.to_entity_id), (1, 2));
     }

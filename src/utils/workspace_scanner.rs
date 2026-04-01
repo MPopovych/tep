@@ -13,7 +13,10 @@ pub struct WorkspaceFile {
     pub display_path: String,
 }
 
-pub fn collect_workspace_files(workspace_root: &PathBuf, paths: &[String]) -> Result<Vec<WorkspaceFile>> {
+pub fn collect_workspace_files(
+    workspace_root: &PathBuf,
+    paths: &[String],
+) -> Result<Vec<WorkspaceFile>> {
     let filter = TepIgnoreFilter::for_workspace_root(workspace_root);
     let files = filter.collect_paths(paths)?;
     Ok(files

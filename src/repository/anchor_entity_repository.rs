@@ -22,21 +22,34 @@ impl<'a> AnchorEntityRepository<'a> {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn detach(&self, anchor_id: i64, entity_id: i64) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM anchor_entities WHERE anchor_id = ?1 AND entity_id = ?2",
-            params![anchor_id, entity_id],
-        )
-        .with_context(|| format!("failed to detach anchor {} from entity {}", anchor_id, entity_id))?;
+        self.conn
+            .execute(
+                "DELETE FROM anchor_entities WHERE anchor_id = ?1 AND entity_id = ?2",
+                params![anchor_id, entity_id],
+            )
+            .with_context(|| {
+                format!(
+                    "failed to detach anchor {} from entity {}",
+                    anchor_id, entity_id
+                )
+            })?;
         Ok(())
     }
 
     pub fn replace_for_anchor(&self, anchor_id: i64, entity_ids: &[i64]) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM anchor_entities WHERE anchor_id = ?1",
-            params![anchor_id],
-        )
-        .with_context(|| format!("failed to clear anchor-entity relations for anchor {}", anchor_id))?;
+        self.conn
+            .execute(
+                "DELETE FROM anchor_entities WHERE anchor_id = ?1",
+                params![anchor_id],
+            )
+            .with_context(|| {
+                format!(
+                    "failed to clear anchor-entity relations for anchor {}",
+                    anchor_id
+                )
+            })?;
 
         for entity_id in entity_ids {
             self.attach(anchor_id, *entity_id)?;
@@ -79,15 +92,21 @@ fn now_utc() -> String {
     secs.to_string()
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::db;
+    use crate::entity::NewEntity;
     use crate::repository::anchor_repository::AnchorRepository;
     use crate::repository::entity_repository::EntityRepository;
-    use crate::entity::NewEntity;
 
-    fn setup() -> (&'static Connection, AnchorEntityRepository<'static>, i64, i64) {
+    fn setup() -> (
+        &'static Connection,
+        AnchorEntityRepository<'static>,
+        i64,
+        i64,
+    ) {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
         conn.execute_batch(db::schema_sql())
             .expect("schema should apply");
@@ -113,17 +132,25 @@ mod tests {
     #[test]
     fn attach_and_list_relations() {
         let (_conn, repo, anchor_id, entity_id) = setup();
-        repo.attach(anchor_id, entity_id).expect("attach should succeed");
+        repo.attach(anchor_id, entity_id)
+            .expect("attach should succeed");
         let entities = repo
             .list_entities_for_anchor(anchor_id)
             .expect("list should succeed");
-        assert_eq!(entities.iter().map(|entity| entity.entity_id).collect::<Vec<_>>(), vec![entity_id]);
+        assert_eq!(
+            entities
+                .iter()
+                .map(|entity| entity.entity_id)
+                .collect::<Vec<_>>(),
+            vec![entity_id]
+        );
     }
 
     #[test]
     fn list_entities_for_anchor_returns_full_rows() {
         let (_conn, repo, anchor_id, entity_id) = setup();
-        repo.attach(anchor_id, entity_id).expect("attach should succeed");
+        repo.attach(anchor_id, entity_id)
+            .expect("attach should succeed");
         let entities = repo
             .list_entities_for_anchor(anchor_id)
             .expect("list should succeed");
@@ -135,7 +162,8 @@ mod tests {
     #[test]
     fn replace_for_anchor_replaces_existing_relations() {
         let (conn, repo, anchor_id, entity_id) = setup();
-        repo.attach(anchor_id, entity_id).expect("attach should succeed");
+        repo.attach(anchor_id, entity_id)
+            .expect("attach should succeed");
 
         let entity_repo = EntityRepository::new(conn);
         let other = entity_repo
@@ -152,14 +180,22 @@ mod tests {
         let entities = repo
             .list_entities_for_anchor(anchor_id)
             .expect("list should succeed");
-        assert_eq!(entities.iter().map(|entity| entity.entity_id).collect::<Vec<_>>(), vec![other.entity_id]);
+        assert_eq!(
+            entities
+                .iter()
+                .map(|entity| entity.entity_id)
+                .collect::<Vec<_>>(),
+            vec![other.entity_id]
+        );
     }
 
     #[test]
     fn detach_removes_relation() {
         let (_conn, repo, anchor_id, entity_id) = setup();
-        repo.attach(anchor_id, entity_id).expect("attach should succeed");
-        repo.detach(anchor_id, entity_id).expect("detach should succeed");
+        repo.attach(anchor_id, entity_id)
+            .expect("attach should succeed");
+        repo.detach(anchor_id, entity_id)
+            .expect("detach should succeed");
         let entities = repo
             .list_entities_for_anchor(anchor_id)
             .expect("list should succeed");

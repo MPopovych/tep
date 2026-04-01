@@ -63,7 +63,9 @@ impl<'a> AnchorService<'a> {
 
     pub fn show(&self, target: &str) -> Result<AnchorShowResult> {
         let anchor = self.resolve_anchor_reference(target)?;
-        let entities = self.anchor_entity_repo.list_entities_for_anchor(anchor.anchor_id)?;
+        let entities = self
+            .anchor_entity_repo
+            .list_entities_for_anchor(anchor.anchor_id)?;
         Ok(AnchorShowResult { anchor, entities })
     }
 
@@ -166,7 +168,8 @@ impl<'a> AnchorService<'a> {
             entity_ids.push(entity.entity_id);
         }
 
-        self.anchor_entity_repo.replace_for_anchor(anchor_id, &entity_ids)?;
+        self.anchor_entity_repo
+            .replace_for_anchor(anchor_id, &entity_ids)?;
         result.relations_synced += entity_ids.len();
         Ok(())
     }
@@ -191,7 +194,10 @@ impl<'a> AnchorService<'a> {
         let mut seen_names: HashSet<String> = HashSet::new();
         for anchor in parsed {
             if !seen_names.insert(anchor.anchor_name.clone()) {
-                bail!("duplicate anchor name '{}' found in the same file", anchor.anchor_name);
+                bail!(
+                    "duplicate anchor name '{}' found in the same file",
+                    anchor.anchor_name
+                );
             }
         }
         Ok(())
@@ -232,7 +238,8 @@ mod tests {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         std::fs::write(temp.path().join("note.txt"), "[#!#tep:foo](student)").unwrap();
 
-        let files = collect_workspace_files(&temp.path().to_path_buf(), &["./note.txt".into()]).unwrap();
+        let files =
+            collect_workspace_files(&temp.path().to_path_buf(), &["./note.txt".into()]).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].absolute_path, temp.path().join("./note.txt"));
     }
@@ -249,7 +256,10 @@ mod tests {
             .expect("sync should succeed");
 
         let updated = std::fs::read_to_string(&file).expect("should read file");
-        assert_eq!(updated, "hello [#!#tep:myanchor](student)", "file should not be rewritten");
+        assert_eq!(
+            updated, "hello [#!#tep:myanchor](student)",
+            "file should not be rewritten"
+        );
         assert_eq!(result.anchors_created, 1);
         assert_eq!(result.anchors_seen, 1);
         assert_eq!(result.anchors_dropped, 0);
@@ -263,7 +273,9 @@ mod tests {
         let file = temp.path().join("note.txt");
         std::fs::write(&file, "[#!#tep:foo]").expect("should write file");
 
-        let result = service.sync_paths(&["./note.txt".into()]).expect("sync should succeed");
+        let result = service
+            .sync_paths(&["./note.txt".into()])
+            .expect("sync should succeed");
 
         assert_eq!(result.anchors_seen, 0);
         assert_eq!(result.anchors_created, 0);
@@ -274,9 +286,22 @@ mod tests {
     fn show_returns_related_entities() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
-        let anchor = service.anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
-        let entity = service.entity_repo.ensure(&crate::entity::NewEntity { name: "student".into(), r#ref: None, description: None }).unwrap();
-        service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
+        let anchor = service
+            .anchor_repo
+            .create(1, "./file.txt", Some(1), Some(0), Some(0))
+            .unwrap();
+        let entity = service
+            .entity_repo
+            .ensure(&crate::entity::NewEntity {
+                name: "student".into(),
+                r#ref: None,
+                description: None,
+            })
+            .unwrap();
+        service
+            .anchor_entity_repo
+            .attach(anchor.anchor_id, entity.entity_id)
+            .unwrap();
 
         let result = service.show(&anchor.anchor_id.to_string()).unwrap();
         assert_eq!(result.anchor.anchor_id, anchor.anchor_id);
@@ -288,9 +313,12 @@ mod tests {
     fn sync_directory_processes_dot_style_path() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
-        std::fs::write(temp.path().join("a.txt"), "[#!#tep:foo](student)").expect("should write file");
+        std::fs::write(temp.path().join("a.txt"), "[#!#tep:foo](student)")
+            .expect("should write file");
 
-        let result = service.sync_paths(&[".".into()]).expect("sync should succeed");
+        let result = service
+            .sync_paths(&[".".into()])
+            .expect("sync should succeed");
         assert_eq!(result.anchors_created, 1);
     }
 
@@ -331,7 +359,8 @@ mod tests {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
         let file = temp.path().join("bad.txt");
-        std::fs::write(&file, "[#!#tep:foo](student)\n[#!#tep:foo](teacher)\n").expect("should write file");
+        std::fs::write(&file, "[#!#tep:foo](student)\n[#!#tep:foo](teacher)\n")
+            .expect("should write file");
 
         let result = service.sync_paths(&["./bad.txt".into()]);
         assert!(result.is_err());

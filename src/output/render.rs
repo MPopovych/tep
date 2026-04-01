@@ -8,7 +8,13 @@ pub fn render_entity_header(entity: &Entity) -> String {
 
 pub fn append_entity_metadata(out: &mut String, entity: &Entity) {
     if let Some(entity_ref) = &entity.r#ref {
-        out.push_str(&format!("{}\n", paint(ANSI_YELLOW, format!("ref: {}", paint(ANSI_CYAN, entity_ref)))));
+        out.push_str(&format!(
+            "{}\n",
+            paint(
+                ANSI_YELLOW,
+                format!("ref: {}", paint(ANSI_CYAN, entity_ref))
+            )
+        ));
     }
     if let Some(description) = &entity.description {
         out.push_str(&format!("description: {}\n", description));
@@ -25,8 +31,14 @@ pub fn append_link_block(out: &mut String, root_entity_id: i64, links: &[LinkedE
     }
     out.push_str("links:\n");
     for item in links {
-        let arrow = if item.link.from_entity_id == root_entity_id { "->" } else { "<-" };
-        let ref_part = item.entity.r#ref
+        let arrow = if item.link.from_entity_id == root_entity_id {
+            "->"
+        } else {
+            "<-"
+        };
+        let ref_part = item
+            .entity
+            .r#ref
             .as_deref()
             .map(|r| format!(" [{}]", r))
             .unwrap_or_default();
@@ -47,6 +59,7 @@ pub fn append_link_block(out: &mut String, root_entity_id: i64, links: &[LinkedE
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

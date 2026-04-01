@@ -2,9 +2,25 @@
 name = "tep"
 version = "0.1.0"
 edition = "2024"
-description = "tep - text entity pointers"
+description = "Text entity pointers — connect concepts to locations in your codebase and docs"
 license = "MIT OR Apache-2.0"
 rust-version = "1.85"
+repository = "https://github.com/MPopovych/tep"
+homepage = "https://github.com/MPopovych/tep"
+readme = "README.md"
+keywords = ["cli", "graph", "context", "documentation", "code-navigation"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = [
+    ".github/",
+    ".tep/",
+    "doc/",
+    "spec/",
+    "skills/",
+    "tests/",
+    "bin/",
+    "*.md",
+    "!README.md",
+]
 
 [dependencies]
 anyhow = "1"

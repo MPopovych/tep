@@ -4,7 +4,9 @@ use std::fs;
 
 use anyhow::{Context, Result};
 
-use crate::db::{self, CURRENT_SCHEMA_VERSION, DEFAULT_DB_FILE, DEFAULT_IGNORE_FILE, DEFAULT_TEP_DIR};
+use crate::db::{
+    self, CURRENT_SCHEMA_VERSION, DEFAULT_DB_FILE, DEFAULT_IGNORE_FILE, DEFAULT_TEP_DIR,
+};
 use crate::service::anchor_service::{AnchorService, AnchorSyncResult};
 use crate::service::entity_service::{EntityAutoResult, EntityService};
 
@@ -44,7 +46,10 @@ impl WorkspaceService {
         let entity_auto = EntityService::new(&conn).auto(&[".".into()])?;
         let anchor_auto = AnchorService::new(&conn).sync_paths(&[".".into()])?;
 
-        Ok(ResetResult { entity_auto, anchor_auto })
+        Ok(ResetResult {
+            entity_auto,
+            anchor_auto,
+        })
     }
 
     pub fn init() -> Result<InitResult> {
@@ -60,8 +65,7 @@ impl WorkspaceService {
         }
 
         let conn = db::open_workspace_db_in(&cwd)?;
-        db::ensure_schema(&conn)
-            .context("failed to apply database schema")?;
+        db::ensure_schema(&conn).context("failed to apply database schema")?;
 
         Ok(InitResult {
             tep_dir: DEFAULT_TEP_DIR.into(),

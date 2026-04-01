@@ -111,14 +111,25 @@ impl<'a> HealthService<'a> {
 
         let mut local_names = HashSet::new();
         for anchor in &parsed_anchors {
-            self.inspect_named_anchor(anchor, &file.display_path, report, tracker, &mut local_names)?;
+            self.inspect_named_anchor(
+                anchor,
+                &file.display_path,
+                report,
+                tracker,
+                &mut local_names,
+            )?;
         }
 
         for declaration in &parsed_declarations {
             if let Some(existing) = self
                 .entity_repo
                 .find(&crate::entity::EntityLookup::Name(declaration.name.clone()))?
-                .and_then(|entity| self.anchor_repo.find_latest_for_entity_in_file(entity.entity_id, &file.display_path).ok().flatten())
+                .and_then(|entity| {
+                    self.anchor_repo
+                        .find_latest_for_entity_in_file(entity.entity_id, &file.display_path)
+                        .ok()
+                        .flatten()
+                })
             {
                 tracker.seen_anchor_ids.insert(existing.anchor_id);
                 report.anchors_healthy += 1;
@@ -157,7 +168,9 @@ impl<'a> HealthService<'a> {
                 return Ok(());
             }
         } else {
-            tracker.seen_name_to_file.insert(name.clone(), file_path.to_string());
+            tracker
+                .seen_name_to_file
+                .insert(name.clone(), file_path.to_string());
         }
 
         match self.anchor_repo.find_by_name(name)? {
@@ -206,7 +219,9 @@ impl<'a> HealthService<'a> {
         report: &mut HealthReport,
     ) -> Result<()> {
         for anchor in self.anchor_repo.list_all()? {
-            if scoped_files.contains(&anchor.file_path) && !seen_anchor_ids.contains(&anchor.anchor_id) {
+            if scoped_files.contains(&anchor.file_path)
+                && !seen_anchor_ids.contains(&anchor.anchor_id)
+            {
                 report.issue_counts.anchors_missing += 1;
                 report.groups.missing_anchors.push(format!(
                     "missing anchor {} recorded in db but not found in file {}",
@@ -238,6 +253,7 @@ impl<'a> HealthService<'a> {
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,7 +273,11 @@ mod tests {
         let service = setup_service();
         service
             .entity_repo
-            .create(&NewEntity { name: "student".into(), r#ref: None, description: None })
+            .create(&NewEntity {
+                name: "student".into(),
+                r#ref: None,
+                description: None,
+            })
             .unwrap();
 
         let report = service.audit_paths(&["src".into()]).unwrap();
@@ -267,9 +287,23 @@ mod tests {
     #[test]
     fn reports_anchors_without_entities() {
         let service = setup_service();
-        service.anchor_repo.create_named("my_anchor", 1, "./docs/student.md", Some(1), Some(0), Some(0)).unwrap();
+        service
+            .anchor_repo
+            .create_named(
+                "my_anchor",
+                1,
+                "./docs/student.md",
+                Some(1),
+                Some(0),
+                Some(0),
+            )
+            .unwrap();
         std::fs::create_dir_all("/tmp/project/docs").ok();
-        std::fs::write("/tmp/project/docs/student.md", "[#!#tep:my_anchor](student)").ok(); // #tepignore
+        std::fs::write(
+            "/tmp/project/docs/student.md",
+            "[#!#tep:my_anchor](student)",
+        )
+        .ok(); // #tepignore
 
         let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.issue_counts.anchors_without_entities, 1);
@@ -288,13 +322,24 @@ mod tests {
             .unwrap();
         let anchor = service
             .anchor_repo
-            .create_named("my_anchor", 1, "./docs/student.md", Some(1), Some(0), Some(0))
+            .create_named(
+                "my_anchor",
+                1,
+                "./docs/student.md",
+                Some(1),
+                Some(0),
+                Some(0),
+            )
             .unwrap();
         let rel = AnchorEntityRepository::new(service.anchor_repo.conn);
         rel.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
         std::fs::create_dir_all("/tmp/project/docs").ok();
-        std::fs::write("/tmp/project/docs/student.md", "[#!#tep:my_anchor](student)").ok(); // #tepignore
+        std::fs::write(
+            "/tmp/project/docs/student.md",
+            "[#!#tep:my_anchor](student)",
+        )
+        .ok(); // #tepignore
 
         let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.anchors_healthy, 1);

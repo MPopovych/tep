@@ -22,7 +22,10 @@ pub fn extract_anchor_snippet(anchor: &Anchor) -> Result<Option<String>> {
 
     // Safety guard: max bytes we're willing to scan
     let max_scan = MAX_BYTES_PER_LINE * (SNIPPET_LINES_BEFORE + SNIPPET_LINES_AFTER + 1);
-    let lines: Vec<&str> = text.lines().take(anchor_line + SNIPPET_LINES_AFTER).collect();
+    let lines: Vec<&str> = text
+        .lines()
+        .take(anchor_line + SNIPPET_LINES_AFTER)
+        .collect();
 
     if anchor_line > lines.len() {
         return Ok(None);
@@ -52,6 +55,7 @@ pub fn extract_anchor_snippet(anchor: &Anchor) -> Result<Option<String>> {
     Ok(Some(snippet))
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,7 +79,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("start.txt");
         std::fs::write(&file, "anchor at start\nrest\n").unwrap();
-        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 1)).unwrap().unwrap();
+        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 1))
+            .unwrap()
+            .unwrap();
         assert!(snippet.contains("anchor at start"));
     }
 
@@ -84,7 +90,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("end.txt");
         std::fs::write(&file, "before\nanchor at end").unwrap();
-        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 2)).unwrap().unwrap();
+        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 2))
+            .unwrap()
+            .unwrap();
         assert!(snippet.contains("anchor at end"));
     }
 
@@ -93,7 +101,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("lines.txt");
         std::fs::write(&file, "one\ntwo anchor target\nthree\n").unwrap();
-        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 2)).unwrap().unwrap();
+        let snippet = extract_anchor_snippet(&anchor(file.to_string_lossy().into(), 2))
+            .unwrap()
+            .unwrap();
         assert!(snippet.contains("two anchor target"));
         // should not start mid-word
         assert!(snippet.starts_with("one") || snippet.starts_with("two"));

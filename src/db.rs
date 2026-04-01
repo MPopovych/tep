@@ -16,6 +16,7 @@ pub struct WorkspacePaths {
     pub ignore_file: PathBuf,
 }
 
+// #tepignoreafter
 #[cfg(test)]
 pub fn open_in_memory() -> rusqlite::Result<Connection> {
     Connection::open_in_memory()
@@ -65,7 +66,8 @@ pub fn open_workspace_db() -> anyhow::Result<Connection> {
 pub fn open_workspace_db_in(root: &Path) -> anyhow::Result<Connection> {
     let paths = workspace_paths_for(root);
     if let Some(parent) = paths.db_file.parent() {
-        fs::create_dir_all(parent).with_context(|| format!("failed to create {}", parent.display()))?;
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create {}", parent.display()))?;
     }
 
     Connection::open(&paths.db_file)
@@ -93,6 +95,7 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+// #tepignoreafter
 #[cfg(test)]
 pub fn schema_sql() -> &'static str {
     base_schema_sql()
@@ -240,6 +243,7 @@ fn set_schema_version(conn: &Connection, version: i64) -> Result<()> {
     Ok(())
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

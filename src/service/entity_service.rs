@@ -7,8 +7,10 @@ use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
 use crate::anchor::Anchor;
-use crate::entity::{Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity, parse_entity_declarations, parse_lookup};
-use crate::repository::anchor_entity_repository::AnchorEntityRepository;
+use crate::entity::{
+    Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity,
+    parse_entity_declarations, parse_lookup,
+};
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 use crate::service::entity_context::extract_anchor_snippet;
@@ -56,7 +58,6 @@ pub struct EntityService<'a> {
     workspace_root: PathBuf,
     repo: EntityRepository<'a>,
     anchor_repo: AnchorRepository<'a>,
-    anchor_entity_repo: AnchorEntityRepository<'a>,
 }
 
 impl<'a> EntityService<'a> {
@@ -71,11 +72,15 @@ impl<'a> EntityService<'a> {
             workspace_root: workspace_root.clone(),
             repo: EntityRepository::new(conn),
             anchor_repo: AnchorRepository::with_workspace_root(conn, workspace_root),
-            anchor_entity_repo: AnchorEntityRepository::new(conn),
         }
     }
 
-    pub fn create(&self, name: String, entity_ref: Option<String>, description: Option<String>) -> Result<Entity> {
+    pub fn create(
+        &self,
+        name: String,
+        entity_ref: Option<String>,
+        description: Option<String>,
+    ) -> Result<Entity> {
         self.repo.create(&NewEntity {
             name,
             r#ref: entity_ref,
@@ -108,7 +113,11 @@ impl<'a> EntityService<'a> {
             .with_context(|| format!("entity not found: {target}"))?;
         let anchors = self.anchor_repo.list_for_entity(entity.entity_id)?;
         let linked_entities = collect_link_context(&self.repo, entity.entity_id, 1)?;
-        Ok(EntityShowResult { entity, anchors, linked_entities })
+        Ok(EntityShowResult {
+            entity,
+            anchors,
+            linked_entities,
+        })
     }
 
     // [#!#tep:entity.service.context](entity.service,entity.context,entity.links)
@@ -118,11 +127,14 @@ impl<'a> EntityService<'a> {
             .repo
             .find(&lookup)?
             .with_context(|| format!("entity not found: {target}"))?;
-        let anchors = self.build_anchor_context(
-            &self.anchor_repo.list_for_entity(entity.entity_id)?
-        );
+        let anchors =
+            self.build_anchor_context(&self.anchor_repo.list_for_entity(entity.entity_id)?);
         let linked_entities = collect_link_context(&self.repo, entity.entity_id, link_depth)?;
-        Ok(EntityContextResult { entity, anchors, linked_entities })
+        Ok(EntityContextResult {
+            entity,
+            anchors,
+            linked_entities,
+        })
     }
 
     pub fn edit(
@@ -150,8 +162,14 @@ impl<'a> EntityService<'a> {
         let from_lookup = parse_lookup(from);
         let to_lookup = parse_lookup(to);
         let link = self.repo.link(&from_lookup, &to_lookup, relation)?;
-        let from_entity = self.repo.find(&from_lookup)?.context("source entity not found")?;
-        let to_entity = self.repo.find(&to_lookup)?.context("target entity not found")?;
+        let from_entity = self
+            .repo
+            .find(&from_lookup)?
+            .context("source entity not found")?;
+        let to_entity = self
+            .repo
+            .find(&to_lookup)?
+            .context("target entity not found")?;
         Ok(EntityLinkResult {
             from: from_entity,
             to: to_entity,
@@ -162,8 +180,14 @@ impl<'a> EntityService<'a> {
     pub fn unlink(&self, from: &str, to: &str) -> Result<(Entity, Entity)> {
         let from_lookup = parse_lookup(from);
         let to_lookup = parse_lookup(to);
-        let from_entity = self.repo.find(&from_lookup)?.context("source entity not found")?;
-        let to_entity = self.repo.find(&to_lookup)?.context("target entity not found")?;
+        let from_entity = self
+            .repo
+            .find(&from_lookup)?
+            .context("source entity not found")?;
+        let to_entity = self
+            .repo
+            .find(&to_lookup)?
+            .context("target entity not found")?;
         self.repo.unlink(&from_lookup, &to_lookup)?;
         Ok((from_entity, to_entity))
     }
@@ -240,7 +264,6 @@ impl<'a> EntityService<'a> {
 
         Ok(entity)
     }
-
 }
 
 // #tepignoreafter
@@ -293,7 +316,9 @@ mod tests {
             .create("student.permissions".into(), None, None)
             .expect("create should succeed");
 
-        let result = service.show("student.permissions").expect("show should succeed");
+        let result = service
+            .show("student.permissions")
+            .expect("show should succeed");
         assert_eq!(result.entity.name, "student.permissions");
     }
 
@@ -303,12 +328,26 @@ mod tests {
         service.create("Student".into(), None, None).unwrap();
         service.create("Subject".into(), None, None).unwrap();
         service.create("Teacher".into(), None, None).unwrap();
-        service.link("Student", "Subject", "student has subjects").unwrap();
-        service.link("Teacher", "Student", "teacher mentors student").unwrap();
+        service
+            .link("Student", "Subject", "student has subjects")
+            .unwrap();
+        service
+            .link("Teacher", "Student", "teacher mentors student")
+            .unwrap();
         let result = service.show("Student").unwrap();
         assert_eq!(result.linked_entities.len(), 2);
-        assert!(result.linked_entities.iter().any(|l| l.entity.name == "subject"));
-        assert!(result.linked_entities.iter().any(|l| l.entity.name == "teacher"));
+        assert!(
+            result
+                .linked_entities
+                .iter()
+                .any(|l| l.entity.name == "subject")
+        );
+        assert!(
+            result
+                .linked_entities
+                .iter()
+                .any(|l| l.entity.name == "teacher")
+        );
     }
 
     #[test]
@@ -318,16 +357,60 @@ mod tests {
         let service = EntityService::with_workspace_root(conn, "/tmp/project");
         let entity_repo = EntityRepository::new(conn);
 
-        entity_repo.create(&NewEntity { name: "student".into(), r#ref: Some("./docs/student.md".into()), description: Some("A learner".into()) }).unwrap();
-        entity_repo.create(&NewEntity { name: "subject".into(), r#ref: Some("./docs/subject.md".into()), description: Some("A course".into()) }).unwrap();
-        entity_repo.create(&NewEntity { name: "teacher".into(), r#ref: Some("./docs/teacher.md".into()), description: Some("An instructor".into()) }).unwrap();
-        entity_repo.link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects").unwrap();
-        entity_repo.link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student").unwrap();
+        entity_repo
+            .create(&NewEntity {
+                name: "student".into(),
+                r#ref: Some("./docs/student.md".into()),
+                description: Some("A learner".into()),
+            })
+            .unwrap();
+        entity_repo
+            .create(&NewEntity {
+                name: "subject".into(),
+                r#ref: Some("./docs/subject.md".into()),
+                description: Some("A course".into()),
+            })
+            .unwrap();
+        entity_repo
+            .create(&NewEntity {
+                name: "teacher".into(),
+                r#ref: Some("./docs/teacher.md".into()),
+                description: Some("An instructor".into()),
+            })
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("student"),
+                &parse_lookup("subject"),
+                "student has subjects",
+            )
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("teacher"),
+                &parse_lookup("student"),
+                "teacher mentors student",
+            )
+            .unwrap();
 
         let result = service.context("student", 1).unwrap();
         assert_eq!(result.linked_entities.len(), 2);
-        assert!(result.linked_entities.iter().any(|item| item.entity.name == "subject" && item.link.from_entity_id != item.link.to_entity_id && item.depth == 1));
-        assert!(result.linked_entities.iter().any(|item| item.entity.name == "teacher" && item.link.from_entity_id != item.link.to_entity_id && item.depth == 1));
+        assert!(
+            result
+                .linked_entities
+                .iter()
+                .any(|item| item.entity.name == "subject"
+                    && item.link.from_entity_id != item.link.to_entity_id
+                    && item.depth == 1)
+        );
+        assert!(
+            result
+                .linked_entities
+                .iter()
+                .any(|item| item.entity.name == "teacher"
+                    && item.link.from_entity_id != item.link.to_entity_id
+                    && item.depth == 1)
+        );
     }
 
     #[test]
@@ -337,25 +420,110 @@ mod tests {
         let service = EntityService::with_workspace_root(conn, "/tmp/project");
         let entity_repo = EntityRepository::new(conn);
 
-        entity_repo.create(&NewEntity { name: "student".into(), r#ref: Some("./docs/student.md".into()), description: Some("A learner".into()) }).unwrap();
-        entity_repo.create(&NewEntity { name: "subject".into(), r#ref: Some("./docs/subject.md".into()), description: Some("A course".into()) }).unwrap();
-        entity_repo.create(&NewEntity { name: "semester".into(), r#ref: Some("./docs/semester.md".into()), description: Some("A term".into()) }).unwrap();
-        entity_repo.create(&NewEntity { name: "teacher".into(), r#ref: Some("./docs/teacher.md".into()), description: Some("An instructor".into()) }).unwrap();
-        entity_repo.create(&NewEntity { name: "department".into(), r#ref: Some("./docs/department.md".into()), description: Some("An org unit".into()) }).unwrap();
+        entity_repo
+            .create(&NewEntity {
+                name: "student".into(),
+                r#ref: Some("./docs/student.md".into()),
+                description: Some("A learner".into()),
+            })
+            .unwrap();
+        entity_repo
+            .create(&NewEntity {
+                name: "subject".into(),
+                r#ref: Some("./docs/subject.md".into()),
+                description: Some("A course".into()),
+            })
+            .unwrap();
+        entity_repo
+            .create(&NewEntity {
+                name: "semester".into(),
+                r#ref: Some("./docs/semester.md".into()),
+                description: Some("A term".into()),
+            })
+            .unwrap();
+        entity_repo
+            .create(&NewEntity {
+                name: "teacher".into(),
+                r#ref: Some("./docs/teacher.md".into()),
+                description: Some("An instructor".into()),
+            })
+            .unwrap();
+        entity_repo
+            .create(&NewEntity {
+                name: "department".into(),
+                r#ref: Some("./docs/department.md".into()),
+                description: Some("An org unit".into()),
+            })
+            .unwrap();
 
-        entity_repo.link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects").unwrap();
-        entity_repo.link(&parse_lookup("subject"), &parse_lookup("semester"), "subject is scheduled in semester").unwrap();
-        entity_repo.link(&parse_lookup("semester"), &parse_lookup("student"), "semester contains student records").unwrap();
-        entity_repo.link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student").unwrap();
-        entity_repo.link(&parse_lookup("department"), &parse_lookup("teacher"), "department employs teacher").unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("student"),
+                &parse_lookup("subject"),
+                "student has subjects",
+            )
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("subject"),
+                &parse_lookup("semester"),
+                "subject is scheduled in semester",
+            )
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("semester"),
+                &parse_lookup("student"),
+                "semester contains student records",
+            )
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("teacher"),
+                &parse_lookup("student"),
+                "teacher mentors student",
+            )
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("department"),
+                &parse_lookup("teacher"),
+                "department employs teacher",
+            )
+            .unwrap();
 
         let result = service.context("student", 2).unwrap();
         assert_eq!(result.linked_entities.len(), 4);
-        assert!(result.linked_entities.iter().any(|item| item.entity.name == "subject" && item.depth == 1));
-        assert!(result.linked_entities.iter().any(|item| item.entity.name == "semester" && item.depth == 1));
-        assert!(result.linked_entities.iter().any(|item| item.entity.name == "teacher" && item.depth == 1));
-        assert!(result.linked_entities.iter().any(|item| item.entity.name == "department" && item.depth == 2));
-        assert!(!result.linked_entities.iter().any(|item| item.entity.name == "student"));
+        assert!(
+            result
+                .linked_entities
+                .iter()
+                .any(|item| item.entity.name == "subject" && item.depth == 1)
+        );
+        assert!(
+            result
+                .linked_entities
+                .iter()
+                .any(|item| item.entity.name == "semester" && item.depth == 1)
+        );
+        assert!(
+            result
+                .linked_entities
+                .iter()
+                .any(|item| item.entity.name == "teacher" && item.depth == 1)
+        );
+        assert!(
+            result
+                .linked_entities
+                .iter()
+                .any(|item| item.entity.name == "department" && item.depth == 2)
+        );
+        assert!(
+            !result
+                .linked_entities
+                .iter()
+                .any(|item| item.entity.name == "student")
+        );
     }
 
     #[test]
@@ -367,19 +535,40 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let file = temp.path().join("note.txt");
         std::fs::write(&file, "before line\nanchor line\nafter line\n").unwrap();
-        let entity = entity_repo.create(&NewEntity {
-            name: "student".into(),
-            r#ref: Some("./docs/student.md".into()),
-            description: Some("A learner".into()),
-        }).unwrap();
-        entity_repo.create(&NewEntity {
-            name: "subject".into(),
-            r#ref: Some("./docs/subject.md".into()),
-            description: Some("A course".into()),
-        }).unwrap();
-        entity_repo.link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects").unwrap();
-        let anchor = service.anchor_repo.create(1, file.to_string_lossy().as_ref(), Some(2), Some(0), Some(12)).unwrap();
-        service.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
+        let entity = entity_repo
+            .create(&NewEntity {
+                name: "student".into(),
+                r#ref: Some("./docs/student.md".into()),
+                description: Some("A learner".into()),
+            })
+            .unwrap();
+        entity_repo
+            .create(&NewEntity {
+                name: "subject".into(),
+                r#ref: Some("./docs/subject.md".into()),
+                description: Some("A course".into()),
+            })
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("student"),
+                &parse_lookup("subject"),
+                "student has subjects",
+            )
+            .unwrap();
+        let anchor = service
+            .anchor_repo
+            .create(
+                1,
+                file.to_string_lossy().as_ref(),
+                Some(2),
+                Some(0),
+                Some(12),
+            )
+            .unwrap();
+        crate::repository::anchor_entity_repository::AnchorEntityRepository::new(conn)
+            .attach(anchor.anchor_id, entity.entity_id)
+            .unwrap();
 
         let result = service.context("student", 1).unwrap();
         assert_eq!(result.entity.r#ref.as_deref(), Some("./docs/student.md"));

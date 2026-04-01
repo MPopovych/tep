@@ -30,10 +30,11 @@ fn entity_create_prints_created_entity() {
         .success()
         .stdout(predicate::str::contains("created"))
         .stdout(predicate::str::contains("(student)"))
-        .stdout(predicate::str::contains("description: A learner enrolled in the system"));
+        .stdout(predicate::str::contains(
+            "description: A learner enrolled in the system",
+        ));
 
-    temp.child(".tep/tep.db")
-        .assert(predicates::path::exists());
+    temp.child(".tep/tep.db").assert(predicates::path::exists());
 }
 
 #[test]
@@ -53,19 +54,38 @@ fn entity_command_fails_cleanly_outside_workspace() {
 #[test]
 fn entity_list_shows_one_line_intro_format() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
-
     Command::cargo_bin("tep")
         .unwrap()
         .current_dir(temp.path())
-        .args(["entity", "create", "Student", "--ref", "./docs/student.md", "--description", "A learner"])
+        .args(["init"])
         .assert()
         .success();
 
     Command::cargo_bin("tep")
         .unwrap()
         .current_dir(temp.path())
-        .args(["entity", "create", "Teacher", "--description", "An instructor"])
+        .args([
+            "entity",
+            "create",
+            "Student",
+            "--ref",
+            "./docs/student.md",
+            "--description",
+            "A learner",
+        ])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args([
+            "entity",
+            "create",
+            "Teacher",
+            "--description",
+            "An instructor",
+        ])
         .assert()
         .success();
 
@@ -75,23 +95,49 @@ fn entity_list_shows_one_line_intro_format() {
         .args(["entity", "list"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("1 student - \"A learner\" (./docs/student.md)"))
+        .stdout(predicate::str::contains(
+            "1 student - \"A learner\" (./docs/student.md)",
+        ))
         .stdout(predicate::str::contains("2 teacher - \"An instructor\""));
 }
 
 #[test]
 fn entity_show_includes_incoming_and_outgoing_links() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "Student"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "Subject"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "Teacher"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "Student"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "Subject"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "Teacher"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
         .current_dir(temp.path())
         .args([
-            "entity", "link", "Student", "Subject", "--relation",
+            "entity",
+            "link",
+            "Student",
+            "Subject",
+            "--relation",
             "student has subjects assigned to him each semester",
         ])
         .assert()
@@ -101,7 +147,11 @@ fn entity_show_includes_incoming_and_outgoing_links() {
         .unwrap()
         .current_dir(temp.path())
         .args([
-            "entity", "link", "Teacher", "Student", "--relation",
+            "entity",
+            "link",
+            "Teacher",
+            "Student",
+            "--relation",
             "teacher mentors student",
         ])
         .assert()
@@ -116,7 +166,9 @@ fn entity_show_includes_incoming_and_outgoing_links() {
         .stdout(predicate::str::contains("links:"))
         .stdout(predicate::str::contains("subject"))
         .stdout(predicate::str::contains("teacher"))
-        .stdout(predicate::str::contains("student has subjects assigned to him each semester"))
+        .stdout(predicate::str::contains(
+            "student has subjects assigned to him each semester",
+        ))
         .stdout(predicate::str::contains("teacher mentors student"));
 }
 
@@ -134,9 +186,33 @@ fn entity_context_includes_all_link_directions_by_default() {
         .success();
 
     for args in [
-        vec!["entity", "create", "student", "--ref", "./docs/student.md", "--description", "A learner"],
-        vec!["entity", "create", "subject", "--ref", "./docs/subject.md", "--description", "A course"],
-        vec!["entity", "create", "teacher", "--ref", "./docs/teacher.md", "--description", "An instructor"],
+        vec![
+            "entity",
+            "create",
+            "student",
+            "--ref",
+            "./docs/student.md",
+            "--description",
+            "A learner",
+        ],
+        vec![
+            "entity",
+            "create",
+            "subject",
+            "--ref",
+            "./docs/subject.md",
+            "--description",
+            "A course",
+        ],
+        vec![
+            "entity",
+            "create",
+            "teacher",
+            "--ref",
+            "./docs/teacher.md",
+            "--description",
+            "An instructor",
+        ],
     ] {
         Command::cargo_bin("tep")
             .expect("binary should build")
@@ -154,8 +230,22 @@ fn entity_context_includes_all_link_directions_by_default() {
         .success();
 
     for args in [
-        vec!["entity", "link", "student", "subject", "--relation", "student has subjects"],
-        vec!["entity", "link", "teacher", "student", "--relation", "teacher mentors student"],
+        vec![
+            "entity",
+            "link",
+            "student",
+            "subject",
+            "--relation",
+            "student has subjects",
+        ],
+        vec![
+            "entity",
+            "link",
+            "teacher",
+            "student",
+            "--relation",
+            "teacher mentors student",
+        ],
     ] {
         Command::cargo_bin("tep")
             .unwrap()
@@ -181,7 +271,12 @@ fn entity_context_includes_all_link_directions_by_default() {
 #[test]
 fn entity_create_rejects_empty_name() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -195,7 +290,12 @@ fn entity_create_rejects_empty_name() {
 #[test]
 fn entity_create_rejects_invalid_name_characters() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -203,27 +303,47 @@ fn entity_create_rejects_invalid_name_characters() {
         .args(["entity", "create", "basic-user"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("entity name may only contain lowercase letters, numbers, dots, and underscores"));
+        .stderr(predicate::str::contains(
+            "entity name may only contain lowercase letters, numbers, dots, and underscores",
+        ));
 }
 
 #[test]
 fn entity_create_rejects_description_quotes() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
         .current_dir(temp.path())
-        .args(["entity", "create", "student", "--description", "A \"learner\""])
+        .args([
+            "entity",
+            "create",
+            "student",
+            "--description",
+            "A \"learner\"",
+        ])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("entity description cannot contain quotes"));
+        .stderr(predicate::str::contains(
+            "entity description cannot contain quotes",
+        ));
 }
 
 #[test]
 fn entity_ensure_creates_entity_if_absent() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -237,7 +357,12 @@ fn entity_ensure_creates_entity_if_absent() {
 #[test]
 fn entity_ensure_is_idempotent() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -269,30 +394,70 @@ fn entity_ensure_is_idempotent() {
 #[test]
 fn entity_edit_success() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "student"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "student"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
         .current_dir(temp.path())
-        .args(["entity", "edit", "student", "--description", "A learner in the system"])
+        .args([
+            "entity",
+            "edit",
+            "student",
+            "--description",
+            "A learner in the system",
+        ])
         .assert()
         .success()
         .stdout(predicate::str::contains("updated"))
-        .stdout(predicate::str::contains("description: A learner in the system"));
+        .stdout(predicate::str::contains(
+            "description: A learner in the system",
+        ));
 }
 
 #[test]
 fn entity_unlink_removes_link() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "student"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "subject"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "student"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "subject"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
         .current_dir(temp.path())
-        .args(["entity", "link", "student", "subject", "--relation", "student attends subject"])
+        .args([
+            "entity",
+            "link",
+            "student",
+            "subject",
+            "--relation",
+            "student attends subject",
+        ])
         .assert()
         .success();
 
@@ -317,16 +482,30 @@ fn entity_unlink_removes_link() {
 #[test]
 fn entity_context_files_only_omits_snippets() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    std::fs::write(temp.path().join("note.txt"), "hello world\n[#!#tep:my_anchor](student)\n")
-        .expect("should write file");
+    std::fs::write(
+        temp.path().join("note.txt"),
+        "hello world\n[#!#tep:my_anchor](student)\n",
+    )
+    .expect("should write file");
 
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
         .args(["entity", "create", "student", "--ref", "./docs/student.md"])
-        .assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path())
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
         .args(["anchor", "auto", "./note.txt"])
-        .assert().success();
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -341,7 +520,12 @@ fn entity_context_files_only_omits_snippets() {
 #[test]
 fn entity_list_is_empty_on_fresh_workspace() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -355,7 +539,12 @@ fn entity_list_is_empty_on_fresh_workspace() {
 #[test]
 fn entity_shorthand_alias_works() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -369,8 +558,18 @@ fn entity_shorthand_alias_works() {
 #[test]
 fn entity_create_rejects_duplicate_name() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "student"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "student"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -383,8 +582,18 @@ fn entity_create_rejects_duplicate_name() {
 #[test]
 fn entity_edit_requires_at_least_one_field() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "student"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "student"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -392,13 +601,20 @@ fn entity_edit_requires_at_least_one_field() {
         .args(["entity", "edit", "student"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("entity edit requires at least one field to update"));
+        .stderr(predicate::str::contains(
+            "entity edit requires at least one field to update",
+        ));
 }
 
 #[test]
 fn entity_show_reports_missing_entity() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -412,9 +628,24 @@ fn entity_show_reports_missing_entity() {
 #[test]
 fn entity_link_rejects_empty_relation() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "student"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "subject"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "student"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "subject"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
@@ -428,13 +659,30 @@ fn entity_link_rejects_empty_relation() {
 #[test]
 fn entity_link_rejects_self_link() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();
-    Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["entity", "create", "student"]).assert().success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+    Command::cargo_bin("tep")
+        .unwrap()
+        .current_dir(temp.path())
+        .args(["entity", "create", "student"])
+        .assert()
+        .success();
 
     Command::cargo_bin("tep")
         .unwrap()
         .current_dir(temp.path())
-        .args(["entity", "link", "student", "student", "--relation", "self link"])
+        .args([
+            "entity",
+            "link",
+            "student",
+            "student",
+            "--relation",
+            "self link",
+        ])
         .assert()
         .failure()
         .stderr(predicate::str::contains("entity cannot link to itself"));
@@ -454,11 +702,51 @@ fn entity_context_can_expand_link_depth() {
         .success();
 
     for args in [
-        vec!["entity", "create", "student", "--ref", "./docs/student.md", "--description", "A learner"],
-        vec!["entity", "create", "subject", "--ref", "./docs/subject.md", "--description", "A course"],
-        vec!["entity", "create", "semester", "--ref", "./docs/semester.md", "--description", "A term"],
-        vec!["entity", "create", "teacher", "--ref", "./docs/teacher.md", "--description", "An instructor"],
-        vec!["entity", "create", "department", "--ref", "./docs/department.md", "--description", "An org unit"],
+        vec![
+            "entity",
+            "create",
+            "student",
+            "--ref",
+            "./docs/student.md",
+            "--description",
+            "A learner",
+        ],
+        vec![
+            "entity",
+            "create",
+            "subject",
+            "--ref",
+            "./docs/subject.md",
+            "--description",
+            "A course",
+        ],
+        vec![
+            "entity",
+            "create",
+            "semester",
+            "--ref",
+            "./docs/semester.md",
+            "--description",
+            "A term",
+        ],
+        vec![
+            "entity",
+            "create",
+            "teacher",
+            "--ref",
+            "./docs/teacher.md",
+            "--description",
+            "An instructor",
+        ],
+        vec![
+            "entity",
+            "create",
+            "department",
+            "--ref",
+            "./docs/department.md",
+            "--description",
+            "An org unit",
+        ],
     ] {
         Command::cargo_bin("tep")
             .expect("binary should build")
@@ -476,11 +764,46 @@ fn entity_context_can_expand_link_depth() {
         .success();
 
     for args in [
-        vec!["entity", "link", "student", "subject", "--relation", "student has subjects"],
-        vec!["entity", "link", "subject", "semester", "--relation", "subject is scheduled in semester"],
-        vec!["entity", "link", "semester", "student", "--relation", "semester contains student records"],
-        vec!["entity", "link", "teacher", "student", "--relation", "teacher mentors student"],
-        vec!["entity", "link", "department", "teacher", "--relation", "department employs teacher"],
+        vec![
+            "entity",
+            "link",
+            "student",
+            "subject",
+            "--relation",
+            "student has subjects",
+        ],
+        vec![
+            "entity",
+            "link",
+            "subject",
+            "semester",
+            "--relation",
+            "subject is scheduled in semester",
+        ],
+        vec![
+            "entity",
+            "link",
+            "semester",
+            "student",
+            "--relation",
+            "semester contains student records",
+        ],
+        vec![
+            "entity",
+            "link",
+            "teacher",
+            "student",
+            "--relation",
+            "teacher mentors student",
+        ],
+        vec![
+            "entity",
+            "link",
+            "department",
+            "teacher",
+            "--relation",
+            "department employs teacher",
+        ],
     ] {
         Command::cargo_bin("tep")
             .unwrap()

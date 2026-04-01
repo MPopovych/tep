@@ -8,5 +8,8 @@ pub fn format_anchor_line(anchor: &Anchor) -> String {
     let line = paint(ANSI_GREEN, anchor.line.unwrap_or(0).to_string());
     let shift = paint(ANSI_MAGENTA, anchor.shift.unwrap_or(0).to_string());
     let offset = paint(ANSI_YELLOW, anchor.offset.unwrap_or(0).to_string());
-    format!("anchor:{} {} {} ({}:{}) [{}]\n", anchor.anchor_id, name, file, line, shift, offset)
+    format!(
+        "anchor:{} {} {} ({}:{}) [{}]\n",
+        anchor.anchor_id, name, file, line, shift, offset
+    )
 }

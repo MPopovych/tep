@@ -1,6 +1,12 @@
-use crate::cli::{EditEntityArgs, EntityAutoArgs, EntityCommands, EntityContextArgs, UpsertEntityArgs};
+use crate::cli::{
+    EditEntityArgs, EntityAutoArgs, EntityCommands, EntityContextArgs, UpsertEntityArgs,
+};
 use crate::commands::support::{print_rendered, with_entity_service};
-use crate::output::entity_output::{format_entity_auto_result, format_entity_context, format_entity_context_files_only, format_entity_created, format_entity_link_result, format_entity_list, format_entity_show, format_entity_unlink_result};
+use crate::output::entity_output::{
+    format_entity_auto_result, format_entity_context, format_entity_context_files_only,
+    format_entity_created, format_entity_link_result, format_entity_list, format_entity_show,
+    format_entity_unlink_result,
+};
 use crate::service::entity_service::EntityService;
 
 pub fn run(command: EntityCommands) -> anyhow::Result<()> {
@@ -65,7 +71,11 @@ fn link(service: &EntityService<'_>, from: &str, to: &str, relation: &str) -> an
 
 fn unlink(service: &EntityService<'_>, from: &str, to: &str) -> anyhow::Result<()> {
     let (from_entity, to_entity) = service.unlink(from, to)?;
-    print_rendered(format_entity_unlink_result("unlinked", &from_entity, &to_entity));
+    print_rendered(format_entity_unlink_result(
+        "unlinked",
+        &from_entity,
+        &to_entity,
+    ));
     Ok(())
 }
 

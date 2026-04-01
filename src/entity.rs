@@ -77,7 +77,9 @@ pub fn validate_name(name: &str) -> Result<(), &'static str> {
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '_')
     {
-        return Err("entity name may only contain lowercase letters, numbers, dots, and underscores");
+        return Err(
+            "entity name may only contain lowercase letters, numbers, dots, and underscores",
+        );
     }
     Ok(())
 }
@@ -155,6 +157,7 @@ fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntit
     })
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,7 +169,10 @@ mod tests {
 
     #[test]
     fn parses_non_numeric_lookup_as_normalized_name() {
-        assert_eq!(parse_lookup("Student"), EntityLookup::Name("student".into()));
+        assert_eq!(
+            parse_lookup("Student"),
+            EntityLookup::Name("student".into())
+        );
     }
 
     #[test]
@@ -247,7 +253,8 @@ mod tests {
 
     #[test]
     fn ignores_entity_declarations_after_tepignoreafter_marker() {
-        let parsed = parse_entity_declarations("(#!#tep:Student)\n#tepignoreafter\n(#!#tep:Teacher)");
+        let parsed =
+            parse_entity_declarations("(#!#tep:Student)\n#tepignoreafter\n(#!#tep:Teacher)");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].name, "student");
     }

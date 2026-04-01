@@ -22,6 +22,7 @@ impl<'a> AnchorRepository<'a> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn create(
         &self,
         version: i64,
@@ -41,9 +42,12 @@ impl<'a> AnchorRepository<'a> {
         shift: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Anchor> {
-        let existing = self
-            .find_by_id(anchor_id)?
-            .with_context(|| format!("materialized anchor {} was found in a file but does not exist in the database", anchor_id))?;
+        let existing = self.find_by_id(anchor_id)?.with_context(|| {
+            format!(
+                "materialized anchor {} was found in a file but does not exist in the database",
+                anchor_id
+            )
+        })?;
 
         let normalized = self.normalize_path(file_path);
         if self.normalize_path(&existing.file_path) != normalized {
@@ -107,7 +111,9 @@ impl<'a> AnchorRepository<'a> {
         let mut stmt = self.conn.prepare(
             "SELECT anchor_id, version, name, file_path, line, shift, offset, created_at, updated_at FROM anchors WHERE anchor_id = ?1",
         )?;
-        let anchor = stmt.query_row(params![anchor_id], map_anchor_row).optional()?;
+        let anchor = stmt
+            .query_row(params![anchor_id], map_anchor_row)
+            .optional()?;
         Ok(anchor)
     }
 
@@ -121,9 +127,9 @@ impl<'a> AnchorRepository<'a> {
 
     pub fn list_ids_for_file(&self, file_path: &str) -> Result<Vec<i64>> {
         let normalized = self.normalize_path(file_path);
-        let mut stmt = self.conn.prepare(
-            "SELECT anchor_id FROM anchors WHERE file_path = ?1 ORDER BY anchor_id ASC",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT anchor_id FROM anchors WHERE file_path = ?1 ORDER BY anchor_id ASC")?;
         let rows = stmt.query_map(params![normalized], |row| row.get::<_, i64>(0))?;
         let ids = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(ids)
@@ -166,7 +172,11 @@ impl<'a> AnchorRepository<'a> {
         Ok(anchors)
     }
 
-    pub fn find_latest_for_entity_in_file(&self, entity_id: i64, file_path: &str) -> Result<Option<Anchor>> {
+    pub fn find_latest_for_entity_in_file(
+        &self,
+        entity_id: i64,
+        file_path: &str,
+    ) -> Result<Option<Anchor>> {
         let normalized = self.normalize_path(file_path);
         let mut stmt = self.conn.prepare(
             "SELECT a.anchor_id, a.version, a.name, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
@@ -176,13 +186,18 @@ impl<'a> AnchorRepository<'a> {
              ORDER BY a.anchor_id DESC
              LIMIT 1",
         )?;
-        let anchor = stmt.query_row(params![entity_id, normalized], map_anchor_row).optional()?;
+        let anchor = stmt
+            .query_row(params![entity_id, normalized], map_anchor_row)
+            .optional()?;
         Ok(anchor)
     }
 
     pub fn delete(&self, anchor_id: i64) -> Result<()> {
         self.conn
-            .execute("DELETE FROM anchors WHERE anchor_id = ?1", params![anchor_id])
+            .execute(
+                "DELETE FROM anchors WHERE anchor_id = ?1",
+                params![anchor_id],
+            )
             .with_context(|| format!("failed to delete anchor {}", anchor_id))?;
         Ok(())
     }
@@ -213,6 +228,7 @@ fn map_anchor_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Anchor> {
     })
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,8 +280,12 @@ mod tests {
     #[test]
     fn update_location_accepts_legacy_absolute_path_equivalent() {
         let repo = setup_repo();
-        let anchor = repo.create(1, "/tmp/project/./file.txt", Some(1), Some(0), Some(0)).unwrap();
-        let updated = repo.update_location(anchor.anchor_id, "./file.txt", Some(2), Some(0), Some(5)).unwrap();
+        let anchor = repo
+            .create(1, "/tmp/project/./file.txt", Some(1), Some(0), Some(0))
+            .unwrap();
+        let updated = repo
+            .update_location(anchor.anchor_id, "./file.txt", Some(2), Some(0), Some(5))
+            .unwrap();
         assert_eq!(updated.file_path, "./file.txt");
     }
 
@@ -283,15 +303,20 @@ mod tests {
             .create(1, "./file.txt", Some(2), Some(3), Some(12))
             .expect("create should succeed");
 
-        let result = repo.update_location(anchor.anchor_id, "./other.txt", Some(1), Some(0), Some(0));
+        let result =
+            repo.update_location(anchor.anchor_id, "./other.txt", Some(1), Some(0), Some(0));
         assert!(result.is_err());
     }
 
     #[test]
     fn list_ids_for_file_and_delete_work() {
         let repo = setup_repo();
-        let a = repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
-        let b = repo.create(1, "/tmp/project/./file.txt", Some(2), Some(0), Some(5)).unwrap();
+        let a = repo
+            .create(1, "./file.txt", Some(1), Some(0), Some(0))
+            .unwrap();
+        let b = repo
+            .create(1, "/tmp/project/./file.txt", Some(2), Some(0), Some(5))
+            .unwrap();
         let ids = repo.list_ids_for_file("file.txt").unwrap();
         assert_eq!(ids, vec![a.anchor_id, b.anchor_id]);
         repo.delete(a.anchor_id).unwrap();
@@ -302,7 +327,8 @@ mod tests {
     #[test]
     fn list_without_entities_returns_orphan_anchor() {
         let repo = setup_repo();
-        repo.create(1, "./docs/orphan.md", Some(1), Some(0), Some(0)).unwrap();
+        repo.create(1, "./docs/orphan.md", Some(1), Some(0), Some(0))
+            .unwrap();
         let anchors = repo.list_without_entities().unwrap();
         assert_eq!(anchors.len(), 1);
         assert_eq!(anchors[0].file_path, "./docs/orphan.md");
@@ -316,8 +342,16 @@ mod tests {
         let entity_repo = EntityRepository::new(conn);
         let rel_repo = AnchorEntityRepository::new(conn);
 
-        let anchor = anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
-        let entity = entity_repo.create(&NewEntity { name: "student".into(), r#ref: None, description: None }).unwrap();
+        let anchor = anchor_repo
+            .create(1, "./file.txt", Some(1), Some(0), Some(0))
+            .unwrap();
+        let entity = entity_repo
+            .create(&NewEntity {
+                name: "student".into(),
+                r#ref: None,
+                description: None,
+            })
+            .unwrap();
         rel_repo.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
         let anchors = anchor_repo.list_for_entity(entity.entity_id).unwrap();
@@ -333,11 +367,25 @@ mod tests {
         let entity_repo = EntityRepository::new(conn);
         let rel_repo = AnchorEntityRepository::new(conn);
 
-        let entity = entity_repo.create(&NewEntity { name: "student".into(), r#ref: None, description: None }).unwrap();
-        let old_anchor = anchor_repo.create(1, "./file.txt", Some(1), Some(0), Some(0)).unwrap();
-        let new_anchor = anchor_repo.create(1, "/tmp/project/./file.txt", Some(2), Some(0), Some(5)).unwrap();
-        rel_repo.attach(old_anchor.anchor_id, entity.entity_id).unwrap();
-        rel_repo.attach(new_anchor.anchor_id, entity.entity_id).unwrap();
+        let entity = entity_repo
+            .create(&NewEntity {
+                name: "student".into(),
+                r#ref: None,
+                description: None,
+            })
+            .unwrap();
+        let old_anchor = anchor_repo
+            .create(1, "./file.txt", Some(1), Some(0), Some(0))
+            .unwrap();
+        let new_anchor = anchor_repo
+            .create(1, "/tmp/project/./file.txt", Some(2), Some(0), Some(5))
+            .unwrap();
+        rel_repo
+            .attach(old_anchor.anchor_id, entity.entity_id)
+            .unwrap();
+        rel_repo
+            .attach(new_anchor.anchor_id, entity.entity_id)
+            .unwrap();
 
         let found = anchor_repo
             .find_latest_for_entity_in_file(entity.entity_id, "file.txt")
@@ -349,6 +397,9 @@ mod tests {
     #[test]
     fn normalized_path_for_returns_workspace_relative_path() {
         let repo = setup_repo();
-        assert_eq!(repo.normalized_path_for("/tmp/project/./docs/a.md"), "./docs/a.md");
+        assert_eq!(
+            repo.normalized_path_for("/tmp/project/./docs/a.md"),
+            "./docs/a.md"
+        );
     }
 }

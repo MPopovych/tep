@@ -29,10 +29,26 @@ pub fn format_anchor_health_result(report: &HealthReport) -> String {
 
     append_group(&mut out, "moved anchors", &report.groups.moved_anchors);
     append_group(&mut out, "missing anchors", &report.groups.missing_anchors);
-    append_group(&mut out, "duplicate anchor ids", &report.groups.duplicate_anchor_ids);
-    append_group(&mut out, "unknown anchor ids", &report.groups.unknown_anchor_ids);
-    append_group(&mut out, "entities without anchors", &report.groups.entities_without_anchors);
-    append_group(&mut out, "anchors without entities", &report.groups.anchors_without_entities);
+    append_group(
+        &mut out,
+        "duplicate anchor ids",
+        &report.groups.duplicate_anchor_ids,
+    );
+    append_group(
+        &mut out,
+        "unknown anchor ids",
+        &report.groups.unknown_anchor_ids,
+    );
+    append_group(
+        &mut out,
+        "entities without anchors",
+        &report.groups.entities_without_anchors,
+    );
+    append_group(
+        &mut out,
+        "anchors without entities",
+        &report.groups.anchors_without_entities,
+    );
 
     out
 }
@@ -61,6 +77,7 @@ fn append_group(out: &mut String, label: &str, items: &[String]) {
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

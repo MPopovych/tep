@@ -1,6 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 
-const ABOUT: &str = "text entity pointers — connect concepts to locations in your codebase and docs";
+const ABOUT: &str =
+    "text entity pointers — connect concepts to locations in your codebase and docs";
 const ENTITY_ABOUT: &str = "Work with entities, descriptions, refs, and directional links";
 const ANCHOR_ABOUT: &str = "Work with anchors, names, and anchor-entity attachments";
 
@@ -50,7 +51,10 @@ pub enum Commands {
 
 #[derive(Debug, Args, Clone)]
 pub struct HealthArgs {
-    #[arg(default_value = ".", help = "File or directory to audit relative to the workspace")]
+    #[arg(
+        default_value = ".",
+        help = "File or directory to audit relative to the workspace"
+    )]
     pub path: String,
 }
 
@@ -132,7 +136,11 @@ pub struct EntityContextArgs {
     pub target: String,
     #[arg(long, help = "Show files and linked entities without anchor snippets")]
     pub files_only: bool,
-    #[arg(long, default_value_t = 1, help = "Traverse directional links up to this depth")]
+    #[arg(
+        long,
+        default_value_t = 1,
+        help = "Traverse directional links up to this depth"
+    )]
     pub link_depth: usize,
 }
 

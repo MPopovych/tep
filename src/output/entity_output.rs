@@ -1,7 +1,9 @@
 use crate::entity::Entity;
 use crate::output::anchor_format::format_anchor_line;
 use crate::output::render::{append_entity_metadata, append_link_block, render_entity_header};
-use crate::service::entity_service::{EntityAutoResult, EntityContextResult, EntityLinkResult, EntityShowResult};
+use crate::service::entity_service::{
+    EntityAutoResult, EntityContextResult, EntityLinkResult, EntityShowResult,
+};
 
 pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
     let mut out = format!("{prefix}\n");
@@ -79,11 +81,7 @@ pub fn format_entity_link_result(prefix: &str, result: &EntityLinkResult) -> Str
 pub fn format_entity_unlink_result(prefix: &str, from: &Entity, to: &Entity) -> String {
     format!(
         "{}\nfrom: {} ({})\nto: {} ({})\n",
-        prefix,
-        from.entity_id,
-        from.name,
-        to.entity_id,
-        to.name
+        prefix, from.entity_id, from.name, to.entity_id, to.name
     )
 }
 
@@ -113,6 +111,7 @@ fn format_entity_list_line(entity: &Entity) -> String {
     out
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,6 +260,9 @@ mod tests {
             }],
         });
         assert!(rendered.contains("links:"));
-        assert!(rendered.contains("-> 10 (subject) [./docs/subject.md]  student has subjects  [depth:2]"));
+        assert!(
+            rendered
+                .contains("-> 10 (subject) [./docs/subject.md]  student has subjects  [depth:2]")
+        );
     }
 }
