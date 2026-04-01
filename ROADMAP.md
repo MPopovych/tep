@@ -4,9 +4,9 @@
 - initialize a local `tep` workspace
 - create entities
 - auto-declare entities from files
-- place and materialize anchor tags in files
-- store anchors in SQLite using the in-file anchor ID as identity
-- attach entities to anchors through a many-to-many association
+- place named anchor tags in files; `anchor auto` registers and syncs them
+- store anchors in SQLite using the anchor name as identity
+- anchor-entity relations managed through tag syntax
 - retrieve direct entity and anchor context
 
 ## Phase 2: agent-friendly retrieval

@@ -47,13 +47,13 @@ This is a lightweight implementation backlog for the early `tep` project.
 - [x] introduce anchor schema
 - [x] introduce anchor-entity relation schema
 - [x] implement initial `tep anchor <pathspec...>` command
-- [x] detect incomplete anchors
+- [x] detect named anchor tags
 - [x] materialize anchors with version and anchor ID
 - [x] support comma-separated multiple entity references at parse level
 - [x] record `line`, `shift`, and `offset`
 - [x] bind entity references to entities
 - [x] persist anchor-entity relations
-- [x] add manual relation manipulation via `attach` and `detach`
+- [-] manual `attach`/`detach` commands (removed — relations managed through tag syntax)
 - [x] improve failure behavior for unknown materialized anchors
 - [x] introduce reusable filter layer for `.tep_ignore`
 - [x] detect dropped anchors in targeted files

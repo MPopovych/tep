@@ -92,7 +92,8 @@ tep e ...
 ### Anchors
 ```bash
 tep anchor auto <pathspec...>
-tep anchor show <anchor-id>
+tep anchor show <name>
+tep anchor list
 ```
 
 Shorthand:
@@ -100,24 +101,20 @@ Shorthand:
 tep a ...
 ```
 
-### Entity-anchor associations
-```bash
-tep attach <entity-id-or-name> <anchor-id>
-tep detach <entity-id-or-name> <anchor-id>
-```
-
 ## Marker syntax
 
 ### Anchor tag
 ```txt
-[#!#tep:](student) #tepignore
-[#!#1#tep:123](student) #tepignore
+[#!#tep:anchor_name](entity1,entity2) #tepignore
 ```
+
+- name is required: lowercase, `[a-z0-9._]`, not purely numeric
+- entity ref list is required (at least one)
+- the name is the durable identity; numeric IDs are internal
 
 ### Entity declaration tag
 ```txt
 (#!#tep:student) #tepignore
-(#!#1#tep:student) #tepignore
 ```
 
 Bracket type decides the role:
@@ -170,10 +167,11 @@ Not part of the current implemented CLI surface:
 - `status`
 - `doctor`
 - `scan`
-- `anchor list`
 - `resolve`
 - `graph`
 - `context get`
+- `attach` / `detach` top-level commands (relations managed through tag syntax)
+- `anchor edit` (rename command removed)
 - a required explicit migrate command for routine schema upgrades
 
 Those can be revisited later, but the docs should not present them as current commands.

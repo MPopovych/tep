@@ -18,17 +18,16 @@ Minimal entity data should stay simple:
 
 ### 2. Anchor synchronization and tracking
 Allow users to:
-- place incomplete anchors in files
-- materialize anchors through `tep anchor <pathspec...>`
+- place named anchor tags in files: `[#!#tep:name](entity1,entity2)`
+- register and sync anchors through `tep anchor auto <pathspec...>`
 - inspect known anchors
 - understand where anchors currently appear
 - refresh file-local anchor state
 
 Important note:
-- location metadata is useful
-- location metadata is not durable truth
-- anchor identity comes from the materialized in-file anchor ID
-- the optional `( ... )` suffix acts as an entity reference instruction list
+- location metadata is useful but not durable truth
+- anchor identity is the name in the tag
+- the `( ... )` suffix is the entity reference list and is required
 
 ### 3. Anchor-entity relations
 Allow users to:
@@ -66,7 +65,7 @@ Allow users to:
 The first useful feature slice probably includes:
 - entity create/ensure/read/edit/list
 - init
-- later: anchor materialization via `tep anchor`
+- anchor auto via `tep anchor auto`
 - anchor inspection
 - relation handling
 - resolve

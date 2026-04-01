@@ -16,7 +16,7 @@ You create entities for meaningful things such as:
 - services
 - UI flows
 
-You place anchor tags into relevant files, attach entities to anchors, and connect entities with links.
+You place named anchor tags into relevant files, run `anchor auto` to register them, and connect entities with links.
 
 Potential value:
 - easier onboarding

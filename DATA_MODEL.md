@@ -2,8 +2,6 @@
 
 ## 1. Entity
 
-[#!#1#tep:22](entity)
-
 Current shape:
 - `entity_id` (integer)
 - `name` (unique)
@@ -20,10 +18,9 @@ Notes:
 
 ## 2. Anchor
 
-[#!#1#tep:23](anchor,anchor.tag)
-
 Current shape:
-- `anchor_id` (integer)
+- `anchor_id` (integer, internal)
+- `name` (unique, the tag identity)
 - `version`
 - `file_path`
 - `line`
@@ -33,13 +30,12 @@ Current shape:
 - `updated_at`
 
 Notes:
-- the durable identity is the `anchor_id`
+- the durable tag identity is the `name`
+- `anchor_id` is internal; shown in list/show output
 - `line`, `shift`, and `offset` are metadata, not identity
 - `shift` and `offset` are byte-oriented in practice
 
 ## 3. Anchor-entity relation
-
-[#!#1#tep:24](anchor_entity_relation,entity,anchor)
 
 This is a many-to-many relation.
 
@@ -52,8 +48,6 @@ This relation should stay separate from both:
 - the anchor table
 
 ## 4. Entity link
-
-[#!#1#tep:25](link,entity)
 
 Current shape:
 - `from_entity_id`

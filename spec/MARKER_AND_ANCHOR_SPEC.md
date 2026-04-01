@@ -1,121 +1,93 @@
 # Marker and Anchor Spec
 
-This document describes the current planned marker and anchor behavior.
+This document describes the current anchor tag syntax and behavior.
 
-## Marker states
+## Anchor tag format
 
-There are two planned states:
-- incomplete anchor
-- materialized anchor
-
-## Incomplete anchor format
-
-Planned examples:
+The canonical anchor tag format is:
 
 ```txt
-[#!#tep:](student)
-[#!#tep:](student,basic_user)
-[#!#tep:]
+[#!#tep:anchor_name](entity1,entity2)
 ```
 
-Important:
-- the optional `( ... )` suffix is an entity reference instruction list
-- incomplete anchors do not yet contain version or anchor ID information
-- the `:` represents the anchor ID slot
-- in incomplete form, the slot is empty
+Rules:
+- `[#!#tep:` — fixed opening pattern
+- `anchor_name` — required, human-readable name (charset: `[a-z0-9._]`, not purely numeric)
+- `(entity1,entity2)` — required entity reference list (at least one entity)
+- anchors without entity refs are ignored
 
-## Materialized anchor format
+Examples:
+```txt
+[#!#tep:student_processor](student)
+[#!#tep:auth_flow](auth,session)
+```
 
-Planned examples:
+## Anchor name rules
+
+- lowercase letters, digits, dots, and underscores only: `[a-z0-9._]`
+- mixed-case input is normalized to lowercase on parse
+- purely numeric names are rejected
+- dashes are not allowed
+
+Valid: `student_processor`, `auth.flow`, `v2_login`
+Invalid: `student-processor`, `123`, `AuthFlow`
+
+## Ignored / rejected tags
+
+The following are silently ignored:
 
 ```txt
-[#!#1#tep:123763636473](student)
-[#!#1#tep:123763636474](student,basic_user)
+[#!#tep:]                     ← no name
+[#!#tep:my_anchor]            ← no entity refs
+[#!#tep:my_anchor]()          ← empty entity refs
+[#!#tep:123](student)         ← purely numeric name
+[#!#tep:bad-name](student)    ← invalid charset
+[#!#1#tep:name](student)      ← old version-prefixed format, not recognized
 ```
 
-Without entity reference instruction:
+## Entity reference list
 
-```txt
-[#!#1#tep:123763636475]
-```
+The `(...)` suffix is a list of entity names, comma-separated.
 
-## Marker meaning
-
-Parts of a materialized anchor:
-- `[#!#` — special opening pattern
-- `1` — tep anchor format/version marker
-- `tep:` — namespace and anchor ID slot prefix
-- `123763636473` — anchor ID filling the slot
-- optional `( ... )` — entity reference instruction list
+Behavior:
+- each name is resolved by name in the DB; if missing, it is auto-created
+- the anchor is linked to all listed entities after `anchor auto` runs
+- the list replaces previous relations for that anchor on each sync
 
 ## Ignore controls
 
-### Line-local ignore
-If a line contains:
+### Line-local: `#tepignore`
+
+Anchors on a line containing `#tepignore` are ignored.
 
 ```txt
-#tepignore
+[#!#tep:example](student) #tepignore
 ```
 
-anchors on that line are ignored.
+Use for docs, examples, test strings that show anchor syntax.
 
-Use this for:
-- isolated example lines
-- one-off fake marker literals
-- regex/test/example strings that only affect a single line
+### File-tail: `#tepignoreafter`
 
-### File-tail ignore
-If a file contains:
+Everything after the first occurrence of `#tepignoreafter` is ignored.
 
 ```txt
-#tepignoreafter
+// #tepignoreafter
+#[cfg(test)]
+mod tests { ... }
 ```
 
-then everything after the first occurrence of that marker is ignored by anchor parsing and auto-indexing.
+Use for test modules and fixture tails.
 
-Use this for:
-- fixture files
-- intentionally broken examples
-- unit-test data stored below a cutoff marker
-- `#[cfg(test)]` modules in source files when the whole tail is non-canonical graph material
+**Rule of thumb:** `#tepignore` for a few noisy lines, `#tepignoreafter` for entire test/fixture tails.
 
-### Practical rule
+## Under the hood
 
-Prefer:
-- `#tepignore` for a few noisy lines
-- `#tepignoreafter` for a large fixture/test tail
+Anchors still have numeric `anchor_id` in the DB — they are shown in `anchor list` and `anchor show` output. The name is the tag identity; the numeric ID is internal.
 
-## Core rules
+## Location metadata
 
-1. The materialized marker contains the **anchor ID**.
-2. The marker does **not** contain an entity ID as its durable identity.
-3. The entity reference instruction list is optional.
-4. A single anchor may be associated with multiple entities.
-5. A single entity may be associated with multiple anchors.
-6. Repeated incomplete entity reference instructions in different physical positions still become different anchors.
-7. Multiple entity references may be listed with comma separation inside `( ... )`.
+`line`, `shift`, and `offset` are refreshable metadata, not identity. They are updated on each `anchor auto` run.
 
-## Parsing expectations
+## Relationship to `tep anchor auto`
 
-A scanner or anchor-sync routine should:
-- detect incomplete anchors
-- detect materialized anchors
-- parse version when present
-- parse anchor ID when present
-- parse optional entity reference instruction list when present
-- associate the discovered anchor with the current file path
-- optionally record current location metadata (`line`, `shift`, `offset`)
-- stop parsing the remainder of a file after `#tepignoreafter`
-
-## Durability rule
-
-`line`, `shift`, and `offset` are not identity.
-They are only current or last-known metadata.
-
-## Future evolution
-
-Because the materialized marker includes a version field, the syntax can evolve later while preserving backward-compatible scanning behavior.
-
-## Relationship to `tep anchor`
-
-The planned `tep anchor <pathspec...>` command is responsible for turning incomplete anchors into materialized anchors and synchronizing file-local anchor state.
+`tep anchor auto <pathspec...>` scans files, registers new named anchors, refreshes location metadata, and syncs entity relations. It does not rewrite files.

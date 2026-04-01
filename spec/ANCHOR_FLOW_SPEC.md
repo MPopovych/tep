@@ -4,9 +4,28 @@ This document captures the current anchor workflow for `tep`.
 
 ## Core idea
 
-Users place incomplete anchors into files, then ask `tep` to materialize and synchronize them.
+Users place named anchor tags in files, then run `tep anchor auto` to register them in the workspace DB and sync entity relations.
 
-Current command shape:
+The tool never rewrites anchor tags — names are placed by the user and stay as-is.
+
+## Canonical tag format
+
+```txt
+[#!#tep:anchor_name](entity1,entity2)
+```
+
+Examples:
+```txt
+[#!#tep:student_processor](student)
+[#!#tep:auth_flow](auth,session)
+```
+
+Rules:
+- name must be non-empty, not purely numeric, charset `[a-z0-9._]`
+- at least one entity ref is required — anchors without entity refs are ignored
+- multiple entity refs are comma-separated
+
+## Command
 
 ```bash
 tep anchor auto <pathspec...>
@@ -19,166 +38,79 @@ tep anchor auto .
 tep anchor auto ./docs ./src
 ```
 
-Shorthand:
-```bash
-tep a auto <pathspec...>
-```
+Shorthand: `tep a auto <pathspec...>`
 
 ## Workspace requirement
 
-Anchor commands require a `tep` workspace.
+`anchor auto` requires a `tep` workspace. Run `tep init` first.
 
-Current behavior:
-- `tep init` creates the workspace in the current directory
-- DB-requiring commands resolve the nearest ancestor workspace from cwd
-- commands outside any workspace fail clearly and suggest `tep init`
+Commands resolve the nearest ancestor workspace from cwd, so nested directories inside a workspace work fine.
 
-## Incomplete anchor syntax
+## Behavior of `tep anchor auto`
 
-Examples:
+For each targeted file, the command:
 
-```txt
-[#!#tep:](student)
-[#!#tep:](student,basic_user)
-[#!#tep:]
-```
+1. Scans for valid anchor tags (`[#!#tep:name](entities)`)
+2. For each anchor:
+   - If the name exists in DB: update location metadata, sync entity relations
+   - If the name is new: create an anchor record, sync entity relations
+3. Detects anchors previously registered to this file that are no longer present
+4. Deletes stale anchor records for dropped anchors
 
-Rules:
-- square brackets identify anchor tags
-- the `( ... )` part is optional
-- the `:` is the anchor ID slot
-- in incomplete form, the ID slot is empty
-- multiple entity references are comma-separated inside `( ... )`
+Files are **never rewritten** — the tag format is the final format.
 
-## Materialized anchor syntax
+## Entity ref behavior
 
-Examples:
-
-```txt
-[#!#1#tep:123](student)
-[#!#1#tep:124](student,basic_user)
-[#!#1#tep:125]
-```
-
-Meaning:
-- `1` = anchor format version
-- the value after `tep:` is the anchor ID
-- `( ... )` remains an optional entity reference instruction list
-
-## Behavior of `tep anchor auto <pathspec...>`
-
-For targeted files, the command:
-
-1. scans files for incomplete and existing anchors
-2. creates new anchor records for incomplete anchors
-3. rewrites incomplete anchors into materialized anchors
-4. refreshes file-path and location metadata for existing anchors
-5. synchronizes anchor-entity relations when `( ... )` is present
-6. detects dropped anchors in those files
-7. removes stale anchor state that no longer exists in the file
-
-If a line contains the literal marker `#tepignore`, anchors on that line are ignored.
-This is useful for docs and examples that intentionally show incomplete tags.
-
-## Entity reference instruction behavior
-
-The payload in `( ... )` is optional.
-
-When present, it is treated as an entity reference instruction list.
-
-Behavior:
-- entries are comma-separated
-- each entry may be an entity ID or entity name
-- numeric values resolve by ID
-- non-numeric values resolve by name and may be ensured
-
-Important:
-- the entity instruction list is not anchor identity
-- anchor identity is the anchor ID
-
-## Entity declarations are separate
-
-`tep anchor auto` does **not** process entity declaration tags.
-Those belong to `tep entity auto`.
-
-Entity declarations use parentheses, for example:
-
-```txt
-(#!#tep:student)
-```
+When entity refs are present:
+- each name is resolved by name; auto-created if it doesn't exist
+- anchor-entity relations are **replaced** on each sync (not appended)
 
 ## Anchor show
 
-Command:
 ```bash
-tep anchor show <anchor-id>
+tep anchor show <name>
+tep a show <name>
 ```
 
-Shorthand:
-```bash
-tep a show <anchor-id>
-```
+Prints the anchor in compact form plus related entities.
 
-Behavior:
-- print the anchor in compact form
-- print related entities beneath it
-
-Shared anchor format:
+Output format:
 ```txt
-<anchor_id>
+<anchor_id> (<name>)
 <file> (<line>:<shift>) [<offset>]
+1 (student)
 ```
 
-## Repeated incomplete anchors
+## Anchor list
 
-If the same entity reference instruction appears multiple times, those are still separate anchors.
-
-Example:
-```txt
-[#!#tep:](student)
-...
-[#!#tep:](student)
+```bash
+tep anchor list
+tep a list
 ```
 
-After materialization:
-```txt
-[#!#1#tep:101](student)
-...
-[#!#1#tep:102](student)
-```
+Lists all anchors in the workspace.
 
-Each physical occurrence gets its own anchor ID.
+## Path selection
 
-## Path selection behavior
-
-Supported input forms:
+Supported inputs:
 - direct file path
 - directory path
-- current directory (`.`)
+- `.` (current directory)
 
-Selection respects `.tep_ignore`.
-It does not use `.gitignore`.
+Respects `.tep_ignore`. Does not use `.gitignore`.
 
 ## Storage model
 
-Current storage keeps these concerns separate:
-
 ### Anchors table
-Stores:
-- anchor identity
-- version
+- anchor identity (numeric id, internal)
+- anchor name (unique, the tag identity)
 - current file path
-- current location metadata (`line`, `shift`, `offset`)
+- location metadata (`line`, `shift`, `offset`)
 - timestamps
 
 ### Anchor-entity relation table
-Stores:
-- associations between anchors and entities
-
-This keeps the many-to-many model explicit.
+- many-to-many associations between anchors and entities
 
 ## Notes on metadata
 
-`line`, `shift`, and `offset` are refreshable metadata.
-They are useful for display, but not durable identity.
-The durable identity is the anchor ID.
+`line`, `shift`, and `offset` are refreshable. They are useful for display and tooling, not durable identity. The durable identity is the anchor name.

@@ -42,14 +42,12 @@ The graph lives in your repo (`.tep/`), works offline, and stays under your cont
 - Initialize and auto-migrate local workspaces
 - Create, edit, list, and query entities with names, descriptions, and refs
 - Enforce entity name normalization (`student`, not `Student` — lowercase, `[a-z0-9._]`)
-- Materialize anchor tags in files — numeric (`[#!#1#tep:42]`) or named (`[#!#1#tep:student_processor]`)
-- Named anchors: assign human-readable names to anchors, look them up by name, edit them via CLI
+- Named anchor tags — place `[#!#tep:name](entity)` in any file; `anchor auto` registers and syncs them
 - Auto-declare entities from declaration markers (`(#!#tep:student)`)
-- Attach/detach entities to anchors by entity name or id, anchor name or id
 - Directional entity-to-entity links with free-text relations
 - Assemble retrieval-oriented context bundles for entities (`entity context`)
 - Bounded link traversal (`--link-depth`)
-- Audit anchor health and auto-repair metadata
+- Audit anchor health with `tep health`
 - List all anchors in the workspace (`anchor list`)
 - Respect `.tep_ignore` for test fixtures and examples
 
@@ -95,54 +93,39 @@ Current behavior:
 
 ### Anchor tags
 
-[#!#1#tep:20](anchor,anchor.tag)
+Anchor tags use square brackets:
 
-Anchor tags use square brackets.
-
-Incomplete (anonymous):
 ```txt
-[#!#tep:](student) #tepignore
+[#!#tep:anchor_name](entity1,entity2) #tepignore
 ```
 
-Materialized (numeric id):
+Examples:
 ```txt
-[#!#1#tep:42](student) #tepignore
+[#!#tep:student_processor](student) #tepignore
+[#!#tep:auth_flow](auth,session) #tepignore
 ```
 
-Materialized (named):
-```txt
-[#!#1#tep:student_processor](student) #tepignore
-```
-
-Meaning:
-- square brackets identify an anchor tag
-- the value after `tep:` is either a numeric anchor ID or a human-readable name
-- numeric IDs are assigned automatically by `anchor auto`
-- names are either set in the file directly or assigned via `anchor edit <id> --name <name>`
-- the optional `( ... )` suffix is an entity reference instruction list
+Rules:
+- name is required — lowercase, `[a-z0-9._]`, not purely numeric
+- entity ref list is required — at least one entity
+- the name is the durable anchor identity
+- numeric IDs are internal only (shown in `anchor list` / `anchor show`)
+- `anchor auto` registers and syncs; it does **not** rewrite the tag
 
 ### Entity declaration tags
 
-[#!#1#tep:21](entity,entity.declaration)
+Entity declaration tags use parentheses:
 
-Entity declaration tags use parentheses.
-
-Incomplete declaration:
 ```txt
 (#!#tep:student) #tepignore
-```
-
-Materialized declaration:
-```txt
-(#!#1#tep:student) #tepignore
 ```
 
 Meaning:
 - parentheses identify an entity declaration marker
 - `student` is the entity name
 - `tep entity auto` ensures the entity exists
-- if the entity has no `ref`, the declaring file path is stored in `ref`
-- a backing anchor relation is created for that declaration location
+- if the entity has no `ref`, the declaring file is stored as its `ref`
+- a backing anchor relation is created for the declaration location
 
 ## Ignore controls
 
@@ -214,20 +197,13 @@ tep e ...
 ### Anchors
 ```bash
 tep anchor auto <pathspec...>
-tep anchor show <anchor-id-or-name>
-tep anchor edit <anchor-id> --name <name>
+tep anchor show <name>
 tep anchor list
 ```
 
 Shorthand:
 ```bash
 tep a ...
-```
-
-### Manual relations
-```bash
-tep attach <entity-id-or-name> <anchor-id-or-name>
-tep detach <entity-id-or-name> <anchor-id-or-name>
 ```
 
 ## Health and root repair
@@ -279,10 +255,10 @@ Anchor identity is the anchor ID.
 - entity names cannot be purely numeric
 - entity metadata includes `ref` and `description`
 - entity links are directional in storage
-- anchor names are optional, unique, same charset as entity names (`[a-z0-9._]`)
+- anchor names are required, unique, same charset as entity names (`[a-z0-9._]`)
 - anchor names cannot be purely numeric
-- `anchor show`, `attach`, and `detach` accept either id or name
-- `anchor edit <id> --name <name>` assigns/renames and rewrites the file tag in-place
+- anchor-entity relations are managed through the tag's entity ref list, not via separate CLI commands
+- `anchor show <name>` accepts name or numeric id
 - `entity context` always includes linked entities by default
 - `.tep_ignore` is respected; `.gitignore` is not
 - `line`, `shift`, and `offset` are refreshable metadata only; anchor identity is the id or name in the tag
