@@ -318,7 +318,7 @@ fn entity_unlink_removes_link() {
 #[test]
 fn entity_context_files_only_omits_snippets() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    std::fs::write(temp.path().join("note.txt"), "hello world\n[#!#tep:](student)\n")
+    std::fs::write(temp.path().join("note.txt"), "hello world\n[#!#tep:my_anchor](student)\n")
         .expect("should write file");
 
     Command::cargo_bin("tep").unwrap().current_dir(temp.path()).args(["init"]).assert().success();

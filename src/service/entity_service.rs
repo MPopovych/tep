@@ -1,6 +1,3 @@
-// (#!#1#tep:service.entity.context)
-// [#!#1#tep:48](service.entity.auto)
-// [#!#1#tep:61](service.entity.context,service.entity.auto)
 use std::fs;
 use std::path::PathBuf;
 
@@ -8,7 +5,7 @@ use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
 use crate::anchor::{Anchor, parse_anchors};
-use crate::entity::{Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity, materialize_entity_declaration, parse_entity_declarations, parse_lookup};
+use crate::entity::{Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity, parse_entity_declarations, parse_lookup};
 use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
@@ -246,8 +243,8 @@ impl<'a> EntityService<'a> {
 
         for declaration in declarations {
             rewritten.push_str(&original[cursor..declaration.start_offset]);
-            let replacement = self.sync_declaration(&file.display_path, &declaration, result)?;
-            rewritten.push_str(&replacement);
+            self.sync_declaration(&file.display_path, &declaration, result)?;
+            rewritten.push_str(&declaration.raw);
             cursor = declaration.start_offset + declaration.raw.len();
         }
 
@@ -265,9 +262,9 @@ impl<'a> EntityService<'a> {
 
     fn refresh_anchor_locations(&self, file_path: &str, text: &str) -> Result<()> {
         for anchor in parse_anchors(text) {
-            if let Some(anchor_id) = anchor.anchor_id {
+            if let Some(existing) = self.anchor_repo.find_by_name(&anchor.anchor_name)? {
                 self.anchor_repo.update_location(
-                    anchor_id,
+                    existing.anchor_id,
                     file_path,
                     Some(anchor.line),
                     Some(anchor.shift),
@@ -283,13 +280,12 @@ impl<'a> EntityService<'a> {
         file_path: &str,
         declaration: &ParsedEntityDeclaration,
         result: &mut EntityAutoResult,
-    ) -> Result<String> {
+    ) -> Result<()> {
         let entity = self.ensure_entity_for_declaration(declaration, file_path, result)?;
         let anchor = self.ensure_anchor_for_declaration(file_path, declaration, entity.entity_id, result)?;
         self.anchor_entity_repo.attach(anchor.anchor_id, entity.entity_id)?;
         result.relations_synced += 1;
-
-        Ok(materialize_entity_declaration(declaration, 1))
+        Ok(())
     }
 
     fn ensure_entity_for_declaration(
@@ -327,40 +323,25 @@ impl<'a> EntityService<'a> {
         entity_id: i64,
         result: &mut EntityAutoResult,
     ) -> Result<Anchor> {
-        let anchor = if declaration.version.is_some() {
-            if let Some(existing) = self.anchor_repo.find_latest_for_entity_in_file(entity_id, file_path)? {
-                self.anchor_repo.update_location(
-                    existing.anchor_id,
-                    file_path,
-                    Some(declaration.line),
-                    Some(declaration.shift),
-                    Some(declaration.start_offset as i64),
-                )?
-            } else {
-                self.create_declaration_anchor(file_path, declaration, result)?
-            }
+        if let Some(existing) = self.anchor_repo.find_latest_for_entity_in_file(entity_id, file_path)? {
+            Ok(self.anchor_repo.update_location(
+                existing.anchor_id,
+                file_path,
+                Some(declaration.line),
+                Some(declaration.shift),
+                Some(declaration.start_offset as i64),
+            )?)
         } else {
-            self.create_declaration_anchor(file_path, declaration, result)?
-        };
-
-        Ok(anchor)
-    }
-
-    fn create_declaration_anchor(
-        &self,
-        file_path: &str,
-        declaration: &ParsedEntityDeclaration,
-        result: &mut EntityAutoResult,
-    ) -> Result<Anchor> {
-        let created = self.anchor_repo.create(
-            declaration.version.unwrap_or(1),
-            file_path,
-            Some(declaration.line),
-            Some(declaration.shift),
-            Some(declaration.start_offset as i64),
-        )?;
-        result.anchors_created += 1;
-        Ok(created)
+            let created = self.anchor_repo.create(
+                1,
+                file_path,
+                Some(declaration.line),
+                Some(declaration.shift),
+                Some(declaration.start_offset as i64),
+            )?;
+            result.anchors_created += 1;
+            Ok(created)
+        }
     }
 }
 

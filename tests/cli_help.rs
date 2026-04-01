@@ -16,10 +16,6 @@ fn prints_help() {
         .stdout(predicate::str::contains("Work with entities, descriptions, refs, and directional links"))
         .stdout(predicate::str::contains("anchor"))
         .stdout(predicate::str::contains("Work with anchors, names, and anchor-entity attachments"))
-        .stdout(predicate::str::contains("attach"))
-        .stdout(predicate::str::contains("Attach an entity to an anchor"))
-        .stdout(predicate::str::contains("detach"))
-        .stdout(predicate::str::contains("Detach an entity from an anchor"))
         .stdout(predicate::str::contains("init"))
         .stdout(predicate::str::contains("Initialize a tep workspace in the current directory"))
         .stdout(predicate::str::contains("e"))
@@ -35,7 +31,7 @@ fn prints_anchor_help_with_descriptions() {
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("auto"))
-        .stdout(predicate::str::contains("Materialize and sync anchors in files"))
+        .stdout(predicate::str::contains("Sync anchors in files"))
         .stdout(predicate::str::contains("show"))
         .stdout(predicate::str::contains("Show one anchor and its related entities"));
 }
@@ -92,7 +88,7 @@ fn prints_health_help_with_path_description() {
 #[test]
 fn anchor_shorthand_alias_works() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    std::fs::write(temp.path().join("note.txt"), "[#!#tep:](student)")
+    std::fs::write(temp.path().join("note.txt"), "[#!#tep:my_anchor](student)")
         .expect("should write file");
 
     Command::cargo_bin("tep")

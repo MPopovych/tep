@@ -16,11 +16,5 @@ pub fn run(cli: Cli) -> anyhow::Result<()> {
         Commands::Health(args) => health::run(args),
         Commands::Entity { command } | Commands::E { command } => entity::run(command),
         Commands::Anchor { command } | Commands::A { command } => anchor::run(command),
-        Commands::Attach { entity_id, anchor_id } => {
-            anchor::attach(&anchor_id, &entity_id)
-        }
-        Commands::Detach { entity_id, anchor_id } => {
-            anchor::detach(&anchor_id, &entity_id)
-        }
     }
 }

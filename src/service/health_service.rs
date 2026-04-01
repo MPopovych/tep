@@ -1,5 +1,3 @@
-// (#!#1#tep:service.anchor.health)
-// [#!#1#tep:62](service.anchor.health)
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
@@ -7,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
-use crate::anchor::{AnchorKind, ParsedAnchor, parse_anchors};
+use crate::anchor::{ParsedAnchor, parse_anchors};
 use crate::entity::parse_entity_declarations;
 use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_repository::AnchorRepository;
@@ -51,7 +49,7 @@ struct ParsedFile {
 
 #[derive(Debug, Default)]
 struct HealthTracker {
-    seen_by_anchor_id: HashMap<i64, String>,
+    seen_by_anchor_id: HashMap<String, String>,
     seen_materialized_ids: HashSet<i64>,
 }
 
@@ -147,14 +145,9 @@ impl<'a> HealthService<'a> {
 
         report.anchors_seen += parsed_anchors.len() + parsed_declarations.len();
 
-        let mut local_ids = HashSet::new();
+        let mut local_names = HashSet::new();
         for anchor in &parsed_anchors {
-            match anchor.kind() {
-                AnchorKind::Incomplete => {}
-                AnchorKind::Materialized => {
-                    self.inspect_materialized_anchor(anchor, &file.display_path, report, tracker, &mut local_ids)?;
-                }
-            }
+            self.inspect_named_anchor(anchor, &file.display_path, report, tracker, &mut local_names)?;
         }
 
         for declaration in &parsed_declarations {
@@ -171,43 +164,41 @@ impl<'a> HealthService<'a> {
         Ok(true)
     }
 
-    fn inspect_materialized_anchor(
+    fn inspect_named_anchor(
         &self,
         anchor: &ParsedAnchor,
         file_path: &str,
         report: &mut HealthReport,
         tracker: &mut HealthTracker,
-        local_ids: &mut HashSet<i64>,
+        local_names: &mut HashSet<String>,
     ) -> Result<()> {
-        let anchor_id = anchor.anchor_id.expect("materialized anchor should have id");
-        tracker.seen_materialized_ids.insert(anchor_id);
+        let name = &anchor.anchor_name;
 
-        if !local_ids.insert(anchor_id) {
+        if !local_names.insert(name.clone()) {
             report.issue_counts.duplicate_anchor_ids += 1;
             report.groups.duplicate_anchor_ids.push(format!(
-                "anchor {} appears multiple times in {}",
-                anchor_id, file_path
+                "anchor '{}' appears multiple times in {}",
+                name, file_path
             ));
             return Ok(());
         }
 
-        if let Some(existing_file) = tracker.seen_by_anchor_id.get(&anchor_id) {
+        if let Some(existing_file) = tracker.seen_by_anchor_id.get(name) {
             if existing_file != file_path {
                 report.issue_counts.duplicate_anchor_ids += 1;
                 report.groups.duplicate_anchor_ids.push(format!(
-                    "anchor {} appears in multiple files: {} and {}",
-                    anchor_id, existing_file, file_path
+                    "anchor '{}' appears in multiple files: {} and {}",
+                    name, existing_file, file_path
                 ));
                 return Ok(());
             }
         } else {
-            tracker
-                .seen_by_anchor_id
-                .insert(anchor_id, file_path.to_string());
+            tracker.seen_by_anchor_id.insert(name.clone(), file_path.to_string());
         }
 
-        match self.anchor_repo.find_by_id(anchor_id)? {
+        match self.anchor_repo.find_by_name(name)? {
             Some(stored) => {
+                tracker.seen_materialized_ids.insert(stored.anchor_id);
                 let normalized_file_path = self.anchor_repo.normalized_path_for(file_path);
                 if normalized_file_path != stored.file_path
                     || stored.line != Some(anchor.line)
@@ -216,8 +207,8 @@ impl<'a> HealthService<'a> {
                 {
                     report.issue_counts.anchors_moved += 1;
                     report.groups.moved_anchors.push(format!(
-                        "anchor {} metadata drifted in {} (db: {} {:?}:{:?} [{:?}], file: {} {}:{} [{}])",
-                        anchor_id,
+                        "anchor '{}' metadata drifted in {} (db: {} {:?}:{:?} [{:?}], file: {} {}:{} [{}])",
+                        name,
                         file_path,
                         stored.file_path,
                         stored.line,
@@ -235,8 +226,8 @@ impl<'a> HealthService<'a> {
             None => {
                 report.issue_counts.unknown_anchor_ids += 1;
                 report.groups.unknown_anchor_ids.push(format!(
-                    "materialized anchor {} was found in a file but does not exist in the database ({})",
-                    anchor_id, file_path
+                    "anchor '{}' found in file but does not exist in the database ({})",
+                    name, file_path
                 ));
             }
         }
@@ -312,9 +303,9 @@ mod tests {
     #[test]
     fn reports_anchors_without_entities() {
         let service = setup_service();
-        service.anchor_repo.create(1, "./docs/student.md", Some(1), Some(0), Some(0)).unwrap();
+        service.anchor_repo.create_named("my_anchor", 1, "./docs/student.md", Some(1), Some(0), Some(0)).unwrap();
         std::fs::create_dir_all("/tmp/project/docs").ok();
-        std::fs::write("/tmp/project/docs/student.md", "[#!#1#tep:1](student)").ok(); // #tepignore
+        std::fs::write("/tmp/project/docs/student.md", "[#!#tep:my_anchor](student)").ok(); // #tepignore
 
         let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.issue_counts.anchors_without_entities, 1);
@@ -333,13 +324,13 @@ mod tests {
             .unwrap();
         let anchor = service
             .anchor_repo
-            .create(1, "./docs/student.md", Some(1), Some(0), Some(0))
+            .create_named("my_anchor", 1, "./docs/student.md", Some(1), Some(0), Some(0))
             .unwrap();
         let rel = AnchorEntityRepository::new(service.anchor_repo.conn);
         rel.attach(anchor.anchor_id, entity.entity_id).unwrap();
 
         std::fs::create_dir_all("/tmp/project/docs").ok();
-        std::fs::write("/tmp/project/docs/student.md", "[#!#1#tep:1](student)").ok(); // #tepignore
+        std::fs::write("/tmp/project/docs/student.md", "[#!#tep:my_anchor](student)").ok(); // #tepignore
 
         let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.anchors_healthy, 1);

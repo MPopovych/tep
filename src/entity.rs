@@ -1,6 +1,4 @@
 // (#!#1#tep:module.entity)
-// [#!#tep:entity.declaration.parser](entity.declaration.parser)
-// [#!#1#tep:58](module.entity,entity.declaration.parser)
 use crate::utils::parse::{line_contains_marker, parse_scan_limit};
 
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
@@ -48,7 +46,6 @@ pub struct EntityLink {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedEntityDeclaration {
     pub raw: String,
-    pub version: Option<i64>,
     pub name: String,
     pub start_offset: usize,
     pub line: i64,
@@ -111,7 +108,7 @@ pub fn parse_entity_declarations(input: &str) -> Vec<ParsedEntityDeclaration> {
 
     while i < input.len() && i < scan_limit {
         let rest = &input[i..];
-        if rest.starts_with("(#!#tep:") || rest.starts_with("(#!#") {
+        if rest.starts_with("(#!#tep:") {
             if let Some(parsed) = try_parse_entity_declaration(input, i) {
                 i = parsed.start_offset + parsed.raw.len();
                 out.push(parsed);
@@ -134,15 +131,7 @@ fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntit
     let close_idx = rest.find(')')?;
     let raw = &rest[..=close_idx];
 
-    let body = raw.strip_prefix("(#!#")?.strip_suffix(')')?;
-    let (version, name) = if let Some(name) = body.strip_prefix("tep:") {
-        (None, name)
-    } else {
-        let (version_str, name) = body.split_once("#tep:")?;
-        let version = version_str.parse::<i64>().ok()?;
-        (Some(version), name)
-    };
-
+    let name = raw.strip_prefix("(#!#tep:")?.strip_suffix(')')?;
     validate_name(name).ok()?;
     let normalized_name = normalize_name(name);
 
@@ -157,16 +146,11 @@ fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntit
 
     Some(ParsedEntityDeclaration {
         raw: raw.to_string(),
-        version,
         name: normalized_name,
         start_offset: start,
         line,
         shift,
     })
-}
-
-pub fn materialize_entity_declaration(parsed: &ParsedEntityDeclaration, version: i64) -> String {
-    format!("(#!#{}#tep:{})", version, parsed.name)
 }
 
 #[cfg(test)]
@@ -230,37 +214,21 @@ mod tests {
     }
 
     #[test]
-    fn parses_incomplete_entity_declaration() {
+    fn parses_entity_declaration() {
         let parsed = parse_entity_declarations("abc (#!#tep:Student) xyz");
         assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].version, None);
         assert_eq!(parsed[0].name, "student");
     }
 
     #[test]
-    fn parses_materialized_entity_declaration() {
+    fn ignores_entity_declaration_with_version_segment() {
         let parsed = parse_entity_declarations("(#!#1#tep:Student)");
-        assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].version, Some(1));
-        assert_eq!(parsed[0].name, "student");
-    }
-
-    #[test]
-    fn materializes_entity_declaration() {
-        let parsed = parse_entity_declarations("(#!#tep:Student)");
-        let out = materialize_entity_declaration(&parsed[0], 1);
-        assert_eq!(out, "(#!#1#tep:student)");
+        assert!(parsed.is_empty());
     }
 
     #[test]
     fn ignores_numeric_entity_declaration_name() {
         let parsed = parse_entity_declarations("(#!#tep:123)");
-        assert!(parsed.is_empty());
-    }
-
-    #[test]
-    fn ignores_invalid_materialized_entity_declaration_version() {
-        let parsed = parse_entity_declarations("(#!#abc#tep:Student)");
         assert!(parsed.is_empty());
     }
 

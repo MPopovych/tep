@@ -37,10 +37,6 @@ pub fn format_anchor_health_result(report: &HealthReport) -> String {
     out
 }
 
-pub fn format_anchor_relation_result(prefix: &str, anchor_target: &str, entity_target: &str) -> String {
-    format!("{prefix}\nanchor: {anchor_target}\nentity: {entity_target}\n")
-}
-
 pub fn format_anchor_list(anchors: &[crate::anchor::Anchor]) -> String {
     use crate::output::anchor_format::format_anchor_compact;
     if anchors.is_empty() {
@@ -126,14 +122,6 @@ mod tests {
         assert!(rendered.contains("anchors_without_entities: 1"));
         assert!(rendered.contains("moved anchors:"));
         assert!(rendered.contains("entities without anchors:"));
-    }
-
-    #[test]
-    fn formats_anchor_relation_result() {
-        let rendered = format_anchor_relation_result("attached", "42", "student");
-        assert!(rendered.contains("attached"));
-        assert!(rendered.contains("anchor: 42"));
-        assert!(rendered.contains("entity: student"));
     }
 
     #[test]

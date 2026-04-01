@@ -115,22 +115,6 @@ impl<'a> AnchorRepository<'a> {
         Ok(anchor)
     }
 
-    pub fn update_name(&self, anchor_id: i64, name: &str) -> Result<Anchor> {
-        let _existing = self
-            .find_by_id(anchor_id)?
-            .with_context(|| format!("anchor not found: {anchor_id}"))?;
-
-        let now = now_utc();
-        self.conn.execute(
-            "UPDATE anchors SET name = ?1, updated_at = ?2 WHERE anchor_id = ?3",
-            params![name, now, anchor_id],
-        )
-        .with_context(|| format!("failed to update name for anchor {}", anchor_id))?;
-
-        self.find_by_id(anchor_id)?
-            .context("anchor could not be reloaded after name update")
-    }
-
     pub fn list_ids_for_file(&self, file_path: &str) -> Result<Vec<i64>> {
         let normalized = self.normalize_path(file_path);
         let mut stmt = self.conn.prepare(
