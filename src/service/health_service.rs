@@ -1,3 +1,5 @@
+// (#!#tep:anchor.health)
+// [#!#tep:anchor.health](anchor.health)
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
@@ -68,6 +70,7 @@ impl<'a> HealthService<'a> {
         }
     }
 
+    // [#!#tep:anchor.health.audit](anchor.health,workspace.scanner)
     pub fn audit_paths(&self, paths: &[String]) -> Result<HealthReport> {
         let files = collect_workspace_files(&self.workspace_root, paths)?;
         let scoped_files = files

@@ -1,3 +1,5 @@
+// (#!#tep:entity.links)
+// [#!#tep:entity.links](entity.links)
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use anyhow::{Context, Result};

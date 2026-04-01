@@ -1,6 +1,6 @@
 # Workspace and Ignore Spec
 
-This document describes the intended local workspace behavior for `tep`, including `.tep_ignore`.
+This document describes the intended local workspace behavior for `tep`, including `.tepignore`.
 
 ## Workspace shape
 
@@ -23,7 +23,7 @@ Possible contents later:
 ## Ignore file
 
 Planned feature:
-- `.tep_ignore`
+- `.tepignore`
 
 Purpose:
 - control which files or directories should be ignored during `tep` traversal and scanning
@@ -32,7 +32,7 @@ Purpose:
 
 ## Decision: syntax style
 
-`.tep_ignore` should use a syntax **similar to `.gitignore`**.
+`.tepignore` should use a syntax **similar to `.gitignore`**.
 
 That means the intended direction is:
 - comments
@@ -43,7 +43,7 @@ That means the intended direction is:
 
 Important:
 - `tep` should **not** honor `.gitignore`
-- `.tep_ignore` is its own rule source
+- `.tepignore` is its own rule source
 - built-in excludes may still exist separately, but `.gitignore` should not be treated as an input source for `tep`
 
 ## Decision: architecture
@@ -60,7 +60,7 @@ Planned direction:
 - reusable path filtering API
 - anchor service consumes that filter instead of owning ignore parsing itself
 
-## Intended behavior of `.tep_ignore`
+## Intended behavior of `.tepignore`
 
 The file should define traversal exclusions for the current workspace.
 
@@ -84,15 +84,15 @@ playground/
 
 ## Current implementation note
 
-Basic `.tep_ignore` support exists today, but it should be treated as transitional.
+Basic `.tepignore` support exists today, but it should be treated as transitional.
 The long-term direction is a cleaner reusable filter implementation with Git-like syntax semantics.
 
 ## Relationship to traversal behavior
 
-Traversal-heavy commands should apply `.tep_ignore` before processing file contents.
+Traversal-heavy commands should apply `.tepignore` before processing file contents.
 This improves performance and reduces accidental noise.
 
 ## Current non-goal
 
-Even though `.tep_ignore` should feel similar to `.gitignore`, `tep` should not automatically inherit or merge `.gitignore` behavior.
+Even though `.tepignore` should feel similar to `.gitignore`, `tep` should not automatically inherit or merge `.gitignore` behavior.
 That separation is intentional.

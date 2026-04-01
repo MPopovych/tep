@@ -93,7 +93,7 @@ tep health
 tep anchor auto .
 ```
 
-with `.tep_ignore` excluding non-canonical example/fixture material.
+with `.tepignore` excluding non-canonical example/fixture material.
 
 ## Proposed text output
 

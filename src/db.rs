@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 pub const DEFAULT_TEP_DIR: &str = ".tep";
 pub const DEFAULT_DB_FILE: &str = ".tep/tep.db";
-pub const DEFAULT_IGNORE_FILE: &str = ".tep_ignore";
+pub const DEFAULT_IGNORE_FILE: &str = ".tepignore";
 pub const CURRENT_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Debug, Clone)]

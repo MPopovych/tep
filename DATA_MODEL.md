@@ -1,5 +1,7 @@
+<!--- (#!#tep:data.model) -->
 # Data Model
 
+<!--- [#!#tep:data.model.entity](data.model,entity.service,repo.entity) -->
 ## 1. Entity
 
 Current shape:
@@ -16,6 +18,7 @@ Notes:
 - `ref` points to a primary file or reference location when useful
 - `description` holds a direct free-text summary of the entity
 
+<!--- [#!#tep:data.model.anchor](data.model,anchor.parser,repo.anchor) -->
 ## 2. Anchor
 
 Current shape:

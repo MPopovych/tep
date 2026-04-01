@@ -47,7 +47,7 @@ Current Rust direction:
 
 Responsibility:
 - own reusable path filtering logic
-- load and apply `.tep_ignore`
+- load and apply `.tepignore`
 - expose filtering decisions to traversal-heavy modules
 - remain separate from individual services such as `anchor_service`
 
@@ -57,7 +57,7 @@ Current Rust direction:
 
 Implementation direction:
 - backed by the Rust `ignore` crate
-- configured for `.tep_ignore`
+- configured for `.tepignore`
 - Git-specific ignore sources disabled
 - reusable across future file-walking features
 

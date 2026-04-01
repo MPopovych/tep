@@ -18,7 +18,7 @@ fn init_creates_workspace_files() {
     temp.child(".tep").assert(predicates::path::is_dir());
     temp.child(".tep/tep.db")
         .assert(predicates::path::exists());
-    temp.child(".tep_ignore")
+    temp.child(".tepignore")
         .assert(predicates::path::is_file());
 }
 

@@ -36,7 +36,7 @@ The repo itself treats **docs + selected source code** as canonical graph materi
 ### Excluded / controlled
 - `tests/`
 - playgrounds
-- noisy fixture/example-heavy files via `.tep_ignore`
+- noisy fixture/example-heavy files via `.tepignore`
 - source-file tails after `#tepignoreafter`
 - one-off fake marker lines via `#tepignore`
 

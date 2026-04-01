@@ -33,7 +33,7 @@ This is a lightweight implementation backlog for the early `tep` project.
 - [x] create `.tep/` workspace layout
 - [x] create SQLite database file
 - [x] apply schema on init
-- [x] create `.tep_ignore`
+- [x] create `.tepignore`
 
 ### Minimal entity flow
 - [x] create entity records
@@ -55,18 +55,18 @@ This is a lightweight implementation backlog for the early `tep` project.
 - [x] persist anchor-entity relations
 - [-] manual `attach`/`detach` commands (removed — relations managed through tag syntax)
 - [x] improve failure behavior for unknown materialized anchors
-- [x] introduce reusable filter layer for `.tep_ignore`
+- [x] introduce reusable filter layer for `.tepignore`
 - [x] detect dropped anchors in targeted files
 - [x] fail on duplicate materialized anchor IDs in the same file
 - [x] fail on cross-file anchor ID conflicts
 - [x] add regression coverage for Unicode and encountered edge cases
 - [ ] rewrite files safely under additional edge cases
-- [ ] refine `.tep_ignore` semantics further if needed
+- [ ] refine `.tepignore` semantics further if needed
 
 ## Playground / local experimentation
 - [x] create `playground/` for local experiments
 - [x] add `playground/` to `.gitignore`
-- [x] add `playground/` to local `.tep_ignore`
+- [x] add `playground/` to local `.tepignore`
 - [x] validate explicit anchor materialization on playground files
 
 ## Later

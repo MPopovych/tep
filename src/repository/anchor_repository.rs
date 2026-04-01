@@ -1,4 +1,5 @@
-// [#!#tep:repo.anchor.path-normalization](path.normalization,repo.anchor.path-normalization)
+// (#!#tep:repo.anchor)
+// [#!#tep:repo.anchor](repo.anchor)
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -190,6 +191,7 @@ impl<'a> AnchorRepository<'a> {
         self.normalize_path(input)
     }
 
+    // [#!#tep:repo.anchor.normalize](repo.anchor,path.normalization)
     fn normalize_path(&self, input: &str) -> String {
         normalize_to_workspace(Path::new(input), &self.workspace_root)
             .to_string_lossy()

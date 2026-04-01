@@ -37,7 +37,7 @@ impl TepIgnoreFilter {
                 builder.git_exclude(false);
                 builder.git_global(false);
                 builder.ignore(false);
-                builder.add_custom_ignore_filename(".tep_ignore");
+                builder.add_custom_ignore_filename(".tepignore");
 
                 for entry in builder.build() {
                     let entry = entry?;
@@ -68,7 +68,7 @@ impl TepIgnoreFilter {
     }
 
     fn is_special_internal_file(&self, path: &Path) -> bool {
-        matches!(path.file_name().and_then(|s| s.to_str()), Some(".tep_ignore"))
+        matches!(path.file_name().and_then(|s| s.to_str()), Some(".tepignore"))
     }
 }
 
@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn respects_tep_ignore_file_entries() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
-        fs::write(temp.path().join(".tep_ignore"), "ignored.txt\n").expect("should write ignore file");
+        fs::write(temp.path().join(".tepignore"), "ignored.txt\n").expect("should write ignore file");
         fs::write(temp.path().join("ignored.txt"), "x").expect("should write file");
         fs::write(temp.path().join("included.txt"), "y").expect("should write file");
 
@@ -125,7 +125,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(names.contains(&"included.txt"));
         assert!(!names.contains(&"ignored.txt"));
-        assert!(!names.contains(&".tep_ignore"));
+        assert!(!names.contains(&".tepignore"));
     }
 
     #[test]

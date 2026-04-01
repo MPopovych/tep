@@ -1,3 +1,4 @@
+<!--- (#!#tep:cli.design) -->
 # CLI Design
 
 ## Design goals
@@ -25,6 +26,7 @@ The similarity to git is mostly ergonomic:
 
 `tep` is not a version-control system.
 
+<!--- [#!#tep:cli.workspace](cli.design,workspace) -->
 ## Workspace behavior
 
 ### Initialize a workspace
@@ -35,7 +37,7 @@ tep init
 This creates:
 - `.tep/`
 - `.tep/tep.db`
-- `.tep_ignore`
+- `.tepignore`
 
 `init` also ensures the DB schema is current.
 
@@ -101,6 +103,7 @@ Shorthand:
 tep a ...
 ```
 
+<!--- [#!#tep:cli.syntax](cli.design,anchor.parser,entity.declaration) -->
 ## Marker syntax
 
 ### Anchor tag

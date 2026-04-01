@@ -1,3 +1,5 @@
+// (#!#tep:workspace)
+// [#!#tep:workspace](workspace)
 use std::fs;
 
 use anyhow::{Context, Result};
@@ -23,11 +25,12 @@ pub struct ResetResult {
 pub struct WorkspaceService;
 
 impl WorkspaceService {
+    // [#!#tep:workspace.reset](workspace,anchor.sync,entity.service)
     pub fn reset() -> Result<ResetResult> {
         let cwd = std::env::current_dir().context("failed to determine current directory")?;
         let paths = db::workspace_paths_for(&cwd);
 
-        // Delete existing DB (leave .tep_ignore alone)
+        // Delete existing DB (leave .tepignore alone)
         if paths.db_file.exists() {
             fs::remove_file(&paths.db_file)
                 .with_context(|| format!("failed to delete {}", paths.db_file.display()))?;
@@ -90,7 +93,7 @@ mod tests {
         assert_eq!(result.schema_version, CURRENT_SCHEMA_VERSION);
         assert!(temp.path().join(".tep").exists());
         assert!(temp.path().join(".tep/tep.db").exists());
-        assert!(temp.path().join(".tep_ignore").exists());
+        assert!(temp.path().join(".tepignore").exists());
 
         env::set_current_dir(previous).expect("should restore current dir");
     }

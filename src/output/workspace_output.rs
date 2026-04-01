@@ -16,13 +16,13 @@ mod tests {
         let rendered = format_init_result(&InitResult {
             tep_dir: ".tep".into(),
             db_file: ".tep/tep.db".into(),
-            ignore_file: ".tep_ignore".into(),
+            ignore_file: ".tepignore".into(),
             schema_version: 2,
         });
 
         assert!(rendered.contains("Initialized empty tep workspace in .tep"));
         assert!(rendered.contains("Database: .tep/tep.db"));
-        assert!(rendered.contains("Ignore file: .tep_ignore"));
+        assert!(rendered.contains("Ignore file: .tepignore"));
         assert!(rendered.contains("Schema version: 2"));
     }
 }

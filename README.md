@@ -21,9 +21,9 @@ Codebases grow. Concepts scatter across files. Documentation drifts from impleme
 Instead of grepping for "student" and hoping you find the right places, you:
 
 1. **Tag locations** — drop anchor markers in code, docs, configs
-2. **Name concepts** — create entities like `student`, `auth_flow`, `pricing_model`
+2. **Name concepts** — create entities like `auth_flow`, `pricing_model`
 3. **Connect them** — attach entities to anchors, link entities to each other
-4. **Query the graph** — ask "where does `student` appear?" or "what's related to `auth_flow`?"
+4. **Query the graph** — ask "where does `auth_flow` appear?" or "what's related to `pricing_model`?"
 
 **Use cases:**
 
@@ -41,21 +41,19 @@ The graph lives in your repo (`.tep/`), works offline, and stays under your cont
 
 - Initialize and auto-migrate local workspaces
 - Create, edit, list, and query entities with names, descriptions, and refs
-- Enforce entity name normalization (`student`, not `Student` — lowercase, `[a-z0-9._]`)
-- Named anchor tags — place `[#!#tep:name](entity)` in any file; `anchor auto` registers and syncs them <!-- #tepignore -->
-- Auto-declare entities from declaration markers (`(#!#tep:student)`) <!-- #tepignore -->
+- Enforce entity name normalization (lowercase, `[a-z0-9._]`)
+- Named anchor tags — place `[#!#tep:name](entity)` in any file; `anchor auto` registers and syncs them
+- Auto-declare entities from declaration markers `(#!#tep:entity_name)`
 - Directional entity-to-entity links with free-text relations
 - Assemble retrieval-oriented context bundles for entities (`entity context`)
 - Bounded link traversal (`--link-depth`)
 - Audit anchor health with `tep health`
-- List all anchors in the workspace (`anchor list`)
-- Respect `.tep_ignore` for test fixtures and examples
+- Reset and re-index the workspace with `tep reset`
+- Respect `.tepignore` for test fixtures and examples
 
 ---
 
 ## Workspace model
-
-[#!#1#tep:19](workspace,workspace.discovery)
 
 A `tep` workspace is created with:
 
@@ -66,7 +64,7 @@ tep init
 That creates:
 - `.tep/`
 - `.tep/tep.db`
-- `.tep_ignore`
+- `.tepignore`
 
 For commands that require the database, `tep` resolves the **nearest ancestor workspace** from the current working directory.
 
@@ -96,13 +94,7 @@ Current behavior:
 Anchor tags use square brackets:
 
 ```txt
-[#!#tep:anchor_name](entity1,entity2) #tepignore
-```
-
-Examples:
-```txt
-[#!#tep:student_processor](student) #tepignore
-[#!#tep:auth_flow](auth,session) #tepignore
+[#!#tep:anchor_name](entity1,entity2)
 ```
 
 Rules:
@@ -117,15 +109,13 @@ Rules:
 Entity declaration tags use parentheses:
 
 ```txt
-(#!#tep:student) #tepignore
+(#!#tep:entity_name)
 ```
 
 Meaning:
 - parentheses identify an entity declaration marker
-- `student` is the entity name
 - `tep entity auto` ensures the entity exists
 - if the entity has no `ref`, the declaring file is stored as its `ref`
-- a backing anchor relation is created for the declaration location
 
 ## Ignore controls
 
@@ -137,11 +127,6 @@ Use it for:
 - regex/test strings that look like markers
 - isolated fake literals in source or docs
 
-Example:
-```rust
-let example = "[#!#tep:](student)"; // #tepignore
-```
-
 ### `#tepignoreafter`
 Ignores the rest of the file after the first occurrence.
 
@@ -149,17 +134,6 @@ Use it for:
 - test modules
 - large fixture tails
 - intentionally broken example sections
-
-Example:
-```rust
-// real implementation above
-
-// #tepignoreafter
-#[cfg(test)]
-mod tests {
-    ...
-}
-```
 
 Practical rule:
 - prefer `#tepignore` when a few lines are noisy
@@ -170,9 +144,8 @@ Practical rule:
 ### Workspace
 ```bash
 tep init
-tep version
-tep -V
-tep --version
+tep reset [--yes]
+tep version / -V / --version
 tep health [path]
 ```
 
@@ -187,11 +160,7 @@ tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <va
 tep entity link <from> <to> --relation <text>
 tep entity unlink <from> <to>
 tep entity list
-```
-
-Shorthand:
-```bash
-tep e ...
+tep e ...  (shorthand)
 ```
 
 ### Anchors
@@ -199,54 +168,80 @@ tep e ...
 tep anchor auto <pathspec...>
 tep anchor show <name>
 tep anchor list
+tep a ...  (shorthand)
 ```
 
-Shorthand:
+## Entity context examples
+
+### Get all locations and linked concepts for an entity
 ```bash
-tep a ...
+tep entity context anchor.parser
 ```
 
-## Health and root repair
+Output:
+```
+2 (anchor.parser)
+ref: ./src/anchor.rs
 
-`tep health` performs a read-only anchor health audit.
+anchor:1 anchor.parser ./src/anchor.rs (1:3) [3]
+  // [#!#tep:anchor.parser](anchor.parser)
+  use crate::utils::parse::{line_contains_marker, parse_scan_limit};
+  ...
 
-Example:
+links:
+-> 5 (anchor.sync) [./src/service/anchor_service.rs]  anchor parser feeds anchor sync
+```
+
+### Files-only view (no snippets)
+```bash
+tep entity context anchor.parser --files-only
+```
+
+### Follow linked entities two hops out
+```bash
+tep entity context anchor.parser --link-depth 2
+```
+
+### Show compact graph shape
+```bash
+tep entity show anchor.parser
+```
+
+## Health and reset
+
+`tep health` performs a read-only anchor health audit:
 ```bash
 tep health
-tep health ./docs
+tep health ./src
 ```
 
-`tep anchor auto .` is the repair path for a workspace root.
-
-In practice, repo-wide health and auto-fix should usually be paired with a sensible `.tep_ignore` so example fixtures and intentionally broken samples do not pollute canonical workspace health.
+`tep reset` wipes and re-indexes the workspace:
+```bash
+tep reset          # prompts for confirmation
+tep reset --yes    # skip prompt
+```
 
 ## Output style
 
 Default output is intentionally compact.
 
-Entity:
+Entity header:
 ```txt
 <id> (<name>)
+ref: <path>
+description: <text>
 ```
 
-Anchor:
+Anchor line:
 ```txt
-<anchor_id>
-<file> (<line>:<shift>) [<offset>]
+anchor:<id> <name> <file> (<line>:<shift>) [<offset>]
 ```
 
-Location fields are metadata, not identity.
-Anchor identity is the anchor ID.
-
-`entity context` is more retrieval-oriented and may include:
-- primary `ref`
-- description
-- anchor snippets
-- deduplicated files
-- linked entities with explicit edge notation like:
-  ```txt
-  edge: (1->2)[1] student has subjects
-  ```
+Link line:
+```txt
+-> <id> (<name>) [<ref>]  <relation>
+<- <id> (<name>) [<ref>]  <relation>  [depth:<n>]
+```
 
 ## Notes
 
@@ -255,20 +250,17 @@ Anchor identity is the anchor ID.
 - entity names cannot be purely numeric
 - entity metadata includes `ref` and `description`
 - entity links are directional in storage
-- anchor names are required, unique, same charset as entity names (`[a-z0-9._]`)
+- anchor names are required, unique, same charset as entity names
 - anchor names cannot be purely numeric
-- anchor-entity relations are managed through the tag's entity ref list, not via separate CLI commands
+- anchor-entity relations are managed through the tag's entity ref list
 - `anchor show <name>` accepts name or numeric id
-- `entity context` always includes linked entities by default
-- `.tep_ignore` is respected; `.gitignore` is not
-- `line`, `shift`, and `offset` are refreshable metadata only; anchor identity is the id or name in the tag
-- `shift` and `offset` are byte-oriented in practice
+- `.tepignore` is respected; `.gitignore` is not
+- `line`, `shift`, and `offset` are refreshable metadata only; anchor identity is the name in the tag
 
 ## Repo self-check
 
 The `tep` repo uses `tep` to track its own entities and anchors.
-`tep health` in the repo root reports clean for all source and doc files.
-The README contains example anchor tags that are intentionally excluded via `#tepignore`.
+`tep health` in the repo root reports clean for all tracked source and doc files.
 
 ## Documentation map
 
@@ -283,9 +275,6 @@ The README contains example anchor tags that are intentionally excluded via `#te
 
 ### Specs
 - [Spec Index](./spec/README.md)
-- [Entity Commands Spec](./spec/ENTITY_COMMANDS_SPEC.md)
-- [Entity Context Spec](./spec/ENTITY_CONTEXT_SPEC.md)
-- [Entity Links Spec](./spec/ENTITY_LINKS_SPEC.md)
 
 ### Internal docs
 - [Internal Doc Index](./doc/README.md)

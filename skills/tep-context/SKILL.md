@@ -108,7 +108,7 @@ Everything after the first occurrence is ignored for the rest of the file.
 tep init
 ```
 
-Creates `.tep/`, `.tep/tep.db`, `.tep_ignore`.
+Creates `.tep/`, `.tep/tep.db`, `.tepignore`.
 
 ### 2. Declare key entities in their canonical files
 
@@ -207,7 +207,7 @@ tep entity context student --link-depth 2
 - Treat anchor names as durable identity — do not rename without care.
 - Treat `line`, `shift`, and `offset` as metadata only — they drift with edits.
 - Respect `#tepignore` when editing docs that show example tags.
-- Do not assume `.gitignore` affects `tep`; only `.tep_ignore` does.
+- Do not assume `.gitignore` affects `tep`; only `.tepignore` does.
 - Prefer reading the smallest set of files surfaced by `tep` before broad repo scans.
 
 ## Full command reference

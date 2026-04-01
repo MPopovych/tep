@@ -1,3 +1,4 @@
+// (#!#tep:anchor.parser)
 // [#!#tep:anchor.parser](anchor.parser)
 use crate::utils::parse::{line_contains_marker, parse_scan_limit};
 
@@ -62,6 +63,7 @@ pub fn parse_anchor_target(input: &str) -> AnchorTarget {
     }
 }
 
+// [#!#tep:anchor.parser.scan](anchor.parser)
 pub fn parse_anchors(input: &str) -> Vec<ParsedAnchor> {
     let mut out = Vec::new();
     let mut i = 0usize;

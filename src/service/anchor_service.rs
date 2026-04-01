@@ -1,3 +1,5 @@
+// (#!#tep:anchor.sync)
+// [#!#tep:anchor.sync](anchor.sync)
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -49,6 +51,7 @@ impl<'a> AnchorService<'a> {
         }
     }
 
+    // [#!#tep:anchor.sync.paths](anchor.sync,workspace.scanner)
     pub fn sync_paths(&self, paths: &[String]) -> Result<AnchorSyncResult> {
         let files = collect_workspace_files(&self.workspace_root, paths)?;
         let mut result = AnchorSyncResult::default();

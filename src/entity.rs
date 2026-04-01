@@ -1,3 +1,5 @@
+// (#!#tep:entity.declaration)
+// [#!#tep:entity.declaration](entity.declaration)
 use crate::utils::parse::{line_contains_marker, parse_scan_limit};
 
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
@@ -100,6 +102,7 @@ pub fn normalize_description(description: Option<String>) -> Result<Option<Strin
     }
 }
 
+// [#!#tep:entity.declaration.scan](entity.declaration)
 pub fn parse_entity_declarations(input: &str) -> Vec<ParsedEntityDeclaration> {
     let mut out = Vec::new();
     let mut i = 0usize;

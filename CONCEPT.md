@@ -1,3 +1,5 @@
+<!--- (#!#tep:concept) -->
+<!--- [#!#tep:concept](concept) -->
 # Concept
 
 ## Short definition

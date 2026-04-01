@@ -132,7 +132,7 @@ tep reset --yes
 ```
 
 Deletes the DB, recreates schema, runs `entity auto .` then `anchor auto .` on the whole workspace.
-Leaves `.tep_ignore` untouched.
+Leaves `.tepignore` untouched.
 
 ### Health check
 ```bash
@@ -151,7 +151,7 @@ Reports: moved anchors, missing anchors, duplicate names, unknown names, entitie
 tep init
 ```
 
-Edit `.tep_ignore` to exclude test fixtures, build dirs, generated files:
+Edit `.tepignore` to exclude test fixtures, build dirs, generated files:
 ```
 .tep/
 .git/
@@ -257,7 +257,7 @@ tep entity context payment_flow
 
 - `tep` resolves the nearest ancestor workspace from cwd
 - Run it from inside the project tree
-- Only `.tep_ignore` affects scanning — not `.gitignore`
+- Only `.tepignore` affects scanning — not `.gitignore`
 - `tep reset --yes` is the clean-slate option: wipes DB, re-indexes everything
 
 ---

@@ -97,7 +97,7 @@ Supported inputs:
 - directory path
 - `.` (current directory)
 
-Respects `.tep_ignore`. Does not use `.gitignore`.
+Respects `.tepignore`. Does not use `.gitignore`.
 
 ## Storage model
 

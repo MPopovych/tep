@@ -1,3 +1,5 @@
+// (#!#tep:workspace.scanner)
+// [#!#tep:workspace.scanner](workspace.scanner)
 use std::path::PathBuf;
 
 use anyhow::Result;

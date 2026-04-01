@@ -1,3 +1,5 @@
+// (#!#tep:entity.service)
+// [#!#tep:entity.service](entity.service)
 use std::fs;
 use std::path::PathBuf;
 
@@ -109,6 +111,7 @@ impl<'a> EntityService<'a> {
         Ok(EntityShowResult { entity, anchors, linked_entities })
     }
 
+    // [#!#tep:entity.service.context](entity.service,entity.context,entity.links)
     pub fn context(&self, target: &str, link_depth: usize) -> Result<EntityContextResult> {
         let lookup = parse_lookup(target);
         let entity = self
