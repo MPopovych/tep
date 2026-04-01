@@ -4,112 +4,268 @@
 
 Use `tep` to identify the smallest relevant context bundle before reading many files, and to maintain graph coverage deliberately when needed.
 
-## Common retrieval commands
+---
 
-### Entity context
+## Retrieval patterns
+
+### Entity context (preferred first step)
 ```bash
 tep entity context <name-or-id>
+tep entity context <name-or-id> --link-depth 2
+tep entity context <name-or-id> --files-only
 ```
 
-Useful when you need:
-- primary `ref`
-- related anchors
-- snippets
-- deduplicated files
+Typical output interpretation:
+- `ref` = canonical definition file — read this first
+- anchor list with snippets = grounded code/doc locations
+- files list = shortlist of related files to scan
+- linked entities = related concepts to follow if needed
 
-Typical interpretation:
-- `ref` = best starting doc/file
-- anchor list = additional grounded touchpoints
-- files list = shortlist to read next
-
-### Entity show
+### Entity show (compact graph view)
 ```bash
 tep entity show <name-or-id>
 ```
 
-Useful when you need a compact graph view without snippets.
+Use when you only need the entity's metadata and its graph connections without reading snippets.
 
 ### Anchor show
 ```bash
-tep anchor show <anchor-id>
+tep anchor show <name>
 ```
 
-Useful when:
-- a task references an anchor id
-- you want to see which entities are attached to one location
+Use when a specific anchor name is known and you want to see its location and attached entities.
 
-## Suggested retrieval strategy
+### List-based discovery
+```bash
+tep entity list       # browse all known entities
+tep anchor list       # browse all known anchors
+```
+
+Use when the right entity name is not obvious.
+
+---
+
+## Retrieval strategy
 
 ### Start narrow
 If the user gives a likely entity name:
 1. run `tep entity context <entity>`
 2. read `ref` first
-3. read only returned files that look relevant
+3. read only the returned files that look relevant
 
 ### Fall back carefully
-If the entity is missing or weakly covered:
-1. try a nearby entity name
-2. try `tep entity list`
+If the entity is missing or coverage is thin:
+1. try a nearby entity name or a shorter prefix
+2. try `tep entity list` to scan for the right name
 3. then fall back to normal repo exploration
 
-## Signals to trust
+### Signals to trust
 
-### Strong signals
-- entity `ref`
-- repeated anchors across core docs
-- matching entities across docs and code anchors
+**Strong signals:**
+- entity `ref` pointing to a well-named file
+- multiple anchors across docs and code for the same entity
+- entity links forming a coherent subgraph
 
-### Weak signals
-- sparse single-anchor entities
-- stale-seeming snippets without reinforcing refs/files
+**Weak signals:**
+- single-anchor entities with no `ref`
+- stale-seeming snippets that don't match what you find in the file
+- very sparse graph with few entities
+
+---
+
+## Tag syntax
+
+### Anchor tag (placed in source/docs)
+
+```
+[#!#tep:anchor_name](entity1,entity2)
+```
+
+- `anchor_name`: unique across workspace, lowercase `[a-z0-9._]`, not purely numeric
+- At least one entity ref required — tag is ignored if refs are missing
+- `anchor auto` registers the anchor and syncs entity relations without rewriting the file
+
+### Entity declaration tag (placed at canonical definition point)
+
+```
+(#!#tep:entity_name)
+```
+
+- Marks where an entity is primarily defined
+- `entity auto` ensures entity exists and fills `ref` with the declaring file path
+
+### Ignore controls
+
+```
+example [#!#tep:foo](bar) #tepignore     ← this line is ignored entirely
+```
+
+```
+// #tepignoreafter
+// Everything below this line is ignored by tep parsers
+#[cfg(test)]
+mod tests { ... }
+```
+
+---
 
 ## Maintenance commands
 
-### Update entity declarations
+### Declare entities from files
 ```bash
 tep entity auto <pathspec...>
 ```
 
-Use when:
-- docs contain entity declaration markers
-- you want to ensure entities and relation anchors are synced
+Scans for `(#!#tep:name)` tags. Creates entities and fills `ref` when missing.
+Does **not** create anchors.
 
-### Update anchors
+### Sync anchors from files
 ```bash
 tep anchor auto <pathspec...>
 ```
 
-Use when:
-- docs or code contain anchor tags
-- you want to materialize incomplete anchors
-- you want to refresh relation coverage
+Scans for `[#!#tep:name](entities)` tags. Creates or updates anchor records. Syncs entity relations.
 
-## Doc seeding guidance
-
-When adding `tep` coverage to docs:
-- prefer one anchor per important section or paragraph
-- favor semantic section boundaries over dense tagging
-- use entity declarations where a file or section defines a canonical thing
-- keep examples readable and avoid noisy anchor clutter
-
-### Example hygiene
-Keep example-only lines marked with:
-```txt
-#tepignore
+### Reset and re-index
+```bash
+tep reset --yes
 ```
 
-This prevents incomplete tag examples from being auto-discovered.
+Deletes the DB, recreates schema, runs `entity auto .` then `anchor auto .` on the whole workspace.
+Leaves `.tep_ignore` untouched.
+
+### Health check
+```bash
+tep health
+tep health ./docs
+```
+
+Reports: moved anchors, missing anchors, duplicate names, unknown names, entities without anchors, anchors without entities.
+
+---
+
+## How to add tep coverage to a new project
+
+### Step 1 — Init
+```bash
+tep init
+```
+
+Edit `.tep_ignore` to exclude test fixtures, build dirs, generated files:
+```
+.tep/
+.git/
+target/
+tests/
+node_modules/
+```
+
+### Step 2 — Declare entities at their canonical locations
+
+Add `(#!#tep:entity_name)` tags where each concept is primarily defined:
+
+```rust
+// (#!#tep:payment_flow)
+pub fn process_payment(order: &Order) -> Result<Receipt> { ... }
+```
+
+```markdown
+(#!#tep:user)
+# User
+
+A registered account holder.
+```
+
+Then run:
+```bash
+tep entity auto ./src
+tep entity auto ./docs
+```
+
+### Step 3 — Place named anchor tags at important locations
+
+Add `[#!#tep:name](entities)` tags at meaningful entry points, key algorithms, schema definitions, important doc sections:
+
+```rust
+// [#!#tep:payment.validation](payment_flow,order)
+fn validate_payment_method(method: &PaymentMethod) -> bool { ... }
+```
+
+```markdown
+[#!#tep:user.permissions](user,permissions)
+## Permission model
+
+Users have a role assigned at signup...
+```
+
+Then run:
+```bash
+tep anchor auto ./src
+tep anchor auto ./docs
+```
+
+### Step 4 — Link related entities (optional)
+```bash
+tep entity link payment_flow order "payment flow processes order"
+tep entity link user permissions "user has permissions"
+```
+
+### Step 5 — Verify
+```bash
+tep health
+tep entity context payment_flow
+```
+
+---
+
+## Tagging guidelines
+
+### Placement
+- Entity declarations: at the file or section that canonically defines the concept
+- Anchors: at entry points, key function bodies, schema definitions, section headers worth revisiting
+- One anchor per meaningful unit — not every line
+
+### Naming
+- Use dot-notation for hierarchy: `auth.token_generation`, `payment.refund_flow`
+- Use underscore for compound words: `payment_processor`, `user_permissions`
+- Keep names short but unique in context
+
+### Entity refs in anchors
+- At least one, must be a valid entity name
+- Multiple refs when one location genuinely covers several concepts
+- Don't artificially inflate refs
+
+### Coverage density
+| Location | Guideline |
+|---|---|
+| Core logic | Anchor key functions and service entry points |
+| Docs | Anchor section headers and key paragraphs |
+| Config/schema | Anchor the top-level definition |
+| Tests | Skip unless the behavior being tested is worth tracking |
+| Generated files | Skip |
+
+### Common mistakes to avoid
+- Duplicate anchor names across files (causes `anchor auto` to fail)
+- Missing entity refs (tag silently ignored)
+- Anchoring inside test fixtures without `#tepignore`
+- Very generic names like `misc`, `util`, `helper`
+- Placing entity declarations everywhere instead of just at the canonical definition
+
+---
 
 ## Workspace behavior reminder
 
-`tep` resolves the nearest ancestor workspace from the current cwd.
-That means:
-- run it from inside the project tree
-- do not assume the binary location defines the workspace
+- `tep` resolves the nearest ancestor workspace from cwd
+- Run it from inside the project tree
+- Only `.tep_ignore` affects scanning — not `.gitignore`
+- `tep reset --yes` is the clean-slate option: wipes DB, re-indexes everything
+
+---
 
 ## When this skill is most useful
-- repo triage in a `tep`-annotated project
-- doc-first implementation work
-- context assembly for agent coding tasks
-- understanding architecture/doc relationships with minimal repo scanning
-- maintaining and extending `tep` graph coverage in docs or code
+
+- Repo triage in a `tep`-annotated project
+- Doc-first implementation work
+- Context assembly for coding tasks
+- Understanding architecture/doc relationships with minimal file scanning
+- Seeding or extending graph coverage in a new or existing codebase
