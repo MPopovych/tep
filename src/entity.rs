@@ -1,4 +1,3 @@
-// (#!#1#tep:module.entity)
 use crate::utils::parse::{line_contains_marker, parse_scan_limit};
 
 pub const TEPIGNORE_MARKER: &str = "#tepignore";

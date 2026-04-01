@@ -6,13 +6,12 @@ use rusqlite::Connection;
 
 use crate::anchor::{Anchor, parse_anchors};
 use crate::entity::{Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity, parse_entity_declarations, parse_lookup};
-use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 use crate::service::entity_context::extract_anchor_snippet;
 use crate::service::entity_link_context::collect_link_context;
-use crate::utils::path::{display_path, resolve_from_workspace};
+use crate::utils::workspace_scanner::{WorkspaceFile, collect_workspace_files};
 
 pub struct EntityShowResult {
     pub entity: Entity,
@@ -39,6 +38,7 @@ pub struct EntityContextResult {
     pub linked_entities: Vec<LinkedEntityContext>,
 }
 
+#[derive(Debug, Default)]
 pub struct EntityAutoResult {
     pub files_processed: usize,
     pub declarations_seen: usize,
@@ -52,12 +52,6 @@ pub struct EntityLinkResult {
     pub from: Entity,
     pub to: Entity,
     pub relation: String,
-}
-
-#[derive(Debug, Clone)]
-struct WorkspaceFile {
-    absolute_path: PathBuf,
-    display_path: String,
 }
 
 pub struct EntityService<'a> {
@@ -100,24 +94,11 @@ impl<'a> EntityService<'a> {
     }
 
     pub fn auto(&self, paths: &[String]) -> Result<EntityAutoResult> {
-        let files = self.collect_workspace_files(paths)?;
-
-        let mut result = EntityAutoResult {
-            files_processed: 0,
-            declarations_seen: 0,
-            entities_ensured: 0,
-            refs_filled: 0,
-            anchors_created: 0,
-            relations_synced: 0,
-        };
-
+        let files = collect_workspace_files(&self.workspace_root, paths)?;
+        let mut result = EntityAutoResult::default();
         for file in files {
-            let changed = self.auto_file(&file, &mut result)?;
-            if changed {
-                result.files_processed += 1;
-            }
+            self.auto_file(&file, &mut result)?;
         }
-
         Ok(result)
     }
 
@@ -194,18 +175,6 @@ impl<'a> EntityService<'a> {
         self.repo.list()
     }
 
-    fn collect_workspace_files(&self, paths: &[String]) -> Result<Vec<WorkspaceFile>> {
-        let filter = TepIgnoreFilter::for_workspace_root(&self.workspace_root);
-        let files = filter.collect_paths(paths)?;
-        Ok(files
-            .into_iter()
-            .map(|path| WorkspaceFile {
-                absolute_path: resolve_from_workspace(&path, &self.workspace_root),
-                display_path: display_path(&path),
-            })
-            .collect())
-    }
-
     fn build_anchor_context(&self, anchors: &[Anchor]) -> (Vec<EntityContextAnchor>, Vec<String>) {
         let mut files = Vec::new();
         let mut context_anchors = Vec::new();
@@ -224,40 +193,26 @@ impl<'a> EntityService<'a> {
         (context_anchors, files)
     }
 
-    fn auto_file(&self, file: &WorkspaceFile, result: &mut EntityAutoResult) -> Result<bool> {
+    fn auto_file(&self, file: &WorkspaceFile, result: &mut EntityAutoResult) -> Result<()> {
         if !file.absolute_path.is_file() {
-            return Ok(false);
+            return Ok(());
         }
 
-        let original = fs::read_to_string(&file.absolute_path)
+        let content = fs::read_to_string(&file.absolute_path)
             .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
-        let declarations = parse_entity_declarations(&original);
+        let declarations = parse_entity_declarations(&content);
         if declarations.is_empty() {
-            return Ok(false);
+            return Ok(());
         }
 
         result.declarations_seen += declarations.len();
-
-        let mut rewritten = String::with_capacity(original.len() + 64);
-        let mut cursor = 0usize;
-
-        for declaration in declarations {
-            rewritten.push_str(&original[cursor..declaration.start_offset]);
-            self.sync_declaration(&file.display_path, &declaration, result)?;
-            rewritten.push_str(&declaration.raw);
-            cursor = declaration.start_offset + declaration.raw.len();
+        for declaration in &declarations {
+            self.sync_declaration(&file.display_path, declaration, result)?;
         }
+        self.refresh_anchor_locations(&file.display_path, &content)?;
+        result.files_processed += 1;
 
-        rewritten.push_str(&original[cursor..]);
-
-        if rewritten != original {
-            fs::write(&file.absolute_path, &rewritten)
-                .with_context(|| format!("failed to write {}", file.absolute_path.display()))?;
-        }
-
-        self.refresh_anchor_locations(&file.display_path, &rewritten)?;
-
-        Ok(true)
+        Ok(())
     }
 
     fn refresh_anchor_locations(&self, file_path: &str, text: &str) -> Result<()> {

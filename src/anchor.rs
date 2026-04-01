@@ -112,6 +112,10 @@ fn try_parse_anchor(input: &str, start: usize) -> Option<ParsedAnchor> {
         0
     };
 
+    if entity_refs.is_empty() {
+        return None;
+    }
+
     let raw = format!("{}{}", head, &after_head[..suffix_len]);
     let anchor_name = parse_anchor_head(head)?;
 
@@ -159,11 +163,9 @@ mod tests {
     }
 
     #[test]
-    fn parses_named_anchor_without_entity_refs() {
+    fn ignores_named_anchor_without_entity_refs() {
         let parsed = parse_anchors("[#!#tep:foo]");
-        assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].anchor_name, "foo");
-        assert!(parsed[0].entity_refs.is_empty());
+        assert!(parsed.is_empty());
     }
 
     #[test]
@@ -186,7 +188,7 @@ mod tests {
 
     #[test]
     fn parses_named_anchor_normalizes_case() {
-        let parsed = parse_anchors("[#!#tep:Student_Processor]");
+        let parsed = parse_anchors("[#!#tep:Student_Processor](student)");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].anchor_name, "student_processor");
     }

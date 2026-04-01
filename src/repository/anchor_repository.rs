@@ -1,6 +1,4 @@
-// (#!#1#tep:repo.anchor)
 // [#!#tep:repo.anchor.path-normalization](path.normalization,repo.anchor.path-normalization)
-// [#!#1#tep:59](repo.anchor,repo.anchor.path-normalization)
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -31,17 +29,7 @@ impl<'a> AnchorRepository<'a> {
         shift: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Anchor> {
-        let now = now_utc();
-        let normalized = self.normalize_path(file_path);
-        self.conn.execute(
-            "INSERT INTO anchors (version, name, file_path, line, shift, offset, created_at, updated_at) VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![version, normalized, line, shift, offset, now, now],
-        )
-        .with_context(|| format!("failed to create anchor for file {}", file_path))?;
-
-        let anchor_id = self.conn.last_insert_rowid();
-        self.find_by_id(anchor_id)?
-            .context("created anchor could not be reloaded")
+        self.create_with_name(None, version, file_path, line, shift, offset)
     }
 
     pub fn update_location(
@@ -86,17 +74,32 @@ impl<'a> AnchorRepository<'a> {
         shift: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Anchor> {
+        self.create_with_name(Some(name), version, file_path, line, shift, offset)
+    }
+
+    fn create_with_name(
+        &self,
+        name: Option<&str>,
+        version: i64,
+        file_path: &str,
+        line: Option<i64>,
+        shift: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Anchor> {
         let now = now_utc();
         let normalized = self.normalize_path(file_path);
         self.conn.execute(
             "INSERT INTO anchors (version, name, file_path, line, shift, offset, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![version, name, normalized, line, shift, offset, now, now],
         )
-        .with_context(|| format!("failed to create named anchor '{}' for file {}", name, file_path))?;
+        .with_context(|| match name {
+            Some(n) => format!("failed to create anchor '{}' for file {}", n, file_path),
+            None => format!("failed to create anchor for file {}", file_path),
+        })?;
 
         let anchor_id = self.conn.last_insert_rowid();
         self.find_by_id(anchor_id)?
-            .context("created named anchor could not be reloaded")
+            .context("created anchor could not be reloaded")
     }
 
     pub fn find_by_id(&self, anchor_id: i64) -> Result<Option<Anchor>> {
@@ -118,15 +121,11 @@ impl<'a> AnchorRepository<'a> {
     pub fn list_ids_for_file(&self, file_path: &str) -> Result<Vec<i64>> {
         let normalized = self.normalize_path(file_path);
         let mut stmt = self.conn.prepare(
-            "SELECT anchor_id, file_path FROM anchors ORDER BY anchor_id ASC",
+            "SELECT anchor_id FROM anchors WHERE file_path = ?1 ORDER BY anchor_id ASC",
         )?;
-        let rows = stmt.query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?;
-        let pairs = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(pairs
-            .into_iter()
-            .filter(|(_, stored_path)| self.normalize_path(stored_path) == normalized)
-            .map(|(anchor_id, _)| anchor_id)
-            .collect())
+        let rows = stmt.query_map(params![normalized], |row| row.get::<_, i64>(0))?;
+        let ids = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(ids)
     }
 
     pub fn list_for_entity(&self, entity_id: i64) -> Result<Vec<Anchor>> {
@@ -172,14 +171,12 @@ impl<'a> AnchorRepository<'a> {
             "SELECT a.anchor_id, a.version, a.name, a.file_path, a.line, a.shift, a.offset, a.created_at, a.updated_at
              FROM anchor_entities ae
              JOIN anchors a ON a.anchor_id = ae.anchor_id
-             WHERE ae.entity_id = ?1
-             ORDER BY a.anchor_id DESC",
+             WHERE ae.entity_id = ?1 AND a.file_path = ?2
+             ORDER BY a.anchor_id DESC
+             LIMIT 1",
         )?;
-        let rows = stmt.query_map(params![entity_id], map_anchor_row)?;
-        let anchors = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(anchors
-            .into_iter()
-            .find(|anchor| self.normalize_path(&anchor.file_path) == normalized))
+        let anchor = stmt.query_row(params![entity_id, normalized], map_anchor_row).optional()?;
+        Ok(anchor)
     }
 
     pub fn delete(&self, anchor_id: i64) -> Result<()> {

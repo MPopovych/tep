@@ -7,12 +7,11 @@ use rusqlite::Connection;
 
 use crate::anchor::{ParsedAnchor, parse_anchors};
 use crate::entity::parse_entity_declarations;
-use crate::filter::tep_ignore_filter::TepIgnoreFilter;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
-use crate::utils::path::{display_path, resolve_from_workspace};
+use crate::utils::workspace_scanner::{WorkspaceFile, collect_workspace_files};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct HealthIssueCounts {
     pub anchors_moved: usize,
     pub anchors_missing: usize,
@@ -22,7 +21,7 @@ pub struct HealthIssueCounts {
     pub anchors_without_entities: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct HealthIssueGroups {
     pub moved_anchors: Vec<String>,
     pub missing_anchors: Vec<String>,
@@ -32,7 +31,7 @@ pub struct HealthIssueGroups {
     pub anchors_without_entities: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct HealthReport {
     pub files_scanned: usize,
     pub anchors_seen: usize,
@@ -41,16 +40,11 @@ pub struct HealthReport {
     pub groups: HealthIssueGroups,
 }
 
-#[derive(Debug, Clone)]
-struct ParsedFile {
-    absolute_path: PathBuf,
-    display_path: String,
-}
-
 #[derive(Debug, Default)]
 struct HealthTracker {
-    seen_by_anchor_id: HashMap<String, String>,
-    seen_materialized_ids: HashSet<i64>,
+    /// anchor name → file path where it was first seen
+    seen_name_to_file: HashMap<String, String>,
+    seen_anchor_ids: HashSet<i64>,
 }
 
 pub struct HealthService<'a> {
@@ -75,74 +69,41 @@ impl<'a> HealthService<'a> {
     }
 
     pub fn audit_paths(&self, paths: &[String]) -> Result<HealthReport> {
-        let files = self.collect_workspace_files(paths)?;
-
-        let mut report = HealthReport {
-            files_scanned: 0,
-            anchors_seen: 0,
-            anchors_healthy: 0,
-            issue_counts: HealthIssueCounts {
-                anchors_moved: 0,
-                anchors_missing: 0,
-                duplicate_anchor_ids: 0,
-                unknown_anchor_ids: 0,
-                entities_without_anchors: 0,
-                anchors_without_entities: 0,
-            },
-            groups: HealthIssueGroups {
-                moved_anchors: Vec::new(),
-                missing_anchors: Vec::new(),
-                duplicate_anchor_ids: Vec::new(),
-                unknown_anchor_ids: Vec::new(),
-                entities_without_anchors: Vec::new(),
-                anchors_without_entities: Vec::new(),
-            },
-        };
-
+        let files = collect_workspace_files(&self.workspace_root, paths)?;
         let scoped_files = files
             .iter()
-            .map(|file| self.anchor_repo.normalized_path_for(&file.display_path))
+            .map(|f| self.anchor_repo.normalized_path_for(&f.display_path))
             .collect::<HashSet<_>>();
+
+        let mut report = HealthReport::default();
         let mut tracker = HealthTracker::default();
 
         for file in files {
-            if self.inspect_file(&file, &mut report, &mut tracker)? {
-                report.files_scanned += 1;
-            }
+            self.inspect_file(&file, &mut report, &mut tracker)?;
         }
 
-        self.report_missing_db_anchors(&scoped_files, &tracker.seen_materialized_ids, &mut report)?;
+        self.report_missing_db_anchors(&scoped_files, &tracker.seen_anchor_ids, &mut report)?;
         self.report_entities_without_anchors(&mut report)?;
         self.report_anchors_without_entities(&mut report)?;
         Ok(report)
     }
 
-    fn collect_workspace_files(&self, paths: &[String]) -> Result<Vec<ParsedFile>> {
-        let filter = TepIgnoreFilter::for_workspace_root(&self.workspace_root);
-        let files = filter.collect_paths(paths)?;
-        Ok(files
-            .into_iter()
-            .map(|path| ParsedFile {
-                absolute_path: resolve_from_workspace(&path, &self.workspace_root),
-                display_path: display_path(&path),
-            })
-            .collect())
-    }
-
     fn inspect_file(
         &self,
-        file: &ParsedFile,
+        file: &WorkspaceFile,
         report: &mut HealthReport,
         tracker: &mut HealthTracker,
-    ) -> Result<bool> {
-        let original = fs::read_to_string(&file.absolute_path)
+    ) -> Result<()> {
+        let content = fs::read_to_string(&file.absolute_path)
             .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
-        let parsed_anchors = parse_anchors(&original);
-        let parsed_declarations = parse_entity_declarations(&original);
+        let parsed_anchors = parse_anchors(&content);
+        let parsed_declarations = parse_entity_declarations(&content);
+
         if parsed_anchors.is_empty() && parsed_declarations.is_empty() {
-            return Ok(false);
+            return Ok(());
         }
 
+        report.files_scanned += 1;
         report.anchors_seen += parsed_anchors.len() + parsed_declarations.len();
 
         let mut local_names = HashSet::new();
@@ -156,12 +117,12 @@ impl<'a> HealthService<'a> {
                 .find(&crate::entity::EntityLookup::Name(declaration.name.clone()))?
                 .and_then(|entity| self.anchor_repo.find_latest_for_entity_in_file(entity.entity_id, &file.display_path).ok().flatten())
             {
-                tracker.seen_materialized_ids.insert(existing.anchor_id);
+                tracker.seen_anchor_ids.insert(existing.anchor_id);
                 report.anchors_healthy += 1;
             }
         }
 
-        Ok(true)
+        Ok(())
     }
 
     fn inspect_named_anchor(
@@ -183,7 +144,7 @@ impl<'a> HealthService<'a> {
             return Ok(());
         }
 
-        if let Some(existing_file) = tracker.seen_by_anchor_id.get(name) {
+        if let Some(existing_file) = tracker.seen_name_to_file.get(name) {
             if existing_file != file_path {
                 report.issue_counts.duplicate_anchor_ids += 1;
                 report.groups.duplicate_anchor_ids.push(format!(
@@ -193,12 +154,12 @@ impl<'a> HealthService<'a> {
                 return Ok(());
             }
         } else {
-            tracker.seen_by_anchor_id.insert(name.clone(), file_path.to_string());
+            tracker.seen_name_to_file.insert(name.clone(), file_path.to_string());
         }
 
         match self.anchor_repo.find_by_name(name)? {
             Some(stored) => {
-                tracker.seen_materialized_ids.insert(stored.anchor_id);
+                tracker.seen_anchor_ids.insert(stored.anchor_id);
                 let normalized_file_path = self.anchor_repo.normalized_path_for(file_path);
                 if normalized_file_path != stored.file_path
                     || stored.line != Some(anchor.line)
@@ -238,11 +199,11 @@ impl<'a> HealthService<'a> {
     fn report_missing_db_anchors(
         &self,
         scoped_files: &HashSet<String>,
-        seen_materialized_ids: &HashSet<i64>,
+        seen_anchor_ids: &HashSet<i64>,
         report: &mut HealthReport,
     ) -> Result<()> {
         for anchor in self.anchor_repo.list_all()? {
-            if scoped_files.contains(&anchor.file_path) && !seen_materialized_ids.contains(&anchor.anchor_id) {
+            if scoped_files.contains(&anchor.file_path) && !seen_anchor_ids.contains(&anchor.anchor_id) {
                 report.issue_counts.anchors_missing += 1;
                 report.groups.missing_anchors.push(format!(
                     "missing anchor {} recorded in db but not found in file {}",

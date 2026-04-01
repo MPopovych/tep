@@ -1,6 +1,4 @@
-// (#!#1#tep:repo.entity)
 // [#!#tep:repo.entity.links](repo.entity.links)
-// [#!#1#tep:60](repo.entity,repo.entity.links)
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 

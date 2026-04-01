@@ -1,4 +1,3 @@
-// [#!#tep:service.anchor.sync](service.anchor.sync)
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -6,14 +5,14 @@ use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
 use crate::anchor::{Anchor, AnchorTarget, ParsedAnchor, parse_anchor_target, parse_anchors};
-use crate::entity::parse_lookup;
-use crate::filter::tep_ignore_filter::TepIgnoreFilter;
+use crate::entity::{EntityLookup, NewEntity, parse_lookup};
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
-use crate::utils::path::{display_path, resolve_from_workspace};
+use crate::utils::path::display_path;
+use crate::utils::workspace_scanner::collect_workspace_files;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AnchorSyncResult {
     pub files_processed: usize,
     pub anchors_created: usize,
@@ -25,11 +24,6 @@ pub struct AnchorSyncResult {
 pub struct AnchorShowResult {
     pub anchor: Anchor,
     pub entities: Vec<crate::entity::Entity>,
-}
-
-#[derive(Debug, Clone)]
-struct ParsedFile {
-    absolute_path: PathBuf,
 }
 
 pub struct AnchorService<'a> {
@@ -56,23 +50,11 @@ impl<'a> AnchorService<'a> {
     }
 
     pub fn sync_paths(&self, paths: &[String]) -> Result<AnchorSyncResult> {
-        let files = self.collect_workspace_files(paths)?;
-
-        let mut result = AnchorSyncResult {
-            files_processed: 0,
-            anchors_created: 0,
-            anchors_seen: 0,
-            anchors_dropped: 0,
-            relations_synced: 0,
-        };
-
+        let files = collect_workspace_files(&self.workspace_root, paths)?;
+        let mut result = AnchorSyncResult::default();
         for file in files {
-            let had_anchors = self.sync_file(&file.absolute_path, &mut result)?;
-            if had_anchors {
-                result.files_processed += 1;
-            }
+            self.sync_file(&file.absolute_path, &mut result)?;
         }
-
         Ok(result)
     }
 
@@ -99,45 +81,30 @@ impl<'a> AnchorService<'a> {
         }
     }
 
-    fn collect_workspace_files(&self, paths: &[String]) -> Result<Vec<ParsedFile>> {
-        let filter = TepIgnoreFilter::for_workspace_root(&self.workspace_root);
-        let files = filter.collect_paths(paths)?;
-        Ok(files
-            .into_iter()
-            .map(|path| ParsedFile {
-                absolute_path: resolve_from_workspace(&path, &self.workspace_root),
-            })
-            .collect())
-    }
-
-    fn sync_file(&self, path: &Path, result: &mut AnchorSyncResult) -> Result<bool> {
+    fn sync_file(&self, path: &Path, result: &mut AnchorSyncResult) -> Result<()> {
         if !path.is_file() {
-            return Ok(false);
+            return Ok(());
         }
 
-        let original = std::fs::read_to_string(path)
+        let content = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read {}", path.display()))?;
-        let parsed = parse_anchors(&original);
-        if parsed.is_empty() {
-            self.drop_missing_anchors(path, &HashSet::new(), result)?;
-            return Ok(false);
-        }
+        let parsed = parse_anchors(&content);
 
         self.ensure_no_duplicate_names(&parsed)?;
         result.anchors_seen += parsed.len();
 
         let mut seen_ids = HashSet::new();
-
         for anchor in &parsed {
-            if anchor.entity_refs.is_empty() {
-                continue;
-            }
             self.sync_anchor(path, anchor, result, &mut seen_ids)?;
         }
 
         self.drop_missing_anchors(path, &seen_ids, result)?;
 
-        Ok(true)
+        if !parsed.is_empty() {
+            result.files_processed += 1;
+        }
+
+        Ok(())
     }
 
     fn sync_anchor(
@@ -202,13 +169,14 @@ impl<'a> AnchorService<'a> {
     }
 
     fn resolve_entity_reference(&self, entity_ref: &str) -> Result<crate::entity::Entity> {
-        let lookup = parse_lookup(entity_ref);
-        match lookup {
-            crate::entity::EntityLookup::Id(_) => self
-                .entity_repo
-                .find(&lookup)?
-                .with_context(|| format!("entity not found: {entity_ref}")),
-            crate::entity::EntityLookup::Name(name) => self.entity_repo.ensure(&crate::entity::NewEntity {
+        match parse_lookup(entity_ref) {
+            EntityLookup::Id(_) => {
+                let lookup = parse_lookup(entity_ref);
+                self.entity_repo
+                    .find(&lookup)?
+                    .with_context(|| format!("entity not found: {entity_ref}"))
+            }
+            EntityLookup::Name(name) => self.entity_repo.ensure(&NewEntity {
                 name,
                 r#ref: None,
                 description: None,
@@ -260,9 +228,8 @@ mod tests {
     fn collect_workspace_files_resolves_absolute_paths() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         std::fs::write(temp.path().join("note.txt"), "[#!#tep:foo](student)").unwrap();
-        let service = setup_service(temp.path());
 
-        let files = service.collect_workspace_files(&["./note.txt".into()]).unwrap();
+        let files = collect_workspace_files(&temp.path().to_path_buf(), &["./note.txt".into()]).unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].absolute_path, temp.path().join("./note.txt"));
     }
@@ -287,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_file_skips_anchor_without_entity_refs() {
+    fn sync_file_ignores_anchor_without_entity_refs() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
         let file = temp.path().join("note.txt");
@@ -295,7 +262,7 @@ mod tests {
 
         let result = service.sync_paths(&["./note.txt".into()]).expect("sync should succeed");
 
-        assert_eq!(result.anchors_seen, 1);
+        assert_eq!(result.anchors_seen, 0);
         assert_eq!(result.anchors_created, 0);
         assert_eq!(result.relations_synced, 0);
     }
