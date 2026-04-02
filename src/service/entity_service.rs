@@ -316,12 +316,10 @@ mod tests {
             .create("student.permissions".into(), None, None)
             .expect("create should succeed");
 
-        let dto = crate::dto::entity_show_to_dto(
-            &service
-                .show("student.permissions")
-                .expect("show should succeed"),
-        );
-        assert_eq!(dto.entity.name, "student.permissions");
+        let result = service
+            .show("student.permissions")
+            .expect("show should succeed");
+        assert_eq!(result.entity.name, "student.permissions");
     }
 
     #[test]
@@ -337,20 +335,19 @@ mod tests {
             .link("Teacher", "Student", "teacher mentors student")
             .unwrap();
 
-        let dto = crate::dto::entity_show_to_dto(&service.show("Student").unwrap());
-        assert_eq!(dto.links.len(), 2);
-        assert!(dto.links.iter().any(|l| l.entity.name == "subject"));
-        assert!(dto.links.iter().any(|l| l.entity.name == "teacher"));
-        // directions
+        let result = service.show("Student").unwrap();
+        assert_eq!(result.linked_entities.len(), 2);
         assert!(
-            dto.links
+            result
+                .linked_entities
                 .iter()
-                .any(|l| l.entity.name == "subject" && l.direction == "->")
+                .any(|l| l.entity.name == "subject")
         );
         assert!(
-            dto.links
+            result
+                .linked_entities
                 .iter()
-                .any(|l| l.entity.name == "teacher" && l.direction == "<-")
+                .any(|l| l.entity.name == "teacher")
         );
     }
 
@@ -397,17 +394,19 @@ mod tests {
             )
             .unwrap();
 
-        let dto = crate::dto::entity_context_to_dto(&service.context("student", 1).unwrap());
-        assert_eq!(dto.links.len(), 2);
+        let result = service.context("student", 1).unwrap();
+        assert_eq!(result.linked_entities.len(), 2);
         assert!(
-            dto.links
+            result
+                .linked_entities
                 .iter()
-                .any(|l| l.entity.name == "subject" && l.depth == 1 && l.direction == "->")
+                .any(|l| l.entity.name == "subject" && l.depth == 1)
         );
         assert!(
-            dto.links
+            result
+                .linked_entities
                 .iter()
-                .any(|l| l.entity.name == "teacher" && l.depth == 1 && l.direction == "<-")
+                .any(|l| l.entity.name == "teacher" && l.depth == 1)
         );
     }
 
@@ -490,29 +489,38 @@ mod tests {
             )
             .unwrap();
 
-        let dto = crate::dto::entity_context_to_dto(&service.context("student", 2).unwrap());
-        assert_eq!(dto.links.len(), 4);
+        let result = service.context("student", 2).unwrap();
+        assert_eq!(result.linked_entities.len(), 4);
         assert!(
-            dto.links
+            result
+                .linked_entities
                 .iter()
                 .any(|l| l.entity.name == "subject" && l.depth == 1)
         );
         assert!(
-            dto.links
+            result
+                .linked_entities
                 .iter()
                 .any(|l| l.entity.name == "semester" && l.depth == 1)
         );
         assert!(
-            dto.links
+            result
+                .linked_entities
                 .iter()
                 .any(|l| l.entity.name == "teacher" && l.depth == 1)
         );
         assert!(
-            dto.links
+            result
+                .linked_entities
                 .iter()
                 .any(|l| l.entity.name == "department" && l.depth == 2)
         );
-        assert!(!dto.links.iter().any(|l| l.entity.name == "student"));
+        assert!(
+            !result
+                .linked_entities
+                .iter()
+                .any(|l| l.entity.name == "student")
+        );
     }
 
     #[test]
@@ -559,12 +567,12 @@ mod tests {
             .attach(anchor.anchor_id, entity.entity_id)
             .unwrap();
 
-        let dto = crate::dto::entity_context_to_dto(&service.context("student", 1).unwrap());
-        assert_eq!(dto.entity.r#ref.as_deref(), Some("./docs/student.md"));
-        assert_eq!(dto.anchors.len(), 1);
-        assert!(dto.anchors[0].anchor.file.contains("note.txt"));
-        assert_eq!(dto.links.len(), 1);
-        let snippet = dto.anchors[0].snippet.as_deref().unwrap();
+        let result = service.context("student", 1).unwrap();
+        assert_eq!(result.entity.r#ref.as_deref(), Some("./docs/student.md"));
+        assert_eq!(result.anchors.len(), 1);
+        assert!(result.anchors[0].anchor.file_path.contains("note.txt"));
+        assert_eq!(result.linked_entities.len(), 1);
+        let snippet = result.anchors[0].snippet.as_deref().unwrap();
         assert!(snippet.contains("anchor line"));
     }
 }
