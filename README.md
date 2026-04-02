@@ -49,6 +49,7 @@ The graph lives in your repo (`.tep/`), works offline, and stays under your cont
 - Bounded link traversal (`--link-depth`)
 - Audit anchor health with `tep health`
 - Reset and re-index the workspace with `tep reset`
+- JSON output on any command via `--json`
 - Respect `.tepignore` for test fixtures and examples
 
 ---
@@ -141,6 +142,11 @@ Practical rule:
 
 ## Current command surface
 
+### Global flags
+```bash
+tep --json <command>   # output as JSON (works with any command)
+```
+
 ### Workspace
 ```bash
 tep init
@@ -176,6 +182,7 @@ tep a ...  (shorthand)
 ### Get all locations and linked concepts for an entity
 ```bash
 tep entity context anchor.parser
+tep --json entity context anchor.parser   # machine-readable output
 ```
 
 Output:
@@ -222,6 +229,14 @@ tep reset --yes    # skip prompt
 ```
 
 ## Output style
+
+All commands support `--json` for machine-readable output. Place it before the subcommand:
+```bash
+tep --json entity list
+tep --json anchor show anchor.parser
+tep --json entity context anchor.sync --link-depth 2
+tep --json health
+```
 
 Default output is intentionally compact.
 
