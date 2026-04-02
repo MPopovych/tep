@@ -10,6 +10,8 @@ const ANCHOR_ABOUT: &str = "Work with anchors, names, and anchor-entity attachme
 #[command(about = ABOUT)]
 #[command(version, propagate_version = true)]
 pub struct Cli {
+    #[arg(long, global = true, help = "Output as JSON")]
+    pub json: bool,
     #[command(subcommand)]
     pub command: Commands,
 }

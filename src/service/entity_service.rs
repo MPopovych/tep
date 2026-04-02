@@ -8,8 +8,8 @@ use rusqlite::Connection;
 
 use crate::anchor::Anchor;
 use crate::entity::{
-    Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity,
-    parse_entity_declarations, parse_lookup,
+    Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity, parse_entity_declarations,
+    parse_lookup,
 };
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;

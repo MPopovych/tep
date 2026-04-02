@@ -32,3 +32,10 @@ where
 pub fn print_rendered(rendered: String) {
     print!("{}", rendered);
 }
+
+pub fn print_json<T: serde::Serialize>(value: &T) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).expect("json serialization should not fail")
+    );
+}
