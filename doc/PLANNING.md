@@ -1,5 +1,63 @@
 # Planning
 
+## VS Code Plugin — Interface Plan
+
+### Plugin features
+- **Entity browser** — sidebar listing all entities with name, ref, description
+- **Hover on anchor tag** — show linked entities, descriptions, refs
+- **Hover on entity ref** — show entity info inline
+- **Go to definition** — open the entity's `ref` file
+
+### Plugin architecture
+- Thin Node.js/TypeScript extension — shells out to `tep` CLI, parses JSON, renders in VS Code UI
+- No Rust in the plugin itself
+
+### Commands the plugin calls
+
+| Command | When |
+|---|---|
+| `tep workspace info --json` | Extension activate — confirm workspace, get root |
+| `tep entity list --json` | Populate entity browser |
+| `tep entity show <name> --json` | Hover on entity ref, go-to-definition |
+| `tep anchor show <name> --json` | Hover on anchor tag |
+| `tep anchor at <file> <line> --json` | Cursor position → nearest anchor (NEW) |
+
+### Two new commands needed (TEP-3)
+
+**`tep anchor at <file> <line>`** — returns anchor at/near a file position. Drives hover via cursor coordinates.
+
+**`tep workspace info`** — returns root path + basic stats. Needed by plugin on startup to locate workspace root and resolve relative paths.
+
+### JSON shapes
+
+```jsonc
+// entity list
+[{ "id": 1, "name": "auth.flow", "ref": "./src/auth.rs", "description": "..." }]
+
+// entity show
+{
+  "entity": { "id": 1, "name": "auth.flow", "ref": "...", "description": "..." },
+  "anchors": [{ "id": 7, "name": "auth.flow", "file": "...", "line": 42, "shift": 0, "offset": 1200 }],
+  "links": [{ "direction": "->", "entity": { "id": 2, "name": "token" }, "relation": "produces token", "depth": 1 }]
+}
+
+// anchor show
+{
+  "anchor": { "id": 7, "name": "auth.flow", "file": "...", "line": 42, "shift": 0, "offset": 1200 },
+  "entities": [{ "id": 1, "name": "auth.flow", "ref": "...", "description": "..." }]
+}
+
+// anchor at <file> <line>  (new)
+{ "anchor": { ... } | null, "entities": [...] }
+
+// workspace info  (new)
+{ "root": "/abs/path", "entities": 15, "anchors": 22, "schema_version": 3 }
+```
+
+---
+
+
+
 ## Workflow
 
 - All work happens on feature branches: `TEP-1`, `TEP-2`, etc.
