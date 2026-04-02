@@ -25,9 +25,9 @@ pub fn run(command: EntityCommands, json: bool) -> anyhow::Result<()> {
 }
 
 fn create(service: &EntityService<'_>, args: UpsertEntityArgs, json: bool) -> anyhow::Result<()> {
-    let entity = service.create(args.name, args.r#ref, args.description)?;
+    let entity = entity_to_dto(&service.create(args.name, args.r#ref, args.description)?);
     if json {
-        print_json(&entity_to_dto(&entity));
+        print_json(&entity);
     } else {
         print_rendered(format_entity_created("created", &entity));
     }
@@ -35,9 +35,9 @@ fn create(service: &EntityService<'_>, args: UpsertEntityArgs, json: bool) -> an
 }
 
 fn ensure(service: &EntityService<'_>, args: UpsertEntityArgs, json: bool) -> anyhow::Result<()> {
-    let entity = service.ensure(args.name, args.r#ref)?;
+    let entity = entity_to_dto(&service.ensure(args.name, args.r#ref)?);
     if json {
-        print_json(&entity_to_dto(&entity));
+        print_json(&entity);
     } else {
         print_rendered(format_entity_created("ensured", &entity));
     }
@@ -45,41 +45,42 @@ fn ensure(service: &EntityService<'_>, args: UpsertEntityArgs, json: bool) -> an
 }
 
 fn auto(service: &EntityService<'_>, args: EntityAutoArgs, json: bool) -> anyhow::Result<()> {
-    let result = service.auto(&args.paths)?;
+    let dto = entity_auto_to_dto(&service.auto(&args.paths)?);
     if json {
-        print_json(&entity_auto_to_dto(&result));
+        print_json(&dto);
     } else {
-        print_rendered(format_entity_auto_result(&result));
+        print_rendered(format_entity_auto_result(&dto));
     }
     Ok(())
 }
 
 fn show(service: &EntityService<'_>, target: &str, json: bool) -> anyhow::Result<()> {
-    let result = service.show(target)?;
+    let dto = entity_show_to_dto(&service.show(target)?);
     if json {
-        print_json(&entity_show_to_dto(&result));
+        print_json(&dto);
     } else {
-        print_rendered(format_entity_show(&result));
+        print_rendered(format_entity_show(&dto));
     }
     Ok(())
 }
 
 fn context(service: &EntityService<'_>, args: EntityContextArgs, json: bool) -> anyhow::Result<()> {
-    let result = service.context(&args.target, args.link_depth)?;
+    let dto = entity_context_to_dto(&service.context(&args.target, args.link_depth)?);
     if json {
-        print_json(&entity_context_to_dto(&result));
+        print_json(&dto);
     } else if args.files_only {
-        print_rendered(format_entity_context_files_only(&result));
+        print_rendered(format_entity_context_files_only(&dto));
     } else {
-        print_rendered(format_entity_context(&result));
+        print_rendered(format_entity_context(&dto));
     }
     Ok(())
 }
 
 fn edit(service: &EntityService<'_>, args: EditEntityArgs, json: bool) -> anyhow::Result<()> {
-    let entity = service.edit(&args.target, args.name, args.r#ref, args.description)?;
+    let entity =
+        entity_to_dto(&service.edit(&args.target, args.name, args.r#ref, args.description)?);
     if json {
-        print_json(&entity_to_dto(&entity));
+        print_json(&entity);
     } else {
         print_rendered(format_entity_created("updated", &entity));
     }
@@ -94,40 +95,44 @@ fn link(
     json: bool,
 ) -> anyhow::Result<()> {
     let result = service.link(from, to, relation)?;
+    let from_dto = entity_to_dto(&result.from);
+    let to_dto = entity_to_dto(&result.to);
     if json {
         print_json(&serde_json::json!({
-            "from": entity_to_dto(&result.from),
-            "to": entity_to_dto(&result.to),
+            "from": from_dto,
+            "to": to_dto,
             "relation": result.relation,
         }));
     } else {
-        print_rendered(format_entity_link_result("linked", &result));
+        print_rendered(format_entity_link_result(
+            "linked",
+            &from_dto,
+            &to_dto,
+            &result.relation,
+        ));
     }
     Ok(())
 }
 
 fn unlink(service: &EntityService<'_>, from: &str, to: &str, json: bool) -> anyhow::Result<()> {
     let (from_entity, to_entity) = service.unlink(from, to)?;
+    let from_dto = entity_to_dto(&from_entity);
+    let to_dto = entity_to_dto(&to_entity);
     if json {
         print_json(&serde_json::json!({
-            "from": entity_to_dto(&from_entity),
-            "to": entity_to_dto(&to_entity),
+            "from": from_dto,
+            "to": to_dto,
         }));
     } else {
-        print_rendered(format_entity_unlink_result(
-            "unlinked",
-            &from_entity,
-            &to_entity,
-        ));
+        print_rendered(format_entity_unlink_result("unlinked", &from_dto, &to_dto));
     }
     Ok(())
 }
 
 fn list(service: &EntityService<'_>, json: bool) -> anyhow::Result<()> {
-    let entities = service.list()?;
+    let entities: Vec<_> = service.list()?.iter().map(entity_to_dto).collect();
     if json {
-        let dto: Vec<_> = entities.iter().map(entity_to_dto).collect();
-        print_json(&dto);
+        print_json(&entities);
     } else {
         print_rendered(format_entity_list(&entities));
     }

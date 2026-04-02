@@ -1,11 +1,8 @@
-use crate::entity::Entity;
+use crate::dto::{EntityAutoDto, EntityContextDto, EntityDto, EntityShowDto};
 use crate::output::anchor_format::format_anchor_line;
 use crate::output::render::{append_entity_metadata, append_link_block, render_entity_header};
-use crate::service::entity_service::{
-    EntityAutoResult, EntityContextResult, EntityLinkResult, EntityShowResult,
-};
 
-pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
+pub fn format_entity_created(prefix: &str, entity: &EntityDto) -> String {
     let mut out = format!("{prefix}\n");
     out.push_str(&render_entity_header(entity));
     if let Some(description) = &entity.description {
@@ -14,7 +11,7 @@ pub fn format_entity_created(prefix: &str, entity: &Entity) -> String {
     out
 }
 
-pub fn format_entity_auto_result(result: &EntityAutoResult) -> String {
+pub fn format_entity_auto_result(result: &EntityAutoDto) -> String {
     format!(
         "entity auto complete\nfiles_processed: {}\ndeclarations_seen: {}\nentities_ensured: {}\nrefs_filled: {}\n",
         result.files_processed,
@@ -24,17 +21,17 @@ pub fn format_entity_auto_result(result: &EntityAutoResult) -> String {
     )
 }
 
-pub fn format_entity_show(result: &EntityShowResult) -> String {
+pub fn format_entity_show(result: &EntityShowDto) -> String {
     let mut out = render_entity_header(&result.entity);
     append_entity_metadata(&mut out, &result.entity);
     for anchor in &result.anchors {
         out.push_str(&format_anchor_line(anchor));
     }
-    append_link_block(&mut out, result.entity.entity_id, &result.linked_entities);
+    append_link_block(&mut out, &result.links);
     out
 }
 
-pub fn format_entity_context(result: &EntityContextResult) -> String {
+pub fn format_entity_context(result: &EntityContextDto) -> String {
     let mut out = render_entity_header(&result.entity);
     append_entity_metadata(&mut out, &result.entity);
     if !result.anchors.is_empty() {
@@ -49,11 +46,11 @@ pub fn format_entity_context(result: &EntityContextResult) -> String {
             }
         }
     }
-    append_link_block(&mut out, result.entity.entity_id, &result.linked_entities);
+    append_link_block(&mut out, &result.links);
     out
 }
 
-pub fn format_entity_context_files_only(result: &EntityContextResult) -> String {
+pub fn format_entity_context_files_only(result: &EntityContextDto) -> String {
     let mut out = render_entity_header(&result.entity);
     append_entity_metadata(&mut out, &result.entity);
     if !result.anchors.is_empty() {
@@ -62,44 +59,43 @@ pub fn format_entity_context_files_only(result: &EntityContextResult) -> String 
             out.push_str(&format_anchor_line(&item.anchor));
         }
     }
-    append_link_block(&mut out, result.entity.entity_id, &result.linked_entities);
+    append_link_block(&mut out, &result.links);
     out
 }
 
-pub fn format_entity_link_result(prefix: &str, result: &EntityLinkResult) -> String {
+pub fn format_entity_link_result(
+    prefix: &str,
+    from: &EntityDto,
+    to: &EntityDto,
+    relation: &str,
+) -> String {
     format!(
         "{}\nfrom: {} ({})\nto: {} ({})\nrelation: {}\n",
-        prefix,
-        result.from.entity_id,
-        result.from.name,
-        result.to.entity_id,
-        result.to.name,
-        result.relation
+        prefix, from.id, from.name, to.id, to.name, relation
     )
 }
 
-pub fn format_entity_unlink_result(prefix: &str, from: &Entity, to: &Entity) -> String {
+pub fn format_entity_unlink_result(prefix: &str, from: &EntityDto, to: &EntityDto) -> String {
     format!(
         "{}\nfrom: {} ({})\nto: {} ({})\n",
-        prefix, from.entity_id, from.name, to.entity_id, to.name
+        prefix, from.id, from.name, to.id, to.name
     )
 }
 
-pub fn format_entity_list(entities: &[Entity]) -> String {
+pub fn format_entity_list(entities: &[EntityDto]) -> String {
     if entities.is_empty() {
         return String::new();
     }
-
-    let mut out = String::new();
-    for entity in entities {
-        out.push_str(&format_entity_list_line(entity));
-        out.push('\n');
-    }
-    out
+    entities
+        .iter()
+        .map(format_entity_list_line)
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n"
 }
 
-fn format_entity_list_line(entity: &Entity) -> String {
-    let mut out = format!("{} {}", entity.entity_id, entity.name);
+fn format_entity_list_line(entity: &EntityDto) -> String {
+    let mut out = format!("{} {}", entity.id, entity.name);
     if let Some(description) = &entity.description {
         out.push_str(&format!(" - \"{}\"", description));
     }
@@ -115,30 +111,56 @@ fn format_entity_list_line(entity: &Entity) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::anchor::Anchor;
+    use crate::dto::{
+        AnchorContextDto, AnchorDto, AnchorSyncDto, EntityAutoDto, EntityContextDto, EntityShowDto,
+        LinkDto,
+    };
 
-    fn sample_entity() -> Entity {
-        Entity {
-            entity_id: 42,
+    fn sample_entity() -> EntityDto {
+        EntityDto {
+            id: 42,
             name: "student".into(),
             r#ref: Some("./docs/student.md".into()),
             description: Some("A learner".into()),
-            created_at: "1".into(),
-            updated_at: "2".into(),
         }
     }
 
-    fn sample_anchor() -> Anchor {
-        Anchor {
-            anchor_id: 7,
-            version: 1,
-            name: Some("student_processor".into()),
-            file_path: "./file.md".into(),
+    fn sample_anchor() -> AnchorDto {
+        AnchorDto {
+            id: 7,
+            name: "student_processor".into(),
+            file: "./file.md".into(),
             line: Some(3),
             shift: Some(4),
             offset: Some(22),
-            created_at: "1".into(),
-            updated_at: "2".into(),
+        }
+    }
+
+    fn outgoing_link() -> LinkDto {
+        LinkDto {
+            direction: "->".into(),
+            entity: EntityDto {
+                id: 10,
+                name: "subject".into(),
+                r#ref: None,
+                description: None,
+            },
+            relation: "student has subjects".into(),
+            depth: 1,
+        }
+    }
+
+    fn incoming_link() -> LinkDto {
+        LinkDto {
+            direction: "<-".into(),
+            entity: EntityDto {
+                id: 5,
+                name: "teacher".into(),
+                r#ref: None,
+                description: None,
+            },
+            relation: "teacher mentors student".into(),
+            depth: 1,
         }
     }
 
@@ -152,7 +174,7 @@ mod tests {
 
     #[test]
     fn formats_entity_auto_result() {
-        let rendered = format_entity_auto_result(&EntityAutoResult {
+        let rendered = format_entity_auto_result(&EntityAutoDto {
             files_processed: 1,
             declarations_seen: 2,
             entities_ensured: 2,
@@ -164,48 +186,25 @@ mod tests {
     }
 
     #[test]
+    fn formats_anchor_sync_result() {
+        let rendered = crate::output::anchor_output::format_anchor_sync_result(&AnchorSyncDto {
+            files_processed: 2,
+            anchors_seen: 3,
+            anchors_created: 1,
+            anchors_dropped: 1,
+            relations_synced: 2,
+        });
+        assert!(rendered.contains("anchor sync complete"));
+        assert!(rendered.contains("files_processed: 2"));
+        assert!(rendered.contains("anchors_seen: 3"));
+    }
+
+    #[test]
     fn formats_entity_show_with_links() {
-        let rendered = format_entity_show(&EntityShowResult {
+        let rendered = format_entity_show(&EntityShowDto {
             entity: sample_entity(),
             anchors: vec![sample_anchor()],
-            linked_entities: vec![
-                crate::service::entity_service::LinkedEntityContext {
-                    link: crate::entity::EntityLink {
-                        from_entity_id: 42,
-                        to_entity_id: 10,
-                        relation: "student has subjects".into(),
-                        created_at: "1".into(),
-                        updated_at: "2".into(),
-                    },
-                    entity: Entity {
-                        entity_id: 10,
-                        name: "subject".into(),
-                        r#ref: None,
-                        description: None,
-                        created_at: "1".into(),
-                        updated_at: "2".into(),
-                    },
-                    depth: 1,
-                },
-                crate::service::entity_service::LinkedEntityContext {
-                    link: crate::entity::EntityLink {
-                        from_entity_id: 5,
-                        to_entity_id: 42,
-                        relation: "teacher mentors student".into(),
-                        created_at: "1".into(),
-                        updated_at: "2".into(),
-                    },
-                    entity: Entity {
-                        entity_id: 5,
-                        name: "teacher".into(),
-                        r#ref: None,
-                        description: None,
-                        created_at: "1".into(),
-                        updated_at: "2".into(),
-                    },
-                    depth: 1,
-                },
-            ],
+            links: vec![outgoing_link(), incoming_link()],
         });
         assert!(rendered.contains("42 (student)"));
         assert!(rendered.contains("description: A learner"));
@@ -220,42 +219,34 @@ mod tests {
 
     #[test]
     fn formats_entity_list_with_one_line_shape() {
-        let rendered = format_entity_list(&[
+        let entities = vec![
             sample_entity(),
-            Entity {
-                entity_id: 99,
+            EntityDto {
+                id: 99,
                 name: "teacher".into(),
                 r#ref: None,
                 description: Some("An instructor".into()),
-                created_at: "1".into(),
-                updated_at: "2".into(),
             },
-        ]);
+        ];
+        let rendered = format_entity_list(&entities);
         assert!(rendered.contains("42 student - \"A learner\" (./docs/student.md)"));
         assert!(rendered.contains("99 teacher - \"An instructor\""));
     }
 
     #[test]
-    fn formats_context_links() {
-        let rendered = format_entity_context(&EntityContextResult {
+    fn formats_context_links_with_depth() {
+        let rendered = format_entity_context(&EntityContextDto {
             entity: sample_entity(),
             anchors: vec![],
-            linked_entities: vec![crate::service::entity_service::LinkedEntityContext {
-                link: crate::entity::EntityLink {
-                    from_entity_id: 42,
-                    to_entity_id: 10,
-                    relation: "student has subjects".into(),
-                    created_at: "1".into(),
-                    updated_at: "2".into(),
-                },
-                entity: Entity {
-                    entity_id: 10,
+            links: vec![LinkDto {
+                direction: "->".into(),
+                entity: EntityDto {
+                    id: 10,
                     name: "subject".into(),
                     r#ref: Some("./docs/subject.md".into()),
-                    description: Some("A course".into()),
-                    created_at: "1".into(),
-                    updated_at: "2".into(),
+                    description: None,
                 },
+                relation: "student has subjects".into(),
                 depth: 2,
             }],
         });
@@ -264,5 +255,19 @@ mod tests {
             rendered
                 .contains("-> 10 (subject) [./docs/subject.md]  student has subjects  [depth:2]")
         );
+    }
+
+    #[test]
+    fn format_context_files_only_shows_anchors_without_snippets() {
+        let rendered = format_entity_context_files_only(&EntityContextDto {
+            entity: sample_entity(),
+            anchors: vec![AnchorContextDto {
+                anchor: sample_anchor(),
+                snippet: Some("some snippet".into()),
+            }],
+            links: vec![],
+        });
+        assert!(rendered.contains("anchor:7 student_processor"));
+        assert!(!rendered.contains("some snippet"));
     }
 }

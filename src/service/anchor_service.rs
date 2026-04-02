@@ -303,8 +303,9 @@ mod tests {
             .attach(anchor.anchor_id, entity.entity_id)
             .unwrap();
 
-        let result = service.show(&anchor.anchor_id.to_string()).unwrap();
-        assert_eq!(result.anchor.anchor_id, anchor.anchor_id);
+        let result =
+            crate::dto::anchor_show_to_dto(&service.show(&anchor.anchor_id.to_string()).unwrap());
+        assert_eq!(result.anchor.id, anchor.anchor_id);
         assert_eq!(result.entities.len(), 1);
         assert_eq!(result.entities[0].name, "student");
     }

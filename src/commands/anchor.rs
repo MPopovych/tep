@@ -8,28 +8,27 @@ use crate::output::anchor_output::{
 pub fn run(command: AnchorCommands, json: bool) -> anyhow::Result<()> {
     with_anchor_service(|service| match command {
         AnchorCommands::Auto(args) => {
-            let result = service.sync_paths(&args.paths)?;
+            let dto = anchor_sync_to_dto(&service.sync_paths(&args.paths)?);
             if json {
-                print_json(&anchor_sync_to_dto(&result));
+                print_json(&dto);
             } else {
-                print_rendered(format_anchor_sync_result(&result));
+                print_rendered(format_anchor_sync_result(&dto));
             }
             Ok(())
         }
         AnchorCommands::Show { target } => {
-            let result = service.show(&target)?;
+            let dto = anchor_show_to_dto(&service.show(&target)?);
             if json {
-                print_json(&anchor_show_to_dto(&result));
+                print_json(&dto);
             } else {
-                print_rendered(format_anchor_show(&result));
+                print_rendered(format_anchor_show(&dto));
             }
             Ok(())
         }
         AnchorCommands::List => {
-            let anchors = service.list_all()?;
+            let anchors: Vec<_> = service.list_all()?.iter().map(anchor_to_dto).collect();
             if json {
-                let dto: Vec<_> = anchors.iter().map(anchor_to_dto).collect();
-                print_json(&dto);
+                print_json(&anchors);
             } else {
                 print_rendered(format_anchor_list(&anchors));
             }

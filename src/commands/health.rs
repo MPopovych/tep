@@ -7,11 +7,11 @@ use crate::service::health_service::HealthService;
 pub fn run(args: HealthArgs, json: bool) -> anyhow::Result<()> {
     let conn = open_ready_workspace_db()?;
     let service = HealthService::new(&conn);
-    let result = service.audit_paths(&[args.path])?;
+    let dto = health_to_dto(&service.audit_paths(&[args.path])?);
     if json {
-        print_json(&health_to_dto(&result));
+        print_json(&dto);
     } else {
-        print!("{}", format_anchor_health_result(&result));
+        print!("{}", format_anchor_health_result(&dto));
     }
     Ok(())
 }

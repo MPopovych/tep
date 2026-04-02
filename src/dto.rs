@@ -48,8 +48,6 @@ pub struct LinkDto {
 
 // --- Response DTOs ---
 
-
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EntityShowDto {
     pub entity: EntityDto,
@@ -76,8 +74,6 @@ pub struct AnchorShowDto {
     pub anchor: AnchorDto,
     pub entities: Vec<EntityDto>,
 }
-
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EntityAutoDto {
