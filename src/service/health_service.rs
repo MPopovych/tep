@@ -9,6 +9,7 @@ use rusqlite::Connection;
 
 use crate::anchor::{ParsedAnchor, parse_anchors};
 use crate::entity::parse_entity_declarations;
+use crate::tep_tag::{parse_anchor_tags, parse_entity_tags, parse_relation_tags};
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 use crate::utils::workspace_scanner::{WorkspaceFile, collect_workspace_files};
@@ -21,6 +22,7 @@ pub struct HealthIssueCounts {
     pub unknown_anchor_ids: usize,
     pub entities_without_anchors: usize,
     pub anchors_without_entities: usize,
+    pub metadata_warnings: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -31,6 +33,7 @@ pub struct HealthIssueGroups {
     pub unknown_anchor_ids: Vec<String>,
     pub entities_without_anchors: Vec<String>,
     pub anchors_without_entities: Vec<String>,
+    pub metadata_warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -101,13 +104,16 @@ impl<'a> HealthService<'a> {
             .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
         let parsed_anchors = parse_anchors(&content);
         let parsed_declarations = parse_entity_declarations(&content);
+        let entity_tags = parse_entity_tags(&content);
+        let relation_tags = parse_relation_tags(&content);
+        let anchor_tags = parse_anchor_tags(&content);
 
-        if parsed_anchors.is_empty() && parsed_declarations.is_empty() {
+        if parsed_anchors.is_empty() && parsed_declarations.is_empty() && relation_tags.is_empty() {
             return Ok(());
         }
 
         report.files_scanned += 1;
-        report.anchors_seen += parsed_anchors.len() + parsed_declarations.len();
+        report.anchors_seen += parsed_anchors.len() + parsed_declarations.len() + relation_tags.len();
 
         let mut local_names = HashSet::new();
         for anchor in &parsed_anchors {
@@ -136,6 +142,7 @@ impl<'a> HealthService<'a> {
             }
         }
 
+        self.inspect_metadata_warnings(&entity_tags, &relation_tags, &anchor_tags, report);
         Ok(())
     }
 
@@ -210,6 +217,42 @@ impl<'a> HealthService<'a> {
         }
 
         Ok(())
+    }
+
+    fn inspect_metadata_warnings(
+        &self,
+        entity_tags: &[crate::tep_tag::ParsedEntityTag],
+        relation_tags: &[crate::tep_tag::ParsedRelationTag],
+        anchor_tags: &[crate::tep_tag::ParsedAnchorTag],
+        report: &mut HealthReport,
+    ) {
+        for tag in entity_tags {
+            self.push_metadata_warnings("entity", &tag.name, &tag.metadata.duplicate_keys, &tag.metadata.unknown_fields, report);
+        }
+        for tag in relation_tags {
+            self.push_metadata_warnings("relation", &format!("{} -> {}", tag.from, tag.to), &tag.metadata.duplicate_keys, &tag.metadata.unknown_fields, report);
+        }
+        for tag in anchor_tags {
+            self.push_metadata_warnings("anchor", &tag.anchor_name, &tag.metadata.duplicate_keys, &tag.metadata.unknown_fields, report);
+        }
+    }
+
+    fn push_metadata_warnings(
+        &self,
+        kind: &str,
+        target: &str,
+        duplicate_keys: &[String],
+        unknown_fields: &[String],
+        report: &mut HealthReport,
+    ) {
+        for key in duplicate_keys {
+            report.issue_counts.metadata_warnings += 1;
+            report.groups.metadata_warnings.push(format!("duplicate metadata key '{}' in {} {}", key, kind, target));
+        }
+        for key in unknown_fields {
+            report.issue_counts.metadata_warnings += 1;
+            report.groups.metadata_warnings.push(format!("unknown metadata field '{}' in {} {}", key, kind, target));
+        }
     }
 
     fn report_missing_db_anchors(

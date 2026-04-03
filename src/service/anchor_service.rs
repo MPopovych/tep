@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
-use crate::anchor::{Anchor, AnchorTarget, ParsedAnchor, parse_anchor_target, parse_anchors};
+use crate::anchor::{Anchor, AnchorTarget, parse_anchor_target};
 use crate::entity::{EntityLookup, NewEntity, parse_lookup};
+use crate::tep_tag::{ParsedAnchorTag, parse_anchor_tags};
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
@@ -21,6 +22,8 @@ pub struct AnchorSyncResult {
     pub anchors_seen: usize,
     pub anchors_dropped: usize,
     pub relations_synced: usize,
+    pub metadata_updated: usize,
+    pub warnings: Vec<String>,
 }
 
 pub struct AnchorShowResult {
@@ -93,7 +96,7 @@ impl<'a> AnchorService<'a> {
 
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("failed to read {}", path.display()))?;
-        let parsed = parse_anchors(&content);
+        let parsed = parse_anchor_tags(&content);
 
         self.ensure_no_duplicate_names(&parsed)?;
         result.anchors_seen += parsed.len();
@@ -115,7 +118,7 @@ impl<'a> AnchorService<'a> {
     fn sync_anchor(
         &self,
         path: &Path,
-        anchor: &ParsedAnchor,
+        anchor: &ParsedAnchorTag,
         result: &mut AnchorSyncResult,
         seen_ids: &mut HashSet<i64>,
     ) -> Result<()> {
@@ -133,6 +136,7 @@ impl<'a> AnchorService<'a> {
                     Some(anchor.start_offset as i64),
                 )?;
                 self.sync_entity_relations(existing.anchor_id, &anchor.entity_refs, result)?;
+                self.collect_anchor_metadata_warnings(anchor, result);
             }
             None => {
                 let created = self.anchor_repo.create_named(
@@ -145,6 +149,7 @@ impl<'a> AnchorService<'a> {
                 )?;
                 seen_ids.insert(created.anchor_id);
                 self.sync_entity_relations(created.anchor_id, &anchor.entity_refs, result)?;
+                self.collect_anchor_metadata_warnings(anchor, result);
                 result.anchors_created += 1;
             }
         }
@@ -190,7 +195,7 @@ impl<'a> AnchorService<'a> {
         }
     }
 
-    fn ensure_no_duplicate_names(&self, parsed: &[ParsedAnchor]) -> Result<()> {
+    fn ensure_no_duplicate_names(&self, parsed: &[ParsedAnchorTag]) -> Result<()> {
         let mut seen_names: HashSet<String> = HashSet::new();
         for anchor in parsed {
             if !seen_names.insert(anchor.anchor_name.clone()) {
@@ -201,6 +206,18 @@ impl<'a> AnchorService<'a> {
             }
         }
         Ok(())
+    }
+
+    fn collect_anchor_metadata_warnings(&self, anchor: &ParsedAnchorTag, result: &mut AnchorSyncResult) {
+        for key in &anchor.metadata.duplicate_keys {
+            result.warnings.push(format!("duplicate metadata key '{}' in anchor {}", key, anchor.anchor_name));
+        }
+        for key in &anchor.metadata.unknown_fields {
+            result.warnings.push(format!("unknown metadata field '{}' in anchor {}", key, anchor.anchor_name));
+        }
+        if anchor.metadata.fields.contains_key("description") {
+            result.metadata_updated += 1;
+        }
     }
 
     fn drop_missing_anchors(

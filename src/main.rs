@@ -8,6 +8,7 @@ mod filter;
 mod output;
 mod repository;
 mod service;
+mod tep_tag;
 mod utils;
 
 use clap::Parser;

@@ -201,6 +201,18 @@ impl<'a> EntityRepository<'a> {
         Ok(links)
     }
 
+    pub fn find_link_by_name(&self, from: &str, to: &str) -> Result<Option<EntityLink>> {
+        let from_entity = match self.find(&EntityLookup::Name(from.to_string()))? {
+            Some(entity) => entity,
+            None => return Ok(None),
+        };
+        let to_entity = match self.find(&EntityLookup::Name(to.to_string()))? {
+            Some(entity) => entity,
+            None => return Ok(None),
+        };
+        self.find_link(from_entity.entity_id, to_entity.entity_id)
+    }
+
     fn find_link(&self, from_entity_id: i64, to_entity_id: i64) -> Result<Option<EntityLink>> {
         let mut stmt = self.conn.prepare(
             "SELECT from_entity_id, to_entity_id, relation, created_at, updated_at

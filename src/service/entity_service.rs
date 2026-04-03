@@ -7,10 +7,8 @@ use anyhow::{Context, Result, bail};
 use rusqlite::Connection;
 
 use crate::anchor::Anchor;
-use crate::entity::{
-    Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity,
-    parse_entity_declarations, parse_lookup,
-};
+use crate::entity::{Entity, EntityLink, NewEntity, UpdateEntity, parse_lookup};
+use crate::tep_tag::{ParsedEntityTag, ParsedRelationTag, parse_entity_tags, parse_relation_tags};
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 use crate::service::entity_context::extract_anchor_snippet;
@@ -44,8 +42,12 @@ pub struct EntityContextResult {
 pub struct EntityAutoResult {
     pub files_processed: usize,
     pub declarations_seen: usize,
+    pub relations_seen: usize,
     pub entities_ensured: usize,
     pub refs_filled: usize,
+    pub descriptions_filled: usize,
+    pub relations_synced: usize,
+    pub warnings: Vec<String>,
 }
 
 pub struct EntityLinkResult {
@@ -213,45 +215,75 @@ impl<'a> EntityService<'a> {
 
         let content = fs::read_to_string(&file.absolute_path)
             .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
-        let declarations = parse_entity_declarations(&content);
-        if declarations.is_empty() {
+        let entity_tags = parse_entity_tags(&content);
+        let relation_tags = parse_relation_tags(&content);
+        if entity_tags.is_empty() && relation_tags.is_empty() {
             return Ok(());
         }
 
-        result.declarations_seen += declarations.len();
-        for declaration in &declarations {
-            self.sync_declaration(&file.display_path, declaration, result)?;
+        result.declarations_seen += entity_tags.len();
+        result.relations_seen += relation_tags.len();
+
+        for tag in &entity_tags {
+            self.sync_entity_tag(&file.display_path, tag, result)?;
+        }
+        for tag in &relation_tags {
+            self.sync_relation_tag(tag, result)?;
         }
         result.files_processed += 1;
 
         Ok(())
     }
 
-    fn sync_declaration(
+    fn sync_entity_tag(
         &self,
         file_path: &str,
-        declaration: &ParsedEntityDeclaration,
+        tag: &ParsedEntityTag,
         result: &mut EntityAutoResult,
     ) -> Result<()> {
-        self.ensure_entity_for_declaration(declaration, file_path, result)?;
-        Ok(())
-    }
-
-    fn ensure_entity_for_declaration(
-        &self,
-        declaration: &ParsedEntityDeclaration,
-        file_path: &str,
-        result: &mut EntityAutoResult,
-    ) -> Result<Entity> {
         let mut entity = self.repo.ensure(&NewEntity {
-            name: declaration.name.clone(),
+            name: tag.name.clone(),
             r#ref: None,
             description: None,
         })?;
         result.entities_ensured += 1;
 
+        entity = self.apply_ref_metadata(file_path, tag, entity, result)?;
+        self.apply_description_metadata(tag, entity, result)?;
+        self.collect_metadata_warnings(&tag.metadata.duplicate_keys, &tag.metadata.unknown_fields, &tag.name, "entity", result);
+        Ok(())
+    }
+
+    fn apply_ref_metadata(
+        &self,
+        file_path: &str,
+        tag: &ParsedEntityTag,
+        entity: Entity,
+        result: &mut EntityAutoResult,
+    ) -> Result<Entity> {
+        if let Some(tag_ref) = tag.metadata.fields.get("ref") {
+            let updated = self.repo.update(
+                &parse_lookup(&entity.entity_id.to_string()),
+                &UpdateEntity {
+                    name: None,
+                    r#ref: Some(tag_ref.clone()),
+                    description: None,
+                },
+            )?;
+            if entity.r#ref.as_deref() != Some(tag_ref.as_str()) {
+                result.refs_filled += 1;
+                if entity.r#ref.is_some() && entity.r#ref.as_deref() != Some(tag_ref.as_str()) {
+                    result.warnings.push(format!(
+                        "entity '{}' ref overwritten by later declaration",
+                        tag.name
+                    ));
+                }
+            }
+            return Ok(updated);
+        }
+
         if entity.r#ref.is_none() {
-            entity = self.repo.update(
+            let updated = self.repo.update(
                 &parse_lookup(&entity.entity_id.to_string()),
                 &UpdateEntity {
                     name: None,
@@ -260,9 +292,90 @@ impl<'a> EntityService<'a> {
                 },
             )?;
             result.refs_filled += 1;
+            return Ok(updated);
         }
 
         Ok(entity)
+    }
+
+    fn apply_description_metadata(
+        &self,
+        tag: &ParsedEntityTag,
+        entity: Entity,
+        result: &mut EntityAutoResult,
+    ) -> Result<Entity> {
+        let Some(description) = tag.metadata.fields.get("description") else {
+            return Ok(entity);
+        };
+
+        let updated = self.repo.update(
+            &parse_lookup(&entity.entity_id.to_string()),
+            &UpdateEntity {
+                name: None,
+                r#ref: None,
+                description: Some(description.clone()),
+            },
+        )?;
+        if entity.description.as_deref() != Some(description.as_str()) {
+            result.descriptions_filled += 1;
+            if entity.description.is_some() && entity.description.as_deref() != Some(description.as_str()) {
+                result.warnings.push(format!(
+                    "entity '{}' description overwritten by later declaration",
+                    tag.name
+                ));
+            }
+        }
+        Ok(updated)
+    }
+
+    fn sync_relation_tag(&self, tag: &ParsedRelationTag, result: &mut EntityAutoResult) -> Result<()> {
+        self.repo.ensure(&NewEntity {
+            name: tag.from.clone(),
+            r#ref: None,
+            description: None,
+        })?;
+        self.repo.ensure(&NewEntity {
+            name: tag.to.clone(),
+            r#ref: None,
+            description: None,
+        })?;
+        result.entities_ensured += 2;
+
+        let description = tag
+            .metadata
+            .fields
+            .get("description")
+            .cloned()
+            .unwrap_or_else(|| "related to".to_string());
+        let existing = self.repo.find_link_by_name(&tag.from, &tag.to)?;
+        self.repo.link(&parse_lookup(&tag.from), &parse_lookup(&tag.to), &description)?;
+        result.relations_synced += 1;
+        if let Some(existing) = existing
+            && existing.relation != description
+        {
+            result.warnings.push(format!(
+                "relation '{} -> {}' description overwritten by later declaration",
+                tag.from, tag.to
+            ));
+        }
+        self.collect_metadata_warnings(&tag.metadata.duplicate_keys, &tag.metadata.unknown_fields, &format!("{} -> {}", tag.from, tag.to), "relation", result);
+        Ok(())
+    }
+
+    fn collect_metadata_warnings(
+        &self,
+        duplicate_keys: &[String],
+        unknown_fields: &[String],
+        target: &str,
+        kind: &str,
+        result: &mut EntityAutoResult,
+    ) {
+        for key in duplicate_keys {
+            result.warnings.push(format!("duplicate metadata key '{}' in {} {}", key, kind, target));
+        }
+        for key in unknown_fields {
+            result.warnings.push(format!("unknown metadata field '{}' in {} {}", key, kind, target));
+        }
     }
 }
 

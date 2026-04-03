@@ -1,6 +1,6 @@
 // (#!#tep:anchor.parser)
 // [#!#tep:anchor.parser](anchor.parser)
-use crate::utils::parse::{line_contains_marker, parse_scan_limit};
+use crate::tep_tag::parse_anchor_tags;
 
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
 pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
@@ -67,91 +67,17 @@ pub fn parse_anchor_target(input: &str) -> AnchorTarget {
 
 // [#!#tep:anchor.parser.scan](anchor.parser)
 pub fn parse_anchors(input: &str) -> Vec<ParsedAnchor> {
-    let mut out = Vec::new();
-    let mut i = 0usize;
-    let scan_limit = parse_scan_limit(input, TEPIGNORE_AFTER_MARKER);
-
-    while i < input.len() && i < scan_limit {
-        let rest = &input[i..];
-        if rest.starts_with("[#!#tep:") {
-            if let Some(parsed) = try_parse_anchor(input, i) {
-                i = parsed.start_offset + parsed.raw.len();
-                out.push(parsed);
-                continue;
-            }
-        }
-
-        if let Some(ch) = rest.chars().next() {
-            i += ch.len_utf8();
-        } else {
-            break;
-        }
-    }
-
-    out
-}
-
-fn try_parse_anchor(input: &str, start: usize) -> Option<ParsedAnchor> {
-    let rest = &input[start..];
-    let close_idx = rest.find(']')?;
-    let head = &rest[..=close_idx];
-    let after_head = &rest[close_idx + 1..];
-
-    let entity_refs = if after_head.starts_with('(') {
-        let close_paren = after_head.find(')')?;
-        let inside = &after_head[1..close_paren];
-        inside
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
-
-    let suffix_len = if after_head.starts_with('(') {
-        after_head.find(')').map(|idx| idx + 1).unwrap_or(0)
-    } else {
-        0
-    };
-
-    if entity_refs.is_empty() {
-        return None;
-    }
-
-    let raw = format!("{}{}", head, &after_head[..suffix_len]);
-    let anchor_name = parse_anchor_head(head)?;
-
-    let prefix = &input[..start];
-    let line = prefix.bytes().filter(|b| *b == b'\n').count() as i64 + 1;
-    let last_newline = prefix.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-    let shift = (start - last_newline) as i64;
-
-    if line_contains_marker(input, start, TEPIGNORE_MARKER) {
-        return None;
-    }
-
-    Some(ParsedAnchor {
-        raw,
-        anchor_name,
-        entity_refs,
-        start_offset: start,
-        line,
-        shift,
-    })
-}
-
-/// Parses the head of an anchor tag in the canonical format: [#!#tep:name]
-/// Returns the anchor name, or None if the tag is invalid (has version segment, empty name, invalid name).
-fn parse_anchor_head(head: &str) -> Option<String> {
-    let name = head.strip_prefix("[#!#tep:")?.strip_suffix(']')?;
-    if name.is_empty() {
-        return None;
-    }
-    let name = normalize_anchor_name(name);
-    validate_anchor_name(&name).ok()?;
-    Some(name)
+    parse_anchor_tags(input)
+        .into_iter()
+        .map(|tag| ParsedAnchor {
+            raw: tag.raw,
+            anchor_name: tag.anchor_name,
+            entity_refs: tag.entity_refs,
+            start_offset: tag.start_offset,
+            line: tag.line,
+            shift: tag.shift,
+        })
+        .collect()
 }
 
 // #tepignoreafter
