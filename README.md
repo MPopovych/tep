@@ -157,12 +157,10 @@ tep health [path]
 
 ### Entities
 ```bash
-tep entity create <name> [--ref <value>] [--description <value>]
-tep entity ensure <name> [--ref <value>]
 tep auto <pathspec...>
+tep entity auto <pathspec...>
 tep entity show <name-or-id>
 tep entity context <name-or-id> [--files-only] [--link-depth <n>]
-tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]
 tep entity list
 tep e ...  (shorthand)
 ```

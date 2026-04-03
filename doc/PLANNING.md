@@ -51,7 +51,7 @@
 { "anchor": { ... } | null, "entities": [...] }
 
 // workspace info  (new)
-{ "root": "/abs/path", "entities": 15, "anchors": 22, "schema_version": 3 }
+{ "root": "/abs/path", "entities": 15, "anchors": 22, "schema_version": 4 }
 ```
 
 ---
