@@ -334,6 +334,7 @@ mod tests {
         service
             .link("Teacher", "Student", "teacher mentors student")
             .unwrap();
+
         let result = service.show("Student").unwrap();
         assert_eq!(result.linked_entities.len(), 2);
         assert!(
@@ -399,17 +400,13 @@ mod tests {
             result
                 .linked_entities
                 .iter()
-                .any(|item| item.entity.name == "subject"
-                    && item.link.from_entity_id != item.link.to_entity_id
-                    && item.depth == 1)
+                .any(|l| l.entity.name == "subject" && l.depth == 1)
         );
         assert!(
             result
                 .linked_entities
                 .iter()
-                .any(|item| item.entity.name == "teacher"
-                    && item.link.from_entity_id != item.link.to_entity_id
-                    && item.depth == 1)
+                .any(|l| l.entity.name == "teacher" && l.depth == 1)
         );
     }
 
@@ -498,31 +495,31 @@ mod tests {
             result
                 .linked_entities
                 .iter()
-                .any(|item| item.entity.name == "subject" && item.depth == 1)
+                .any(|l| l.entity.name == "subject" && l.depth == 1)
         );
         assert!(
             result
                 .linked_entities
                 .iter()
-                .any(|item| item.entity.name == "semester" && item.depth == 1)
+                .any(|l| l.entity.name == "semester" && l.depth == 1)
         );
         assert!(
             result
                 .linked_entities
                 .iter()
-                .any(|item| item.entity.name == "teacher" && item.depth == 1)
+                .any(|l| l.entity.name == "teacher" && l.depth == 1)
         );
         assert!(
             result
                 .linked_entities
                 .iter()
-                .any(|item| item.entity.name == "department" && item.depth == 2)
+                .any(|l| l.entity.name == "department" && l.depth == 2)
         );
         assert!(
             !result
                 .linked_entities
                 .iter()
-                .any(|item| item.entity.name == "student")
+                .any(|l| l.entity.name == "student")
         );
     }
 

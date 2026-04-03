@@ -2,6 +2,7 @@ mod anchor;
 mod cli;
 mod commands;
 mod db;
+mod dto;
 mod entity;
 mod filter;
 mod output;
@@ -16,7 +17,7 @@ fn main() -> anyhow::Result<()> {
     init_tracing();
 
     let cli = Cli::parse();
-    commands::run(cli)
+    commands::run(cli.command, cli.json)
 }
 
 fn init_tracing() {

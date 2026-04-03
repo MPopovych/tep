@@ -5,18 +5,18 @@ mod init;
 mod reset;
 mod support;
 
-use crate::cli::{Cli, Commands};
+use crate::cli::Commands;
 
-pub fn run(cli: Cli) -> anyhow::Result<()> {
-    match cli.command {
+pub fn run(command: Commands, json: bool) -> anyhow::Result<()> {
+    match command {
         Commands::Init => init::run(),
         Commands::Reset { yes } => reset::run(yes),
         Commands::Version => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
-        Commands::Health(args) => health::run(args),
-        Commands::Entity { command } | Commands::E { command } => entity::run(command),
-        Commands::Anchor { command } | Commands::A { command } => anchor::run(command),
+        Commands::Health(args) => health::run(args, json),
+        Commands::Entity { command } | Commands::E { command } => entity::run(command, json),
+        Commands::Anchor { command } | Commands::A { command } => anchor::run(command, json),
     }
 }

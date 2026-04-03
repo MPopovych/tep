@@ -124,6 +124,21 @@ Bracket type decides the role:
 - `[...]` = anchor
 - `(...)` = entity declaration
 
+## JSON output
+
+All commands support a global `--json` flag:
+
+```bash
+tep --json entity list
+tep --json entity show <name>
+tep --json entity context <name> [--link-depth <n>]
+tep --json anchor show <name>
+tep --json anchor list
+tep --json health
+```
+
+JSON output uses a stable DTO schema (see `src/dto.rs`). Intended for tooling and editor plugins.
+
 ## Output style
 
 Default output should stay compact.

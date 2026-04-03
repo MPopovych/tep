@@ -76,6 +76,7 @@ tep anchor auto ./src ./docs
 
 # Query context for a concept
 tep entity context entity_name
+tep --json entity context entity_name   # machine-readable JSON
 
 # See what's in the workspace
 tep entity list
