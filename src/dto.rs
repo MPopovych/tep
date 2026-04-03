@@ -8,9 +8,6 @@ use crate::service::entity_service::{
 };
 use crate::service::health_service::HealthReport;
 
-// (#!#tep:dto)
-// [#!#tep:dto](dto)
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EntityDto {
     pub id: i64,
@@ -32,6 +29,8 @@ pub struct AnchorDto {
     pub shift: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +126,7 @@ pub fn anchor_to_dto(a: &Anchor) -> AnchorDto {
         line: a.line,
         shift: a.shift,
         offset: a.offset,
+        description: a.description.clone(),
     }
 }
 

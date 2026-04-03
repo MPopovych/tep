@@ -14,6 +14,7 @@ pub struct Anchor {
     pub line: Option<i64>,
     pub shift: Option<i64>,
     pub offset: Option<i64>,
+    pub description: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

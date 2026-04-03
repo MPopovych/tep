@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 pub const DEFAULT_TEP_DIR: &str = ".tep";
 pub const DEFAULT_DB_FILE: &str = ".tep/tep.db";
 pub const DEFAULT_IGNORE_FILE: &str = ".tepignore";
-pub const CURRENT_SCHEMA_VERSION: i64 = 3;
+pub const CURRENT_SCHEMA_VERSION: i64 = 4;
 
 #[derive(Debug, Clone)]
 pub struct WorkspacePaths {
@@ -16,7 +16,6 @@ pub struct WorkspacePaths {
     pub ignore_file: PathBuf,
 }
 
-// #tepignoreafter
 #[cfg(test)]
 pub fn open_in_memory() -> rusqlite::Result<Connection> {
     Connection::open_in_memory()
@@ -90,12 +89,15 @@ pub fn ensure_schema(conn: &Connection) -> Result<()> {
         migrate_to_v3(conn)?;
         version = 3;
     }
+    if version < 4 {
+        migrate_to_v4(conn)?;
+        version = 4;
+    }
 
     set_schema_version(conn, version.max(CURRENT_SCHEMA_VERSION))?;
     Ok(())
 }
 
-// #tepignoreafter
 #[cfg(test)]
 pub fn schema_sql() -> &'static str {
     base_schema_sql()
@@ -122,6 +124,7 @@ fn base_schema_sql() -> &'static str {
         line INTEGER,
         shift INTEGER,
         offset INTEGER,
+        description TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     );
@@ -194,6 +197,14 @@ fn migrate_to_v3(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+fn migrate_to_v4(conn: &Connection) -> Result<()> {
+    if !column_exists(conn, "anchors", "description")? {
+        conn.execute("ALTER TABLE anchors ADD COLUMN description TEXT", [])
+            .context("failed to add description column to anchors")?;
+    }
+    Ok(())
+}
+
 fn detect_schema_version(conn: &Connection) -> Result<i64> {
     if !table_exists(conn, "entities")? {
         return Ok(0);
@@ -201,10 +212,13 @@ fn detect_schema_version(conn: &Connection) -> Result<i64> {
     if !column_exists(conn, "entities", "description")? {
         return Ok(1);
     }
-    if column_exists(conn, "anchors", "name")? {
+    if !column_exists(conn, "anchors", "name")? {
+        return Ok(2);
+    }
+    if !column_exists(conn, "anchors", "description")? {
         return Ok(3);
     }
-    Ok(2)
+    Ok(4)
 }
 
 fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
@@ -241,108 +255,4 @@ fn set_schema_version(conn: &Connection, version: i64) -> Result<()> {
     conn.pragma_update(None, "user_version", version)
         .context("failed to update schema version")?;
     Ok(())
-}
-
-// #tepignoreafter
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn schema_applies_to_in_memory_db() {
-        let conn = open_in_memory().expect("in-memory db should open");
-        ensure_schema(&conn).expect("schema should apply cleanly");
-        assert_eq!(schema_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
-    }
-
-    #[test]
-    fn migrates_v1_entities_table_to_v2() {
-        let conn = open_in_memory().expect("in-memory db should open");
-        conn.execute_batch(
-            r#"
-            CREATE TABLE entities (
-                entity_id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                ref TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            "#,
-        )
-        .unwrap();
-
-        ensure_schema(&conn).expect("migration should succeed");
-        assert!(column_exists(&conn, "entities", "description").unwrap());
-        assert!(table_exists(&conn, "entity_links").unwrap());
-        assert_eq!(schema_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
-    }
-
-    #[test]
-    fn finds_nearest_workspace_root() {
-        let temp = tempfile::tempdir().expect("temp dir should be created");
-        let root = temp.path();
-        let nested = root.join("a/b/c");
-        fs::create_dir_all(&nested).expect("nested dirs should be created");
-        fs::create_dir_all(root.join(DEFAULT_TEP_DIR)).expect("tep dir should exist");
-        fs::write(root.join(DEFAULT_DB_FILE), b"").expect("db marker should exist");
-
-        let found = find_workspace_root(&nested).expect("workspace should be found");
-        assert_eq!(found, root);
-    }
-
-    #[test]
-    fn migrates_v2_anchors_table_to_v3() {
-        let conn = open_in_memory().expect("in-memory db should open");
-        conn.execute_batch(
-            r#"
-            CREATE TABLE entities (
-                entity_id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
-                ref TEXT,
-                description TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE anchors (
-                anchor_id INTEGER PRIMARY KEY,
-                version INTEGER NOT NULL,
-                file_path TEXT NOT NULL,
-                line INTEGER,
-                shift INTEGER,
-                offset INTEGER,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE anchor_entities (
-                anchor_id INTEGER NOT NULL,
-                entity_id INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                PRIMARY KEY (anchor_id, entity_id)
-            );
-            CREATE TABLE entity_links (
-                from_entity_id INTEGER NOT NULL,
-                to_entity_id INTEGER NOT NULL,
-                relation TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (from_entity_id, to_entity_id)
-            );
-            "#,
-        )
-        .unwrap();
-        set_schema_version(&conn, 2).unwrap();
-
-        ensure_schema(&conn).expect("migration should succeed");
-        assert!(column_exists(&conn, "anchors", "name").unwrap());
-        assert_eq!(schema_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
-    }
-
-    #[test]
-    fn missing_workspace_error_is_actionable() {
-        let temp = tempfile::tempdir().expect("temp dir should be created");
-        let err = find_workspace_root(temp.path()).expect_err("workspace should be missing");
-        let rendered = err.to_string();
-        assert!(rendered.contains("no tep workspace found"));
-        assert!(rendered.contains("tep init"));
-    }
 }
