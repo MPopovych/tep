@@ -1,5 +1,7 @@
-// #!#tep:(anchor.health)
-// #!#tep:[anchor.health](anchor.health)
+// #!#tep:(anchor.health){description="Health audit service for anchor drift, orphaned graph data, and metadata warnings"}
+// #!#tep:(anchor.health)->(repo.anchor){description="uses for stored anchor inspection"}
+// #!#tep:(anchor.health)->(repo.entity){description="uses for entity orphan checks"}
+// #!#tep:[anchor.health](anchor.health,repo.anchor,repo.entity){description="Health service module entry"}
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
@@ -294,6 +296,7 @@ impl<'a> HealthService<'a> {
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

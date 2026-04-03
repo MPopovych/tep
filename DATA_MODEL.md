@@ -1,4 +1,5 @@
-<!--- #!#tep:(data.model) -->
+<!--- #!#tep:(data.model){description="Description of the core tep graph data model"} -->
+<!--- #!#tep:(data.model)->(sqlite.graph){description="describes structures persisted in"} -->
 # Data Model
 
 <!--- #!#tep:[data.model.entity](data.model,entity.service,repo.entity) -->

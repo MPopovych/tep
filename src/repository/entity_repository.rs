@@ -1,5 +1,6 @@
-// #!#tep:(repo.entity)
-// #!#tep:[repo.entity](repo.entity)
+// #!#tep:(repo.entity){description="Repository for entity persistence and directional links"}
+// #!#tep:(repo.entity)->(sqlite.graph){description="reads and writes graph entities in"}
+// #!#tep:[repo.entity](repo.entity,sqlite.graph){description="Entity repository module entry"}
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 

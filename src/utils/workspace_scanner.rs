@@ -1,5 +1,6 @@
-// #!#tep:(workspace.scanner)
-// #!#tep:[workspace.scanner](workspace.scanner)
+// #!#tep:(workspace.scanner){description="Workspace file collection respecting .tepignore rules"}
+// #!#tep:(workspace.scanner)->(workspace){description="supports workspace-wide scans for"}
+// #!#tep:[workspace.scanner](workspace.scanner,workspace){description="Workspace scanner helper module entry"}
 use std::path::PathBuf;
 
 use anyhow::Result;

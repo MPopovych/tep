@@ -1,3 +1,6 @@
+// #!#tep:(repo.anchor){description="Repository for anchor persistence, location tracking, and anchor metadata"}
+// #!#tep:(repo.anchor)->(sqlite.graph){description="reads and writes anchor records in"}
+// #!#tep:[repo.anchor](repo.anchor,sqlite.graph){description="Anchor repository module entry"}
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};

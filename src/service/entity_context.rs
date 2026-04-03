@@ -1,5 +1,6 @@
-// #!#tep:(entity.context)
-// #!#tep:[entity.context](entity.context)
+// #!#tep:(entity.context){description="Snippet extraction around anchors for entity context output"}
+// #!#tep:(entity.context)->(anchor.sync){description="consumes anchor locations produced by"}
+// #!#tep:[entity.context](entity.context,anchor.sync){description="Entity context helper module entry"}
 use std::fs;
 
 use anyhow::{Context, Result};

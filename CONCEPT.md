@@ -1,5 +1,6 @@
-<!--- #!#tep:(concept) -->
-<!--- #!#tep:[concept](concept) -->
+<!--- #!#tep:(concept){description="High-level explanation of entities, anchors, and links in tep"} -->
+<!--- #!#tep:(concept)->(tep){description="explains the model behind"} -->
+<!--- #!#tep:[concept](concept,tep){description="Concept overview document"} -->
 # Concept
 
 ## Short definition

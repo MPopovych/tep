@@ -24,8 +24,8 @@ All graph state should be recoverable from files after `tep reset --yes`.
 ### Entity
 
 ```txt
-#!#tep:(entity)
-#!#tep:(entity){ref="./src/file.rs", description="Main concept"}
+#!#tep:(entity) #tepignore
+#!#tep:(entity) #tepignore{ref="./src/file.rs", description="Main concept"}
 ```
 
 Meaning:
@@ -47,8 +47,8 @@ Meaning:
 ### Anchor
 
 ```txt
-#!#tep:[anchor](entity1,entity2)
-#!#tep:[anchor](entity1,entity2){description="Entry point"}
+#!#tep:[anchor](entity1,entity2) #tepignore
+#!#tep:[anchor](entity1,entity2){description="Entry point"} #tepignore
 ```
 
 Meaning:
@@ -275,5 +275,5 @@ Recommended approach:
 ### Anchor with metadata
 
 ```txt
-#!#tep:[workspace.reset](workspace,anchor.sync,entity.service){description="Reset entry point"}
+#!#tep:[workspace.reset.meta](workspace,anchor.sync,entity.service){description="Reset entry point"}
 ```

@@ -1,4 +1,5 @@
-<!--- #!#tep:(cli.design) -->
+<!--- #!#tep:(cli.design){description="CLI design notes for command structure, syntax, and UX"} -->
+<!--- #!#tep:(cli.design)->(tep){description="defines user-facing interface for"} -->
 # CLI Design
 
 ## Design goals

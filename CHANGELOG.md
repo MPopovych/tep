@@ -5,14 +5,14 @@
 ### Added
 - Unified tag family with shared `#!#tep:` prefix
 - Entity declaration tags:
-  - `#!#tep:(entity)`
-  - `#!#tep:(entity){ref="...", description="..."}`
+  - `#!#tep:(entity) #tepignore`
+  - `#!#tep:(entity) #tepignore{ref="...", description="..."}`
 - Relation tags:
-  - `#!#tep:(a)->(b)`
-  - `#!#tep:(a)->(b){description="..."}`
+  - `#!#tep:(a)->(b) #tepignore`
+  - `#!#tep:(a)->(b) #tepignore{description="..."}`
 - Anchor tags:
-  - `#!#tep:[anchor](a,b)`
-  - `#!#tep:[anchor](a,b){description="..."}`
+  - `#!#tep:[anchor](a,b)` <!-- #tepignore -->
+  - `#!#tep:[anchor](a,b){description="..."}` <!-- #tepignore -->
 - Top-level `tep auto <path...>` command to run entity + anchor sync together
 - Anchor description persistence in the database
 - Health/reporting warnings for:

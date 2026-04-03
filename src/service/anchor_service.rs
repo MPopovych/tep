@@ -1,5 +1,7 @@
-// #!#tep:(anchor.sync)
-// #!#tep:[anchor.sync](anchor.sync)
+// #!#tep:(anchor.sync){description="Service for synchronizing anchors and anchor-entity attachments from files"}
+// #!#tep:(anchor.sync)->(repo.anchor){description="uses for anchor persistence"}
+// #!#tep:(anchor.sync)->(repo.entity){description="uses to ensure referenced entities exist"}
+// #!#tep:[anchor.sync](anchor.sync,repo.anchor,repo.entity){description="Anchor sync service module entry"}
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -252,6 +254,7 @@ impl<'a> AnchorService<'a> {
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

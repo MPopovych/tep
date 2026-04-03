@@ -1,5 +1,8 @@
-// #!#tep:(entity.service)
-// #!#tep:[entity.service](entity.service)
+// #!#tep:(entity.service){description="Service for entity auto-sync, entity reads, and link-aware context assembly"}
+// #!#tep:(entity.service)->(repo.entity){description="uses for entity persistence"}
+// #!#tep:(entity.service)->(entity.links){description="uses for graph traversal"}
+// #!#tep:(entity.service)->(entity.context){description="uses for snippet extraction"}
+// #!#tep:[entity.service](entity.service,repo.entity,entity.links,entity.context){description="Entity service module entry"}
 use std::fs;
 use std::path::PathBuf;
 
@@ -316,6 +319,7 @@ impl<'a> EntityService<'a> {
     }
 }
 
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;

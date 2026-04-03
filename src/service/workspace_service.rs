@@ -1,5 +1,7 @@
-// #!#tep:(workspace)
-// #!#tep:[workspace](workspace)
+// #!#tep:(workspace){description="Workspace lifecycle service for init and full reset/reindex flows"}
+// #!#tep:(workspace)->(entity.service){description="invokes during reindex"}
+// #!#tep:(workspace)->(anchor.sync){description="invokes during reindex"}
+// #!#tep:[workspace](workspace,entity.service,anchor.sync){description="Workspace service module entry"}
 use std::fs;
 
 use anyhow::{Context, Result};

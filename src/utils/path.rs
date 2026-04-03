@@ -1,5 +1,6 @@
-// #!#tep:(path.normalization)
-// #!#tep:[path.normalization](path.normalization)
+// #!#tep:(path.normalization){description="Workspace-relative path normalization helpers"}
+// #!#tep:(path.normalization)->(workspace){description="supports workspace-scoped path handling for"}
+// #!#tep:[path.normalization](path.normalization,workspace){description="Path normalization helper module entry"}
 use std::path::{Component, Path, PathBuf};
 
 pub fn normalize_lexically(path: &Path) -> PathBuf {
