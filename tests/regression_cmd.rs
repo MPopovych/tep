@@ -45,7 +45,10 @@ fn health_is_consistent_from_nested_directory() {
         .stdout
         .clone();
 
-    assert_eq!(String::from_utf8(root).unwrap(), String::from_utf8(nested).unwrap());
+    assert_eq!(
+        String::from_utf8(root).unwrap(),
+        String::from_utf8(nested).unwrap()
+    );
 }
 
 #[test]
@@ -93,7 +96,8 @@ fn auto_warns_and_skips_unreadable_files() {
         "#!#tep:(student){description=\"A learner\"}\n",
     )
     .expect("should write file");
-    std::fs::write(temp.path().join("binary.bin"), [0_u8, 159, 146, 150]).expect("should write binary file");
+    std::fs::write(temp.path().join("binary.bin"), [0_u8, 159, 146, 150])
+        .expect("should write binary file");
 
     Command::cargo_bin("tep")
         .expect("binary should build")
@@ -140,7 +144,9 @@ fn reset_warns_and_continues_on_duplicate_anchor_names() {
         .assert()
         .success()
         .stdout(predicate::str::contains("warnings:"))
-        .stdout(predicate::str::contains("duplicate anchor name 'dup' found in the same file"));
+        .stdout(predicate::str::contains(
+            "duplicate anchor name 'dup' found in the same file",
+        ));
 
     Command::cargo_bin("tep")
         .expect("binary should build")
