@@ -1,5 +1,6 @@
-<!--- (#!#tep:concept) -->
-<!--- [#!#tep:concept](concept) -->
+<!--- #!#tep:(concept){description="High-level explanation of entities, anchors, and links in tep"} -->
+<!--- #!#tep:(concept)->(tep){description="explains the model behind"} -->
+<!--- #!#tep:[concept](concept,tep){description="Concept overview document"} -->
 # Concept
 
 ## Short definition
@@ -38,7 +39,7 @@ An **anchor** is a named bridge point placed as a tag in a file.
 
 Example:
 ```java
-// [#!#tep:student_processor](student) #tepignore
+// #!#tep:[student_processor](student) #tepignore
 ```
 
 Important:
@@ -93,7 +94,7 @@ Imagine a method that converts a student into a basic user.
 
 One anchor tag sits near that code location, referencing both entities:
 ```java
-// [#!#tep:student_converter](student,basic_user) #tepignore
+// #!#tep:[student_converter](student,basic_user) #tepignore
 ```
 
 Separately, those entities may also link to other entities in the graph.

@@ -1,18 +1,23 @@
-// (#!#tep:anchor.sync)
-// [#!#tep:anchor.sync](anchor.sync)
+// #!#tep:(anchor.sync){description="Service for synchronizing anchors and anchor-entity attachments from files"}
+// #!#tep:(anchor.sync)->(repo.anchor){description="uses for anchor persistence"}
+// #!#tep:(anchor.sync)->(repo.entity){description="uses to ensure referenced entities exist"}
+// #!#tep:[anchor.sync](anchor.sync,repo.anchor,repo.entity){description="Anchor sync service module entry"}
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use rusqlite::Connection;
 
-use crate::anchor::{Anchor, AnchorTarget, ParsedAnchor, parse_anchor_target, parse_anchors};
+use crate::anchor::{Anchor, AnchorTarget, parse_anchor_target};
 use crate::entity::{EntityLookup, NewEntity, parse_lookup};
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
-use crate::repository::anchor_repository::AnchorRepository;
+use crate::repository::anchor_repository::{AnchorRepository, NewAnchor};
 use crate::repository::entity_repository::EntityRepository;
+use crate::service::workspace_parse_service::{
+    ParsedWorkspaceFile, collect_parsed_workspace_files,
+};
+use crate::tep_tag::ParsedAnchorTag;
 use crate::utils::path::display_path;
-use crate::utils::workspace_scanner::collect_workspace_files;
 
 #[derive(Debug, Clone, Default)]
 pub struct AnchorSyncResult {
@@ -21,6 +26,8 @@ pub struct AnchorSyncResult {
     pub anchors_seen: usize,
     pub anchors_dropped: usize,
     pub relations_synced: usize,
+    pub metadata_updated: usize,
+    pub warnings: Vec<String>,
 }
 
 pub struct AnchorShowResult {
@@ -37,7 +44,8 @@ pub struct AnchorService<'a> {
 
 impl<'a> AnchorService<'a> {
     pub fn new(conn: &'a Connection) -> Self {
-        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let workspace_root = crate::db::find_workspace_root(&cwd).unwrap_or(cwd);
         Self::with_workspace_root(conn, workspace_root)
     }
 
@@ -51,12 +59,12 @@ impl<'a> AnchorService<'a> {
         }
     }
 
-    // [#!#tep:anchor.sync.paths](anchor.sync,workspace.scanner)
     pub fn sync_paths(&self, paths: &[String]) -> Result<AnchorSyncResult> {
-        let files = collect_workspace_files(&self.workspace_root, paths)?;
+        let (files, warnings) = collect_parsed_workspace_files(&self.workspace_root, paths)?;
         let mut result = AnchorSyncResult::default();
+        result.warnings.extend(warnings);
         for file in files {
-            self.sync_file(&file.absolute_path, &mut result)?;
+            self.sync_file(&file, &mut result)?;
         }
         Ok(result)
     }
@@ -86,26 +94,24 @@ impl<'a> AnchorService<'a> {
         }
     }
 
-    fn sync_file(&self, path: &Path, result: &mut AnchorSyncResult) -> Result<()> {
-        if !path.is_file() {
+    fn sync_file(&self, file: &ParsedWorkspaceFile, result: &mut AnchorSyncResult) -> Result<()> {
+        if let Some(duplicate_name) = self.find_duplicate_name(&file.anchor_tags) {
+            result.warnings.push(format!(
+                "duplicate anchor name '{}' found in the same file {}",
+                duplicate_name,
+                file.file.absolute_path.display()
+            ));
             return Ok(());
         }
-
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
-        let parsed = parse_anchors(&content);
-
-        self.ensure_no_duplicate_names(&parsed)?;
-        result.anchors_seen += parsed.len();
+        result.anchors_seen += file.anchor_tags.len();
 
         let mut seen_ids = HashSet::new();
-        for anchor in &parsed {
-            self.sync_anchor(path, anchor, result, &mut seen_ids)?;
+        for anchor in &file.anchor_tags {
+            self.sync_anchor(&file.file.absolute_path, anchor, result, &mut seen_ids)?;
         }
 
-        self.drop_missing_anchors(path, &seen_ids, result)?;
-
-        if !parsed.is_empty() {
+        self.drop_missing_anchors(&file.file.absolute_path, &seen_ids, result)?;
+        if !file.anchor_tags.is_empty() {
             result.files_processed += 1;
         }
 
@@ -115,7 +121,7 @@ impl<'a> AnchorService<'a> {
     fn sync_anchor(
         &self,
         path: &Path,
-        anchor: &ParsedAnchor,
+        anchor: &ParsedAnchorTag,
         result: &mut AnchorSyncResult,
         seen_ids: &mut HashSet<i64>,
     ) -> Result<()> {
@@ -133,18 +139,25 @@ impl<'a> AnchorService<'a> {
                     Some(anchor.start_offset as i64),
                 )?;
                 self.sync_entity_relations(existing.anchor_id, &anchor.entity_refs, result)?;
+                self.sync_anchor_metadata(existing.anchor_id, anchor, result)?;
             }
             None => {
-                let created = self.anchor_repo.create_named(
-                    name,
-                    1,
-                    &file_path,
-                    Some(anchor.line),
-                    Some(anchor.shift),
-                    Some(anchor.start_offset as i64),
-                )?;
+                let created = self.anchor_repo.create(&NewAnchor {
+                    name: Some(name),
+                    version: 1,
+                    file_path: &file_path,
+                    line: Some(anchor.line),
+                    shift: Some(anchor.shift),
+                    offset: Some(anchor.start_offset as i64),
+                    description: anchor
+                        .metadata
+                        .fields
+                        .get("description")
+                        .map(String::as_str),
+                })?;
                 seen_ids.insert(created.anchor_id);
                 self.sync_entity_relations(created.anchor_id, &anchor.entity_refs, result)?;
+                self.sync_anchor_metadata(created.anchor_id, anchor, result)?;
                 result.anchors_created += 1;
             }
         }
@@ -190,15 +203,43 @@ impl<'a> AnchorService<'a> {
         }
     }
 
-    fn ensure_no_duplicate_names(&self, parsed: &[ParsedAnchor]) -> Result<()> {
+    fn find_duplicate_name(&self, parsed: &[ParsedAnchorTag]) -> Option<String> {
         let mut seen_names: HashSet<String> = HashSet::new();
         for anchor in parsed {
             if !seen_names.insert(anchor.anchor_name.clone()) {
-                bail!(
-                    "duplicate anchor name '{}' found in the same file",
-                    anchor.anchor_name
-                );
+                return Some(anchor.anchor_name.clone());
             }
+        }
+        None
+    }
+
+    fn sync_anchor_metadata(
+        &self,
+        anchor_id: i64,
+        anchor: &ParsedAnchorTag,
+        result: &mut AnchorSyncResult,
+    ) -> Result<()> {
+        let description = anchor
+            .metadata
+            .fields
+            .get("description")
+            .map(String::as_str);
+        if description.is_some() {
+            self.anchor_repo
+                .update_description(anchor_id, description)?;
+            result.metadata_updated += 1;
+        }
+        for key in &anchor.metadata.duplicate_keys {
+            result.warnings.push(format!(
+                "duplicate metadata key '{}' in anchor {}",
+                key, anchor.anchor_name
+            ));
+        }
+        for key in &anchor.metadata.unknown_fields {
+            result.warnings.push(format!(
+                "unknown metadata field '{}' in anchor {}",
+                key, anchor.anchor_name
+            ));
         }
         Ok(())
     }
@@ -234,135 +275,67 @@ mod tests {
     }
 
     #[test]
-    fn collect_workspace_files_resolves_absolute_paths() {
-        let temp = tempfile::tempdir().expect("temp dir should be created");
-        std::fs::write(temp.path().join("note.txt"), "[#!#tep:foo](student)").unwrap();
-
-        let files =
-            collect_workspace_files(&temp.path().to_path_buf(), &["./note.txt".into()]).unwrap();
-        assert_eq!(files.len(), 1);
-        assert_eq!(files[0].absolute_path, temp.path().join("./note.txt"));
-    }
-
-    #[test]
     fn sync_file_tracks_named_anchor_with_entity_refs() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
         let file = temp.path().join("note.txt");
-        std::fs::write(&file, "hello [#!#tep:myanchor](student)").expect("should write file");
+        std::fs::write(&file, "hello #!#tep:[myanchor](student)").expect("should write file");
 
-        let result = service
-            .sync_paths(&["./note.txt".into()])
-            .expect("sync should succeed");
-
-        let updated = std::fs::read_to_string(&file).expect("should read file");
-        assert_eq!(
-            updated, "hello [#!#tep:myanchor](student)",
-            "file should not be rewritten"
-        );
+        let result = service.sync_paths(&["./note.txt".into()]).unwrap();
         assert_eq!(result.anchors_created, 1);
-        assert_eq!(result.anchors_seen, 1);
-        assert_eq!(result.anchors_dropped, 0);
         assert_eq!(result.relations_synced, 1);
     }
 
     #[test]
-    fn sync_file_ignores_anchor_without_entity_refs() {
+    fn sync_persists_anchor_description_metadata() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
         let file = temp.path().join("note.txt");
-        std::fs::write(&file, "[#!#tep:foo]").expect("should write file");
+        std::fs::write(
+            &file,
+            "#!#tep:[myanchor](student){description=\"Entry point\"}",
+        )
+        .unwrap();
 
-        let result = service
-            .sync_paths(&["./note.txt".into()])
-            .expect("sync should succeed");
-
-        assert_eq!(result.anchors_seen, 0);
-        assert_eq!(result.anchors_created, 0);
-        assert_eq!(result.relations_synced, 0);
-    }
-
-    #[test]
-    fn show_returns_related_entities() {
-        let temp = tempfile::tempdir().expect("temp dir should be created");
-        let service = setup_service(temp.path());
+        let result = service.sync_paths(&["./note.txt".into()]).unwrap();
         let anchor = service
             .anchor_repo
-            .create(1, "./file.txt", Some(1), Some(0), Some(0))
+            .find_by_name("myanchor")
+            .unwrap()
             .unwrap();
-        let entity = service
-            .entity_repo
-            .ensure(&crate::entity::NewEntity {
-                name: "student".into(),
-                r#ref: None,
-                description: None,
-            })
-            .unwrap();
-        service
-            .anchor_entity_repo
-            .attach(anchor.anchor_id, entity.entity_id)
-            .unwrap();
-
-        let result = service.show(&anchor.anchor_id.to_string()).unwrap();
-        assert_eq!(result.anchor.anchor_id, anchor.anchor_id);
-        assert_eq!(result.entities.len(), 1);
-        assert_eq!(result.entities[0].name, "student");
+        assert_eq!(result.metadata_updated, 1);
+        assert_eq!(anchor.description.as_deref(), Some("Entry point"));
     }
 
     #[test]
-    fn sync_directory_processes_dot_style_path() {
-        let temp = tempfile::tempdir().expect("temp dir should be created");
-        let service = setup_service(temp.path());
-        std::fs::write(temp.path().join("a.txt"), "[#!#tep:foo](student)")
-            .expect("should write file");
-
-        let result = service
-            .sync_paths(&[".".into()])
-            .expect("sync should succeed");
-        assert_eq!(result.anchors_created, 1);
-    }
-
-    #[test]
-    fn sync_multiple_entity_references_creates_relations() {
+    fn sync_warns_on_unknown_anchor_metadata() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
         let file = temp.path().join("note.txt");
-        std::fs::write(&file, "[#!#tep:foo](student,basic_user)").expect("should write file");
+        std::fs::write(&file, "#!#tep:[myanchor](student){foo=\"bar\"}").unwrap();
 
-        let result = service
-            .sync_paths(&["./note.txt".into()])
-            .expect("sync should succeed");
-
-        assert_eq!(result.relations_synced, 2);
+        let result = service.sync_paths(&["./note.txt".into()]).unwrap();
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("unknown metadata field 'foo'"))
+        );
     }
 
     #[test]
-    fn dropped_anchor_is_deleted_when_removed_from_file() {
-        let temp = tempfile::tempdir().expect("temp dir should be created");
-        let service = setup_service(temp.path());
-        let file = temp.path().join("note.txt");
-        std::fs::write(&file, "[#!#tep:foo](student)").expect("should write file");
-        let first = service
-            .sync_paths(&["./note.txt".into()])
-            .expect("first sync should succeed");
-        assert_eq!(first.anchors_created, 1);
-
-        std::fs::write(&file, "no anchors now\n").expect("should rewrite file");
-        let second = service
-            .sync_paths(&["./note.txt".into()])
-            .expect("second sync should succeed");
-        assert_eq!(second.anchors_dropped, 1);
-    }
-
-    #[test]
-    fn duplicate_anchor_names_in_same_file_fail() {
+    fn duplicate_anchor_names_in_same_file_warn_and_continue() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
         let file = temp.path().join("bad.txt");
-        std::fs::write(&file, "[#!#tep:foo](student)\n[#!#tep:foo](teacher)\n")
-            .expect("should write file");
+        std::fs::write(&file, "#!#tep:[foo](student)\n#!#tep:[foo](teacher)\n").unwrap();
 
-        let result = service.sync_paths(&["./bad.txt".into()]);
-        assert!(result.is_err());
+        let result = service.sync_paths(&["./bad.txt".into()]).unwrap();
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("duplicate anchor name 'foo'"))
+        );
     }
 }

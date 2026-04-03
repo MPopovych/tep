@@ -1,25 +1,30 @@
 ---
 name: tep-context
-description: Use the local `tep` CLI as a context-routing and graph-maintenance layer only when working in a repository or document set that already has a `tep` workspace or when the user explicitly asks to add or maintain `tep` coverage. Trigger for tasks that involve `tep entity context`, `tep entity show`, `tep anchor show`, `tep entity auto`, `tep anchor auto`, doc seeding with `tep`, or handling `#tepignore` example lines. Do not use for generic repo exploration in projects that are not using `tep`.
+description: Use the local `tep` CLI as a context-routing and graph-maintenance layer only when working in a repository or document set that already has a `tep` workspace or when the user explicitly asks to add or maintain `tep` coverage. Trigger for tasks that involve `tep entity context`, `tep entity show`, `tep anchor show`, `tep auto`, graph cleanup, example-tag hygiene, or handling `#tepignore` / `#tepignoreafter` lines. Do not use for generic repo exploration in projects that are not using `tep`.
 ---
 
-Use `tep` to reduce blind repo reading and to keep the graph useful over time. Prefer the smallest grounded retrieval pass first, and update graph coverage intentionally when the task calls for it.
+Use `tep` to reduce blind repo reading and keep the graph trustworthy over time.
+
+For LLM work, optimize for:
+- small grounded retrieval before broad reading
+- stable canonical entities
+- clean graph signal with minimal example pollution
+- reproducible reset behavior
 
 ## Workflow
 
-1. Confirm a `tep` workspace exists for the repo tree.
+1. Confirm a `tep` workspace exists.
 2. Decide whether the task is mainly:
    - retrieval
-   - maintenance (tagging + syncing)
-   - or both
+   - graph maintenance
+   - graph hygiene
 3. Start with the smallest useful `tep` command.
-4. Read or update only the files that look relevant.
-5. Fall back to normal repo exploration only when `tep` coverage is missing or weak.
+4. Prefer fixing graph quality over compensating with broad repo scans.
 
 ## Retrieval-first command order
 
 ### 1. Entity-centered retrieval
-Use first when the task mentions a concept, component, feature, workflow, schema, or doc subject.
+Use first when the task mentions a concept, workflow, component, schema, or document topic.
 
 ```bash
 tep entity context <name-or-id>
@@ -27,214 +32,260 @@ tep entity show <name-or-id>
 ```
 
 Prefer `entity context` when you want:
-- primary `ref`
-- related anchors with snippets
-- related file shortlist
+- canonical `ref`
+- anchor-backed locations
+- nearby related files/entities
 
 Use `entity show` when you only need the graph shape quickly.
 
 ### 2. Anchor-centered retrieval
-Use when you already have an anchor name or id.
-
 ```bash
 tep anchor show <name>
 tep anchor list
 ```
+
+Use when a durable anchor name is already known.
 
 ### 3. Entity list
 ```bash
 tep entity list
 ```
 
-Use to browse available entity names when the right entity is not obvious.
+Use to discover the right concept name before reading files.
 
-## Maintenance commands
-
-Use these only when intentionally updating graph coverage.
+## Current maintenance commands
 
 ```bash
-tep entity auto <pathspec...>   # scan for entity declarations
-tep anchor auto <pathspec...>   # scan for anchor tags and sync relations
-tep reset --yes                 # nuke DB and re-index workspace from scratch
-tep health [path]               # audit anchor state
+tep auto <pathspec...>
+tep health [path]
+tep reset --yes
 ```
+
+Notes:
+- `tep auto` is the primary sync command
+- `tep reset --yes` should be treated as a rebuild + validation pass
+- `tep health` is the audit view for drift, duplicates, and graph hygiene
 
 ## Tag syntax
 
-### Anchor tags — placed in source files and docs
+### Real tags
+Use real tags only where you genuinely want the repo graph to persist a concept.
 
-```
-[#!#tep:anchor_name](entity1,entity2)
-```
-
-Rules:
-- `anchor_name`: lowercase, `[a-z0-9._]`, not purely numeric, must be unique across the workspace
-- `(entity1,entity2)`: required — at least one entity ref, comma-separated names
-- The name is the durable identity; numeric IDs are internal
-- `anchor auto` does **not** rewrite the file — the tag is already in final form
-
-### Entity declaration tags — placed where an entity is canonically defined
-
-```
-(#!#tep:entity_name)
+Entity:
+```txt
+#!#tep:(entity.name)
+#!#tep:(entity.name){ref="./path", description="..."}
 ```
 
-Rules:
-- `entity_name`: same charset as anchor names
-- `entity auto` ensures the entity exists in the DB and fills `ref` with the declaring file path if missing
-- No anchors are created by `entity auto` — it only registers entities
-
-### Ignoring lines
-
-```
-some text [#!#tep:example](student) #tepignore
+Relation:
+```txt
+#!#tep:(entity.a)->(entity.b)
+#!#tep:(entity.a)->(entity.b){description="..."}
 ```
 
-Any line containing `#tepignore` is skipped entirely by both parsers.
-
-For large fixture or test tails, use:
-
+Anchor:
+```txt
+#!#tep:[anchor.name](entity.a,entity.b)
+#!#tep:[anchor.name](entity.a,entity.b){description="..."}
 ```
+
+### Example tags
+Example tags shown in docs should remain visible to readers but should not pollute the graph.
+
+Use:
+```txt
+#!#tep:[example.anchor](example.entity) #tepignore
+#!#tep:(example.entity) #tepignore
+```
+
+### Hidden real tags in markdown
+If a markdown file needs real graph tags but you do not want them rendered, wrap them in HTML comments.
+
+Use:
+```markdown
+<!--- #!#tep:(real.entity){description="..."} -->
+<!--- #!#tep:[real.anchor](real.entity) -->
+```
+
+Rule:
+- real tag in markdown: hidden, not ignored
+- sample tag in docs: visible, ignored
+
+## Ignore controls
+
+### `#tepignore`
+If a line contains `#tepignore`, that line is skipped by `tep` parsers.
+
+Use for:
+- visible syntax examples
+- fixture-like snippets in docs
+- illustrative tag forms
+
+### `#tepignoreafter`
+Everything after the first `#tepignoreafter` in a file is skipped.
+
+Use for:
+- test modules in source files
+- long fixture tails
+- sections full of parser examples that should not enter the graph
+
+Typical pattern:
+```rust
 // #tepignoreafter
+#[cfg(test)]
+mod tests { ... }
 ```
 
-Everything after the first occurrence is ignored for the rest of the file.
 
-## How to add tep coverage to a project
 
-### 1. Init the workspace (once)
+## Working on the `tep` repository itself
+
+Repository path:
+
+```txt
+/Users/agent/Desktop/projects/tep
+```
+
+When working on the `tep` repo specifically:
+- treat selected root docs and selected `src/` files as canonical graph material
+- keep `tests/` and `skills/` excluded from graph participation unless intentionally curated
+- prefer fixing graph pollution at the source over tolerating junk entities
+- after graph-affecting edits, run:
 
 ```bash
-tep init
+cd /Users/agent/Desktop/projects/tep
+tep entity list
+tep reset --yes
+tep health
 ```
 
-Creates `.tep/`, `.tep/tep.db`, `.tepignore`.
+When behavior changes, update the relevant current docs:
+- `README.md`
+- `CLI_DESIGN.md`
+- `DATA_MODEL.md`
+- current `doc/*`
+- current `spec/*`
+- relevant skills
 
-### 2. Declare key entities in their canonical files
+Do not leave old command specs pretending to describe current behavior.
 
-Place entity declaration tags where a concept is primarily defined — top of a file, a key function, a doc section header:
+## Agent graph-maintenance playbook
 
-```rust
-// (#!#tep:auth_flow)
-pub fn authenticate(user: &User) -> Result<Token> { ... }
+When acting as an agent maintaining a repo graph:
+
+1. Run `tep entity list` first.
+2. Identify junk entities caused by:
+   - docs examples
+   - parser fixtures
+   - test modules
+   - rendered markdown samples
+3. Fix pollution with the smallest safe mechanism:
+   - visible example in docs -> add `#tepignore`
+   - long example/test tail -> add `#tepignoreafter`
+   - real markdown tag that should not render -> wrap in HTML comment
+   - whole folder that should never participate -> add to `.tepignore`
+4. Run `tep reset --yes`.
+5. Run `tep health`.
+6. Re-check `tep entity list`.
+
+Prefer cleaning the graph at the source over compensating with more retrieval logic.
+
+## Decision rules for agents
+
+### When to use a real entity tag
+Use a real entity tag only if the file is a canonical place an agent should revisit later.
+
+### When to use a real anchor tag
+Use a real anchor only if it points to a stable, meaningful location worth retrieving again.
+
+### When not to tag
+Do not tag:
+- temporary notes
+- repetitive examples
+- test fixtures unless the test behavior itself is important context
+- syntax reference snippets that only teach formatting
+
+### When to ignore
+Use `.tepignore` for whole-file or whole-folder exclusion.
+Use `#tepignore` for one-line examples.
+Use `#tepignoreafter` for noisy tails.
+
+## LLM-oriented graph design guidelines
+
+### 1. Prefer canonical entities
+Declare an entity where an LLM should start reading.
+
+Good:
+- top of the main service module
+- top of the authoritative design doc
+- top of the schema doc
+
+Bad:
+- every mention of the concept
+- examples and throwaway fixtures
+- secondary references only
+
+### 2. Use descriptions aggressively for important entities
+Descriptions help retrieval ranking and reduce ambiguity.
+
+Good:
+```txt
+#!#tep:(entity.service){description="Service for entity auto-sync, entity reads, and link-aware context assembly"}
 ```
 
-```markdown
-(#!#tep:student)
-# Student
+### 3. Use relations to encode navigational value
+Add relations when they help an LLM jump between concepts intentionally.
 
-A learner enrolled in the system.
-```
+Good examples:
+- service -> repository
+- workspace -> reset flow
+- doc -> product concept
 
-Then run:
+Avoid weak relations like:
+- generic mentions
+- obvious adjacency with no retrieval value
 
+### 4. Keep anchors sparse and meaningful
+Anchors should mark:
+- module entry points
+- key functions
+- important doc sections
+- schema definitions
+- lifecycle boundaries
+
+Do not anchor every function or paragraph just because you can.
+
+### 5. Keep example pollution near zero
+If a doc teaches syntax, default to ignored examples.
+If a markdown file carries real graph meaning, hide the real tags in comments.
+
+### 6. Make reset safe to run often
+A healthy repo should survive:
 ```bash
-tep entity auto ./src
-tep entity auto ./docs
+tep reset --yes
 ```
 
-This creates each entity and records the file as its `ref`.
+without turning docs/examples/tests into junk entities.
 
-### 3. Tag important locations with named anchors
+## Graph hygiene checklist
 
-Place anchor tags at locations that are worth pointing to — entry points, schema definitions, key algorithm sections, important doc paragraphs:
-
-```rust
-// [#!#tep:auth.token_generation](auth_flow,token)
-fn generate_token(claims: &Claims) -> String { ... }
-```
-
-```markdown
-[#!#tep:student.enrollment_rules](student,enrollment)
-## Enrollment rules
-
-Students may enroll in up to 6 subjects per semester.
-```
-
-Then run:
-
-```bash
-tep anchor auto ./src
-tep anchor auto ./docs
-```
-
-### 4. Connect entities with links (optional but powerful)
-
-```bash
-tep entity link student enrollment "student participates in enrollment"
-tep entity link auth_flow token "auth flow produces token"
-```
-
-### 5. Query context
-
-```bash
-tep entity context auth_flow
-tep entity context student --link-depth 2
-```
-
-## Tagging guidelines for agents
-
-**Placement:**
-- One anchor per meaningful unit (function, section, important paragraph)
-- Entity declarations at canonical definition points — not everywhere the entity is mentioned
-- Prefer anchors at stable section boundaries, not volatile line ranges
-
-**Naming:**
-- Use dot-notation for hierarchy: `auth.token_generation`, `student.permissions`
-- Use underscore for compound words: `student_processor`, `enrollment_rules`
-- Keep names short but unambiguous within the project
-
-**Entity refs:**
-- Each anchor must reference at least one entity
-- A single anchor can reference multiple entities when one location is genuinely relevant to several concepts
-- Don't inflate entity refs just to "cover" a concept — prefer separate anchors
-
-**Coverage density:**
-- Core logic: anchor every key function or method
-- Docs: anchor section headers and key paragraphs
-- Config/schema files: anchor the top-level definition
-- Test files: usually skip unless testing behavior worth tracking
-
-**Avoid:**
-- Anchoring every single line
-- Using generic names like `misc`, `stuff`, `helper`
-- Placing anchors in test fixtures without `#tepignore`
-- Duplicate anchor names across files
+When maintaining a repo graph, check:
+- does `tep entity list` mostly show real project concepts?
+- are example entities leaking from docs/specs/tests?
+- do markdown docs hide real tags and show examples visibly?
+- do source test modules have `#tepignoreafter` where needed?
+- do duplicate anchor examples stay ignored?
+- does `tep reset --yes` produce warnings instead of catastrophic failure where possible?
 
 ## Practical rules
 
-- Treat `ref` as the primary reading suggestion when present.
-- Treat anchor names as durable identity — do not rename without care.
-- Treat `line`, `shift`, and `offset` as metadata only — they drift with edits.
-- Respect `#tepignore` when editing docs that show example tags.
-- Do not assume `.gitignore` affects `tep`; only `.tepignore` does.
-- Prefer reading the smallest set of files surfaced by `tep` before broad repo scans.
-
-## Full command reference
-
-```bash
-tep init                                          # create workspace
-tep reset [--yes]                                 # wipe DB and re-index
-tep health [path]                                 # audit workspace
-
-tep entity create <name> [--ref <path>] [--description <text>]
-tep entity ensure <name> [--ref <path>]
-tep entity auto <pathspec...>                     # scan for (#!#tep:name) declarations
-tep entity show <name-or-id>
-tep entity context <name-or-id> [--files-only] [--link-depth <n>]
-tep entity edit <name-or-id> [--name ...] [--ref ...] [--description ...]
-tep entity link <from> <to> --relation <text>
-tep entity unlink <from> <to>
-tep entity list
-
-tep anchor auto <pathspec...>                     # scan for [#!#tep:name](entities) tags
-tep anchor show <name>
-tep anchor list
-
-tep e ...   # shorthand for entity
-tep a ...   # shorthand for anchor
-```
+- Prefer `tep auto` over narrower sync commands unless you are debugging one layer specifically.
+- Treat `ref` as the first recommended file to read.
+- Treat anchor names as durable identifiers.
+- Only `.tepignore` affects scanning; `.gitignore` does not.
+- If a file cannot be decoded as text, skip it and surface a warning.
+- If a file has duplicate anchor examples, prefer warning/skip over aborting the entire rebuild.
 
 ## Reference
 
-Read `references/tep-patterns.md` for concrete retrieval patterns, interpretation guidance, and maintenance reminders.
+Read `references/tep-patterns.md` for compact retrieval and maintenance patterns.

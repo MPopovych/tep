@@ -26,7 +26,11 @@ impl TepIgnoreFilter {
                 if self.is_special_internal_file(&absolute_path) {
                     continue;
                 }
-                out.push(self.normalize_path(&absolute_path));
+                let normalized = self.normalize_path(&absolute_path);
+                if self.is_ignored(&normalized)? {
+                    continue;
+                }
+                out.push(normalized);
                 continue;
             }
 
@@ -72,6 +76,27 @@ impl TepIgnoreFilter {
             path.file_name().and_then(|s| s.to_str()),
             Some(".tepignore")
         )
+    }
+
+    fn is_ignored(&self, normalized_path: &Path) -> Result<bool> {
+        let mut builder = WalkBuilder::new(&self.workspace_root);
+        builder.hidden(false);
+        builder.git_ignore(false);
+        builder.git_exclude(false);
+        builder.git_global(false);
+        builder.ignore(false);
+        builder.add_custom_ignore_filename(".tepignore");
+
+        let candidate = self.workspace_root.join(normalized_path);
+        let mut matched = false;
+        for entry in builder.build() {
+            let entry = entry?;
+            if entry.path() == candidate {
+                matched = true;
+                break;
+            }
+        }
+        Ok(!matched)
     }
 }
 
@@ -149,5 +174,19 @@ mod tests {
             .filter_map(|p| p.file_name().and_then(|s| s.to_str()))
             .collect::<Vec<_>>();
         assert!(names.contains(&"ignored.txt"));
+    }
+
+    #[test]
+    fn explicit_file_input_still_respects_tepignore() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        fs::write(temp.path().join(".tepignore"), "README.md\n").expect("should write ignore file");
+        fs::write(temp.path().join("README.md"), "x").expect("should write file");
+
+        let filter = TepIgnoreFilter::for_workspace_root(temp.path());
+        let paths = filter
+            .collect_paths(&["README.md".into()])
+            .expect("collection should succeed");
+
+        assert!(paths.is_empty());
     }
 }

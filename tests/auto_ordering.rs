@@ -9,7 +9,7 @@ fn entity_auto_declares_entities_without_creating_anchors() {
 
     std::fs::write(
         source.join("sample.rs"),
-        "// (#!#tep:sample.context)\n// (#!#tep:sample.auto)\npub fn sample() {}\n",
+        "// #!#tep:(sample.context)\n// #!#tep:(sample.auto)\npub fn sample() {}\n",
     )
     .expect("sample file should be written");
 

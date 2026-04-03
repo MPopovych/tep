@@ -51,7 +51,7 @@
 { "anchor": { ... } | null, "entities": [...] }
 
 // workspace info  (new)
-{ "root": "/abs/path", "entities": 15, "anchors": 22, "schema_version": 3 }
+{ "root": "/abs/path", "entities": 15, "anchors": 22, "schema_version": 4 }
 ```
 
 ---
@@ -79,7 +79,7 @@ Services currently return domain structs directly to formatters. The goal is to 
 
 ### TEP-2 — Richer tag syntax
 
-Goal: `tep auto .` should be able to reconstruct the full graph from scratch — entities, anchors, relations, links, and metadata — without any manual `tep entity link` or `tep entity edit` calls.
+Goal: `tep auto .` should be able to reconstruct the full graph from scratch — entities, anchors, relations, links, and metadata — from file tags alone, without relying on manual graph mutation commands.
 
 New tag types to design and implement:
 

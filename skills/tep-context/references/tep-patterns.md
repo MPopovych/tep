@@ -2,270 +2,153 @@
 
 ## Goal
 
-Use `tep` to identify the smallest relevant context bundle before reading many files, and to maintain graph coverage deliberately when needed.
+Use `tep` to identify the smallest grounded context bundle before reading many files, and maintain graph quality so resets stay trustworthy.
 
 ---
 
 ## Retrieval patterns
 
-### Entity context (preferred first step)
+### Entity context first
 ```bash
 tep entity context <name-or-id>
 tep entity context <name-or-id> --link-depth 2
 tep entity context <name-or-id> --files-only
 ```
 
-Typical output interpretation:
-- `ref` = canonical definition file — read this first
-- anchor list with snippets = grounded code/doc locations
-- files list = shortlist of related files to scan
-- linked entities = related concepts to follow if needed
+Interpretation:
+- `ref` = canonical starting file
+- anchors = grounded code/doc locations
+- linked entities = follow-up concepts if needed
 
-### Entity show (compact graph view)
+### Entity show
 ```bash
 tep entity show <name-or-id>
 ```
 
-Use when you only need the entity's metadata and its graph connections without reading snippets.
+Use for compact graph shape.
 
 ### Anchor show
 ```bash
 tep anchor show <name>
 ```
 
-Use when a specific anchor name is known and you want to see its location and attached entities.
+Use when an anchor name is already known.
 
-### List-based discovery
+### Discovery
 ```bash
-tep entity list       # browse all known entities
-tep anchor list       # browse all known anchors
+tep entity list
+tep anchor list
 ```
 
-Use when the right entity name is not obvious.
+Use when the right concept name is unclear.
 
 ---
 
-## Retrieval strategy
+## Maintenance patterns
 
-### Start narrow
-If the user gives a likely entity name:
-1. run `tep entity context <entity>`
-2. read `ref` first
-3. read only the returned files that look relevant
+### Primary sync
+```bash
+tep auto <pathspec...>
+```
 
-### Fall back carefully
-If the entity is missing or coverage is thin:
-1. try a nearby entity name or a shorter prefix
-2. try `tep entity list` to scan for the right name
-3. then fall back to normal repo exploration
+Use as the default maintenance command.
 
-### Signals to trust
+### Audit
+```bash
+tep health
+tep health ./docs
+```
 
-**Strong signals:**
-- entity `ref` pointing to a well-named file
-- multiple anchors across docs and code for the same entity
-- entity links forming a coherent subgraph
+Use to detect:
+- duplicate anchors
+- missing anchors
+- orphaned entities
+- orphaned anchors
+- metadata warnings
+- unreadable file warnings
 
-**Weak signals:**
-- single-anchor entities with no `ref`
-- stale-seeming snippets that don't match what you find in the file
-- very sparse graph with few entities
+### Rebuild
+```bash
+tep reset --yes
+```
+
+Use when validating that the graph can be reconstructed from files.
+A healthy repo should tolerate this regularly.
 
 ---
 
-## Tag syntax
+## Example hygiene patterns
 
-### Anchor tag (placed in source/docs)
+### Visible example, ignored
+Use in docs that teach syntax.
 
-```
-[#!#tep:anchor_name](entity1,entity2)
-```
-
-- `anchor_name`: unique across workspace, lowercase `[a-z0-9._]`, not purely numeric
-- At least one entity ref required — tag is ignored if refs are missing
-- `anchor auto` registers the anchor and syncs entity relations without rewriting the file
-
-### Entity declaration tag (placed at canonical definition point)
-
-```
-(#!#tep:entity_name)
+```txt
+#!#tep:[example.anchor](example.entity) #tepignore
+#!#tep:(example.entity) #tepignore
 ```
 
-- Marks where an entity is primarily defined
-- `entity auto` ensures entity exists and fills `ref` with the declaring file path
+### Hidden real tag in markdown
+Use when the doc itself should be part of the graph.
 
-### Ignore controls
+```markdown
+<!--- #!#tep:(real.concept){description="..."} -->
+<!--- #!#tep:[real.anchor](real.concept) -->
+```
 
-```
-example [#!#tep:foo](bar) #tepignore     ← this line is ignored entirely
-```
+### Ignore a whole test/example tail
+Use in source files and docs with many fixture snippets.
 
-```
+```rust
 // #tepignoreafter
-// Everything below this line is ignored by tep parsers
 #[cfg(test)]
 mod tests { ... }
 ```
 
 ---
 
-## Maintenance commands
+## Entity design patterns
 
-### Declare entities from files
-```bash
-tep entity auto <pathspec...>
+### Good canonical entity
+```txt
+#!#tep:(entity.service){description="Service for entity auto-sync, entity reads, and link-aware context assembly"}
 ```
 
-Scans for `(#!#tep:name)` tags. Creates entities and fills `ref` when missing.
-Does **not** create anchors.
-
-### Sync anchors from files
-```bash
-tep anchor auto <pathspec...>
+### Good relation
+```txt
+#!#tep:(entity.service)->(repo.entity){description="uses for entity persistence"}
 ```
 
-Scans for `[#!#tep:name](entities)` tags. Creates or updates anchor records. Syncs entity relations.
-
-### Reset and re-index
-```bash
-tep reset --yes
-```
-
-Deletes the DB, recreates schema, runs `entity auto .` then `anchor auto .` on the whole workspace.
-Leaves `.tepignore` untouched.
-
-### Health check
-```bash
-tep health
-tep health ./docs
-```
-
-Reports: moved anchors, missing anchors, duplicate names, unknown names, entities without anchors, anchors without entities.
-
----
-
-## How to add tep coverage to a new project
-
-### Step 1 — Init
-```bash
-tep init
-```
-
-Edit `.tepignore` to exclude test fixtures, build dirs, generated files:
-```
-.tep/
-.git/
-target/
-tests/
-node_modules/
-```
-
-### Step 2 — Declare entities at their canonical locations
-
-Add `(#!#tep:entity_name)` tags where each concept is primarily defined:
-
-```rust
-// (#!#tep:payment_flow)
-pub fn process_payment(order: &Order) -> Result<Receipt> { ... }
-```
-
-```markdown
-(#!#tep:user)
-# User
-
-A registered account holder.
-```
-
-Then run:
-```bash
-tep entity auto ./src
-tep entity auto ./docs
-```
-
-### Step 3 — Place named anchor tags at important locations
-
-Add `[#!#tep:name](entities)` tags at meaningful entry points, key algorithms, schema definitions, important doc sections:
-
-```rust
-// [#!#tep:payment.validation](payment_flow,order)
-fn validate_payment_method(method: &PaymentMethod) -> bool { ... }
-```
-
-```markdown
-[#!#tep:user.permissions](user,permissions)
-## Permission model
-
-Users have a role assigned at signup...
-```
-
-Then run:
-```bash
-tep anchor auto ./src
-tep anchor auto ./docs
-```
-
-### Step 4 — Link related entities (optional)
-```bash
-tep entity link payment_flow order "payment flow processes order"
-tep entity link user permissions "user has permissions"
-```
-
-### Step 5 — Verify
-```bash
-tep health
-tep entity context payment_flow
+### Good anchor
+```txt
+#!#tep:[workspace.reset](workspace,entity.service,anchor.sync){description="Reset entry point"}
 ```
 
 ---
 
-## Tagging guidelines
+## Maintenance heuristics for LLMs
 
-### Placement
-- Entity declarations: at the file or section that canonically defines the concept
-- Anchors: at entry points, key function bodies, schema definitions, section headers worth revisiting
-- One anchor per meaningful unit — not every line
+Use `tep` well when:
+- entity list mostly shows real repo concepts
+- docs expose examples visibly but keep them ignored
+- markdown hides real tags if rendering matters
+- reset succeeds without graph pollution
+- warnings are informative, not catastrophic
 
-### Naming
-- Use dot-notation for hierarchy: `auth.token_generation`, `payment.refund_flow`
-- Use underscore for compound words: `payment_processor`, `user_permissions`
-- Keep names short but unique in context
-
-### Entity refs in anchors
-- At least one, must be a valid entity name
-- Multiple refs when one location genuinely covers several concepts
-- Don't artificially inflate refs
-
-### Coverage density
-| Location | Guideline |
-|---|---|
-| Core logic | Anchor key functions and service entry points |
-| Docs | Anchor section headers and key paragraphs |
-| Config/schema | Anchor the top-level definition |
-| Tests | Skip unless the behavior being tested is worth tracking |
-| Generated files | Skip |
-
-### Common mistakes to avoid
-- Duplicate anchor names across files (causes `anchor auto` to fail)
-- Missing entity refs (tag silently ignored)
-- Anchoring inside test fixtures without `#tepignore`
-- Very generic names like `misc`, `util`, `helper`
-- Placing entity declarations everywhere instead of just at the canonical definition
+Investigate when:
+- generic entities appear (`example`, `student`, `entity1`)
+- examples from specs/docs leak into the graph
+- test modules create graph noise
+- unreadable files abort scans instead of warning
+- duplicate anchor examples stop full rebuilds
 
 ---
 
-## Workspace behavior reminder
+## Recommended maintenance loop
 
-- `tep` resolves the nearest ancestor workspace from cwd
-- Run it from inside the project tree
-- Only `.tepignore` affects scanning — not `.gitignore`
-- `tep reset --yes` is the clean-slate option: wipes DB, re-indexes everything
-
----
-
-## When this skill is most useful
-
-- Repo triage in a `tep`-annotated project
-- Doc-first implementation work
-- Context assembly for coding tasks
-- Understanding architecture/doc relationships with minimal file scanning
-- Seeding or extending graph coverage in a new or existing codebase
+1. `tep entity list`
+2. identify junk/example entities
+3. fix docs/examples with `#tepignore` or `#tepignoreafter`
+4. keep meaningful real tags hidden in markdown comments when needed
+5. `tep reset --yes`
+6. `tep health`
+7. repeat until graph is mostly project concepts

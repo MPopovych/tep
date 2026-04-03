@@ -26,7 +26,7 @@ For now, this directory is for practical internal project documentation such as:
 4. [Core Modules](./CORE_MODULES.md)
 5. [Architecture Notes](./ARCHITECTURE_NOTES.md)
 6. [Implementation Backlog](./IMPLEMENTATION_BACKLOG.md)
-7. [tep Workflow Skill](./skills/tep-workflow/SKILL.md)
+7. [tep Context Skill](../skills/tep-context/SKILL.md)
 
 ## Relationship to root docs
 

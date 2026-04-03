@@ -1,17 +1,19 @@
-// (#!#tep:anchor.health)
-// [#!#tep:anchor.health](anchor.health)
+// #!#tep:(anchor.health){description="Health audit service for anchor drift, orphaned graph data, and metadata warnings"}
+// #!#tep:(anchor.health)->(repo.anchor){description="uses for stored anchor inspection"}
+// #!#tep:(anchor.health)->(repo.entity){description="uses for entity orphan checks"}
+// #!#tep:[anchor.health](anchor.health,repo.anchor,repo.entity){description="Health service module entry"}
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::anchor::{ParsedAnchor, parse_anchors};
-use crate::entity::parse_entity_declarations;
+use crate::anchor::ParsedAnchor;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
-use crate::utils::workspace_scanner::{WorkspaceFile, collect_workspace_files};
+use crate::service::workspace_parse_service::{
+    ParsedWorkspaceFile, collect_parsed_workspace_files,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct HealthIssueCounts {
@@ -21,6 +23,7 @@ pub struct HealthIssueCounts {
     pub unknown_anchor_ids: usize,
     pub entities_without_anchors: usize,
     pub anchors_without_entities: usize,
+    pub metadata_warnings: usize,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -31,6 +34,7 @@ pub struct HealthIssueGroups {
     pub unknown_anchor_ids: Vec<String>,
     pub entities_without_anchors: Vec<String>,
     pub anchors_without_entities: Vec<String>,
+    pub metadata_warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -44,7 +48,6 @@ pub struct HealthReport {
 
 #[derive(Debug, Default)]
 struct HealthTracker {
-    /// anchor name → file path where it was first seen
     seen_name_to_file: HashMap<String, String>,
     seen_anchor_ids: HashSet<i64>,
 }
@@ -57,7 +60,8 @@ pub struct HealthService<'a> {
 
 impl<'a> HealthService<'a> {
     pub fn new(conn: &'a Connection) -> Self {
-        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let workspace_root = crate::db::find_workspace_root(&cwd).unwrap_or(cwd);
         Self::with_workspace_root(conn, workspace_root)
     }
 
@@ -70,16 +74,19 @@ impl<'a> HealthService<'a> {
         }
     }
 
-    // [#!#tep:anchor.health.audit](anchor.health,workspace.scanner)
     pub fn audit_paths(&self, paths: &[String]) -> Result<HealthReport> {
-        let files = collect_workspace_files(&self.workspace_root, paths)?;
+        let (files, warnings) = collect_parsed_workspace_files(&self.workspace_root, paths)?;
         let scoped_files = files
             .iter()
-            .map(|f| self.anchor_repo.normalized_path_for(&f.display_path))
+            .map(|f| self.anchor_repo.normalized_path_for(&f.file.display_path))
             .collect::<HashSet<_>>();
 
         let mut report = HealthReport::default();
         let mut tracker = HealthTracker::default();
+        for warning in warnings {
+            report.issue_counts.metadata_warnings += 1;
+            report.groups.metadata_warnings.push(warning);
+        }
 
         for file in files {
             self.inspect_file(&file, &mut report, &mut tracker)?;
@@ -93,40 +100,39 @@ impl<'a> HealthService<'a> {
 
     fn inspect_file(
         &self,
-        file: &WorkspaceFile,
+        file: &ParsedWorkspaceFile,
         report: &mut HealthReport,
         tracker: &mut HealthTracker,
     ) -> Result<()> {
-        let content = fs::read_to_string(&file.absolute_path)
-            .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
-        let parsed_anchors = parse_anchors(&content);
-        let parsed_declarations = parse_entity_declarations(&content);
-
-        if parsed_anchors.is_empty() && parsed_declarations.is_empty() {
+        if file.parsed_anchors.is_empty()
+            && file.parsed_declarations.is_empty()
+            && file.relation_tags.is_empty()
+        {
             return Ok(());
         }
 
         report.files_scanned += 1;
-        report.anchors_seen += parsed_anchors.len() + parsed_declarations.len();
+        report.anchors_seen +=
+            file.parsed_anchors.len() + file.parsed_declarations.len() + file.relation_tags.len();
 
         let mut local_names = HashSet::new();
-        for anchor in &parsed_anchors {
+        for anchor in &file.parsed_anchors {
             self.inspect_named_anchor(
                 anchor,
-                &file.display_path,
+                &file.file.display_path,
                 report,
                 tracker,
                 &mut local_names,
             )?;
         }
 
-        for declaration in &parsed_declarations {
+        for declaration in &file.parsed_declarations {
             if let Some(existing) = self
                 .entity_repo
                 .find(&crate::entity::EntityLookup::Name(declaration.name.clone()))?
                 .and_then(|entity| {
                     self.anchor_repo
-                        .find_latest_for_entity_in_file(entity.entity_id, &file.display_path)
+                        .find_latest_for_entity_in_file(entity.entity_id, &file.file.display_path)
                         .ok()
                         .flatten()
                 })
@@ -136,6 +142,12 @@ impl<'a> HealthService<'a> {
             }
         }
 
+        self.inspect_metadata_warnings(
+            &file.entity_tags,
+            &file.relation_tags,
+            &file.anchor_tags,
+            report,
+        );
         Ok(())
     }
 
@@ -212,6 +224,66 @@ impl<'a> HealthService<'a> {
         Ok(())
     }
 
+    fn inspect_metadata_warnings(
+        &self,
+        entity_tags: &[crate::tep_tag::ParsedEntityTag],
+        relation_tags: &[crate::tep_tag::ParsedRelationTag],
+        anchor_tags: &[crate::tep_tag::ParsedAnchorTag],
+        report: &mut HealthReport,
+    ) {
+        for tag in entity_tags {
+            self.push_metadata_warnings(
+                "entity",
+                &tag.name,
+                &tag.metadata.duplicate_keys,
+                &tag.metadata.unknown_fields,
+                report,
+            );
+        }
+        for tag in relation_tags {
+            self.push_metadata_warnings(
+                "relation",
+                &format!("{} -> {}", tag.from, tag.to),
+                &tag.metadata.duplicate_keys,
+                &tag.metadata.unknown_fields,
+                report,
+            );
+        }
+        for tag in anchor_tags {
+            self.push_metadata_warnings(
+                "anchor",
+                &tag.anchor_name,
+                &tag.metadata.duplicate_keys,
+                &tag.metadata.unknown_fields,
+                report,
+            );
+        }
+    }
+
+    fn push_metadata_warnings(
+        &self,
+        kind: &str,
+        target: &str,
+        duplicate_keys: &[String],
+        unknown_fields: &[String],
+        report: &mut HealthReport,
+    ) {
+        for key in duplicate_keys {
+            report.issue_counts.metadata_warnings += 1;
+            report.groups.metadata_warnings.push(format!(
+                "duplicate metadata key '{}' in {} {}",
+                key, kind, target
+            ));
+        }
+        for key in unknown_fields {
+            report.issue_counts.metadata_warnings += 1;
+            report.groups.metadata_warnings.push(format!(
+                "unknown metadata field '{}' in {} {}",
+                key, kind, target
+            ));
+        }
+    }
+
     fn report_missing_db_anchors(
         &self,
         scoped_files: &HashSet<String>,
@@ -260,6 +332,7 @@ mod tests {
     use crate::db;
     use crate::entity::NewEntity;
     use crate::repository::anchor_entity_repository::AnchorEntityRepository;
+    use crate::repository::anchor_repository::NewAnchor;
 
     fn setup_service() -> HealthService<'static> {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
@@ -289,21 +362,22 @@ mod tests {
         let service = setup_service();
         service
             .anchor_repo
-            .create_named(
-                "my_anchor",
-                1,
-                "./docs/student.md",
-                Some(1),
-                Some(0),
-                Some(0),
-            )
+            .create(&NewAnchor {
+                name: Some("my_anchor"),
+                version: 1,
+                file_path: "./docs/student.md",
+                line: Some(1),
+                shift: Some(0),
+                offset: Some(0),
+                description: None,
+            })
             .unwrap();
         std::fs::create_dir_all("/tmp/project/docs").ok();
         std::fs::write(
             "/tmp/project/docs/student.md",
-            "[#!#tep:my_anchor](student)",
+            "#!#tep:[my_anchor](student)",
         )
-        .ok(); // #tepignore
+        .ok();
 
         let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.issue_counts.anchors_without_entities, 1);
@@ -322,14 +396,15 @@ mod tests {
             .unwrap();
         let anchor = service
             .anchor_repo
-            .create_named(
-                "my_anchor",
-                1,
-                "./docs/student.md",
-                Some(1),
-                Some(0),
-                Some(0),
-            )
+            .create(&NewAnchor {
+                name: Some("my_anchor"),
+                version: 1,
+                file_path: "./docs/student.md",
+                line: Some(1),
+                shift: Some(0),
+                offset: Some(0),
+                description: None,
+            })
             .unwrap();
         let rel = AnchorEntityRepository::new(service.anchor_repo.conn);
         rel.attach(anchor.anchor_id, entity.entity_id).unwrap();
@@ -337,9 +412,9 @@ mod tests {
         std::fs::create_dir_all("/tmp/project/docs").ok();
         std::fs::write(
             "/tmp/project/docs/student.md",
-            "[#!#tep:my_anchor](student)",
+            "#!#tep:[my_anchor](student)",
         )
-        .ok(); // #tepignore
+        .ok();
 
         let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.anchors_healthy, 1);

@@ -1,9 +1,6 @@
-// (#!#tep:entity.declaration)
-// [#!#tep:entity.declaration](entity.declaration)
-use crate::utils::parse::{line_contains_marker, parse_scan_limit};
-
-pub const TEPIGNORE_MARKER: &str = "#tepignore";
-pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
+// #!#tep:(entity.declaration)
+// #!#tep:[entity.declaration](entity.declaration)
+use crate::tep_tag::parse_entity_tags;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
@@ -104,57 +101,18 @@ pub fn normalize_description(description: Option<String>) -> Result<Option<Strin
     }
 }
 
-// [#!#tep:entity.declaration.scan](entity.declaration)
+// #!#tep:[entity.declaration.scan](entity.declaration)
 pub fn parse_entity_declarations(input: &str) -> Vec<ParsedEntityDeclaration> {
-    let mut out = Vec::new();
-    let mut i = 0usize;
-    let scan_limit = parse_scan_limit(input, TEPIGNORE_AFTER_MARKER);
-
-    while i < input.len() && i < scan_limit {
-        let rest = &input[i..];
-        if rest.starts_with("(#!#tep:") {
-            if let Some(parsed) = try_parse_entity_declaration(input, i) {
-                i = parsed.start_offset + parsed.raw.len();
-                out.push(parsed);
-                continue;
-            }
-        }
-
-        if let Some(ch) = rest.chars().next() {
-            i += ch.len_utf8();
-        } else {
-            break;
-        }
-    }
-
-    out
-}
-
-fn try_parse_entity_declaration(input: &str, start: usize) -> Option<ParsedEntityDeclaration> {
-    let rest = &input[start..];
-    let close_idx = rest.find(')')?;
-    let raw = &rest[..=close_idx];
-
-    let name = raw.strip_prefix("(#!#tep:")?.strip_suffix(')')?;
-    validate_name(name).ok()?;
-    let normalized_name = normalize_name(name);
-
-    let prefix = &input[..start];
-    let line = prefix.bytes().filter(|b| *b == b'\n').count() as i64 + 1;
-    let last_newline = prefix.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-    let shift = (start - last_newline) as i64;
-
-    if line_contains_marker(input, start, TEPIGNORE_MARKER) {
-        return None;
-    }
-
-    Some(ParsedEntityDeclaration {
-        raw: raw.to_string(),
-        name: normalized_name,
-        start_offset: start,
-        line,
-        shift,
-    })
+    parse_entity_tags(input)
+        .into_iter()
+        .map(|tag| ParsedEntityDeclaration {
+            raw: tag.raw,
+            name: tag.name,
+            start_offset: tag.start_offset,
+            line: tag.line,
+            shift: tag.shift,
+        })
+        .collect()
 }
 
 // #tepignoreafter
@@ -223,7 +181,7 @@ mod tests {
 
     #[test]
     fn parses_entity_declaration() {
-        let parsed = parse_entity_declarations("abc (#!#tep:Student) xyz");
+        let parsed = parse_entity_declarations("abc #!#tep:(Student) xyz");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].name, "student");
     }
@@ -236,7 +194,7 @@ mod tests {
 
     #[test]
     fn ignores_numeric_entity_declaration_name() {
-        let parsed = parse_entity_declarations("(#!#tep:123)");
+        let parsed = parse_entity_declarations("#!#tep:(123)");
         assert!(parsed.is_empty());
     }
 
@@ -247,14 +205,14 @@ mod tests {
 
     #[test]
     fn ignores_entity_declaration_when_line_contains_tepignore() {
-        let parsed = parse_entity_declarations("example (#!#tep:Student) #tepignore");
+        let parsed = parse_entity_declarations("example #!#tep:(Student) #tepignore");
         assert!(parsed.is_empty());
     }
 
     #[test]
     fn ignores_entity_declarations_after_tepignoreafter_marker() {
         let parsed =
-            parse_entity_declarations("(#!#tep:Student)\n#tepignoreafter\n(#!#tep:Teacher)");
+            parse_entity_declarations("#!#tep:(Student)\n#tepignoreafter\n#!#tep:(Teacher)");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].name, "student");
     }

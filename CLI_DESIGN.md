@@ -1,4 +1,5 @@
-<!--- (#!#tep:cli.design) -->
+<!--- #!#tep:(cli.design){description="CLI design notes for command structure, syntax, and UX"} -->
+<!--- #!#tep:(cli.design)->(tep){description="defines user-facing interface for"} -->
 # CLI Design
 
 ## Design goals
@@ -26,7 +27,7 @@ The similarity to git is mostly ergonomic:
 
 `tep` is not a version-control system.
 
-<!--- [#!#tep:cli.workspace](cli.design,workspace) -->
+<!--- #!#tep:[cli.workspace](cli.design,workspace) -->
 ## Workspace behavior
 
 ### Initialize a workspace
@@ -75,14 +76,10 @@ tep health [path]
 
 ### Entities
 ```bash
-tep entity create <name> [--ref <value>] [--description <value>]
-tep entity ensure <name> [--ref <value>]
+tep auto <pathspec...>
 tep entity auto <pathspec...>
 tep entity show <name-or-id>
 tep entity context <name-or-id> [--files-only] [--link-depth <n>]
-tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]
-tep entity link <from> <to> --relation <text>
-tep entity unlink <from> <to>
 tep entity list
 ```
 
@@ -103,12 +100,12 @@ Shorthand:
 tep a ...
 ```
 
-<!--- [#!#tep:cli.syntax](cli.design,anchor.parser,entity.declaration) -->
+<!--- #!#tep:[cli.syntax](cli.design,anchor.parser,entity.declaration) -->
 ## Marker syntax
 
 ### Anchor tag
 ```txt
-[#!#tep:anchor_name](entity1,entity2) #tepignore
+#!#tep:[anchor_name](entity1,entity2) #tepignore
 ```
 
 - name is required: lowercase, `[a-z0-9._]`, not purely numeric
@@ -117,7 +114,7 @@ tep a ...
 
 ### Entity declaration tag
 ```txt
-(#!#tep:student) #tepignore
+#!#tep:(student) #tepignore
 ```
 
 Bracket type decides the role:
@@ -155,7 +152,7 @@ Anchor block:
 ```
 
 Location metadata is useful, but not identity.
-The durable anchor identity is the anchor ID.
+The durable anchor identity is the anchor name in source; numeric anchor IDs are internal/materialized storage details.
 
 `entity context` is intentionally more retrieval-oriented.
 It may include:

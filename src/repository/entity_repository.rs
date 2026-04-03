@@ -1,5 +1,6 @@
-// (#!#tep:repo.entity)
-// [#!#tep:repo.entity](repo.entity)
+// #!#tep:(repo.entity){description="Repository for entity persistence and directional links"}
+// #!#tep:(repo.entity)->(sqlite.graph){description="reads and writes graph entities in"}
+// #!#tep:[repo.entity](repo.entity,sqlite.graph){description="Entity repository module entry"}
 use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -143,16 +144,6 @@ impl<'a> EntityRepository<'a> {
             .context("linked entity relation could not be reloaded")
     }
 
-    pub fn unlink(&self, from: &EntityLookup, to: &EntityLookup) -> Result<()> {
-        let from_entity = self.find(from)?.context("source entity not found")?;
-        let to_entity = self.find(to)?.context("target entity not found")?;
-        self.conn.execute(
-            "DELETE FROM entity_links WHERE from_entity_id = ?1 AND to_entity_id = ?2",
-            params![from_entity.entity_id, to_entity.entity_id],
-        )?;
-        Ok(())
-    }
-
     pub fn list_outgoing_links(&self, entity_id: i64) -> Result<Vec<(EntityLink, Entity)>> {
         self.list_joined_links(
             "SELECT l.from_entity_id, l.to_entity_id, l.relation, l.created_at, l.updated_at,
@@ -199,6 +190,18 @@ impl<'a> EntityRepository<'a> {
         })?;
         let links = rows.collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(links)
+    }
+
+    pub fn find_link_by_name(&self, from: &str, to: &str) -> Result<Option<EntityLink>> {
+        let from_entity = match self.find(&EntityLookup::Name(from.to_string()))? {
+            Some(entity) => entity,
+            None => return Ok(None),
+        };
+        let to_entity = match self.find(&EntityLookup::Name(to.to_string()))? {
+            Some(entity) => entity,
+            None => return Ok(None),
+        };
+        self.find_link(from_entity.entity_id, to_entity.entity_id)
     }
 
     fn find_link(&self, from_entity_id: i64, to_entity_id: i64) -> Result<Option<EntityLink>> {
@@ -399,40 +402,6 @@ mod tests {
     }
 
     #[test]
-    fn unlink_removes_directional_link() {
-        let repo = setup_repo();
-        repo.create(&NewEntity {
-            name: "Student".into(),
-            r#ref: None,
-            description: None,
-        })
-        .unwrap();
-        repo.create(&NewEntity {
-            name: "Subject".into(),
-            r#ref: None,
-            description: None,
-        })
-        .unwrap();
-        repo.link(
-            &EntityLookup::Name("Student".into()),
-            &EntityLookup::Name("Subject".into()),
-            "student has subjects assigned",
-        )
-        .unwrap();
-        repo.unlink(
-            &EntityLookup::Name("Student".into()),
-            &EntityLookup::Name("Subject".into()),
-        )
-        .unwrap();
-        let student = repo
-            .find(&EntityLookup::Name("student".into()))
-            .unwrap()
-            .unwrap();
-        let outgoing = repo.list_outgoing_links(student.entity_id).unwrap();
-        assert!(outgoing.is_empty());
-    }
-
-    #[test]
     fn create_rejects_empty_name() {
         let repo = setup_repo();
         let err = repo
@@ -525,24 +494,6 @@ mod tests {
             )
             .expect_err("empty relation should fail");
         assert!(err.to_string().contains("relation cannot be empty"));
-    }
-
-    #[test]
-    fn unlink_requires_both_entities_to_exist() {
-        let repo = setup_repo();
-        repo.create(&NewEntity {
-            name: "Student".into(),
-            r#ref: None,
-            description: None,
-        })
-        .unwrap();
-        let err = repo
-            .unlink(
-                &EntityLookup::Name("Student".into()),
-                &EntityLookup::Name("Missing".into()),
-            )
-            .expect_err("missing target should fail");
-        assert!(err.to_string().contains("target entity not found"));
     }
 
     #[test]

@@ -29,9 +29,9 @@ This is how humans and agents interact with the graph:
 
 ## Important durability rule
 
-The durable identity is the anchor ID.
+The durable identity is the anchor name in source.
 
-File path and position metadata are useful operational information, but they should not be treated as permanent truth.
+File path, position metadata, and materialized numeric IDs are operational details and should not be treated as permanent truth.
 
 ## Main architectural strengths
 

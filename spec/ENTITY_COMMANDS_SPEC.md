@@ -1,6 +1,6 @@
 # Entity Commands Spec
 
-This document captures the current intended behavior of entity-related commands.
+This document captures the current entity-facing behavior in `tep`.
 
 ## Entity data model
 
@@ -14,17 +14,15 @@ Current entity shape:
 
 ## Identity and lookup rules
 
-- entity IDs are integer-only
-- entity commands may resolve entities by either:
-  - integer id
-  - unique name
-- hexadecimal input is not part of the current behavior
+Entity commands may resolve entities by:
+- integer id
+- unique name
 
 ## Naming rules
 
 Entity names should:
 - be unique
-- be human-readable
+- use lowercase `[a-z0-9._]`
 - support dot-style names such as `student.permissions`
 - not be purely numeric
 
@@ -38,57 +36,36 @@ Current behavior:
 - opening a legacy workspace may auto-migrate the DB schema
 - commands outside any workspace fail clearly and suggest `tep init`
 
-## Command set
-
-### Create
-```bash
-tep entity create "student"
-tep entity create "student" --ref "./docs/student.md"
-tep entity create "student" --description "A learner enrolled in the system"
-```
-
-Behavior:
-- create a new entity
-- fail if the name already exists
-- print the created entity
-
-### Ensure
-```bash
-tep entity ensure "student"
-tep entity ensure "student" --ref "./docs/student.md"
-```
-
-Behavior:
-- if entity exists, return it
-- if entity does not exist, create it
-- always print the resulting entity
+## Current command set
 
 ### Auto
 ```bash
-tep entity auto ./file.md
-tep entity auto ./docs
-tep entity auto .
+tep auto ./file.md
+tep auto ./docs
+tep auto .
+tep entity auto ./src
 ```
 
 Behavior:
-- scan targeted files for entity declaration tags
-- declaration syntax:
+- scans targeted files for entity declaration tags and relation tags
+- entity declaration syntax:
   ```txt
-  (#!#tep:student)
+  #!#tep:(student) #tepignore
+  #!#tep:(student){ref="./docs/student.md", description="A learner"} #tepignore
   ```
-- ensure the declared entity exists
-- if the entity has no `ref`, fill it with the declaring file path
-- create a backing anchor for the declaration location
-- attach the entity to that anchor
-- rewrite the declaration to versioned form:
+- relation syntax:
   ```txt
-  (#!#1#tep:student)
+  #!#tep:(student)->(subject){description="has subject"} #tepignore
   ```
-- do not overwrite an existing non-null `ref`
-- already-versioned declarations reuse the existing related anchor in the same file
-- if a line contains the literal marker `#tepignore`, declarations on that line are ignored
-- if a file contains `#tepignoreafter`, declarations after the first occurrence are ignored
-- `line`, `shift`, and `offset` are metadata only
+- ensures declared entities exist
+- fills `ref` from metadata when present
+- otherwise fills missing `ref` from the declaring file path
+- fills `description` from metadata when present
+- syncs directional entity links from relation tags
+- unknown metadata fields do not fail sync; they surface as warnings
+- duplicate/conflicting metadata resolves last-write-wins and surfaces as warnings
+- if a line contains `#tepignore`, tags on that line are ignored
+- if a file contains `#tepignoreafter`, tags after the first occurrence are ignored
 
 ### Show
 ```bash
@@ -97,12 +74,11 @@ tep entity show 42
 ```
 
 Behavior:
-- accept either unique name or entity id
-- print compact entity data
-- include related anchors
-- include `description` when present
-- include outgoing links when present
-- include incoming links when present
+- accepts either unique name or entity id
+- prints compact entity data
+- includes related anchors
+- includes `description` when present
+- includes outgoing and incoming links when present
 
 ### Context
 ```bash
@@ -112,46 +88,13 @@ tep entity context "student" --link-depth 2
 ```
 
 Behavior:
-- return a retrieval-oriented view of the entity
-- include `ref`
-- include related anchors and snippets by default
-- include deduplicated file list
-- include linked entities by default
-- preserve link direction in rendered edge notation
-- `--files-only` returns the entity header, `ref`, file list, and linked entities, but skips anchors/snippets
-- `--link-depth` bounds traversal depth for linked entities
-- linked entity blocks should include enough identifying context to read next (`name`, optional `ref`, optional `description`, edge notation)
-
-### Edit
-```bash
-tep entity edit "student" --ref "./docs/student.md"
-tep entity edit 42 --name "student.profile" --ref "./docs/profile.md"
-tep entity edit "student" --description "A learner enrolled in the system"
-```
-
-Behavior:
-- accept either unique name or entity id
-- update only provided fields
-- print the updated entity
-
-### Link
-```bash
-tep entity link student subject --relation "student has subjects assigned to him each semester"
-```
-
-Behavior:
-- create or update a directional entity-to-entity link
-- relation text is free-form
-- first argument is the source entity
-- second argument is the target entity
-
-### Unlink
-```bash
-tep entity unlink student subject
-```
-
-Behavior:
-- remove the directional link from source to target
+- returns a retrieval-oriented view of the entity
+- includes `ref`
+- includes related anchors and snippets by default
+- includes linked entities
+- preserves link direction in rendered edge notation
+- `--files-only` skips anchor snippets
+- `--link-depth` bounds traversal depth
 
 ### List
 ```bash
@@ -159,8 +102,8 @@ tep entity list
 ```
 
 Behavior:
-- print entities in a compact CLI-friendly way
-- auto-migrate old workspace schemas before querying when needed
+- prints entities in a compact CLI-friendly way
+- auto-migrates old workspace schemas before querying when needed
 
 ## Output expectation
 
@@ -169,18 +112,11 @@ Compact entity format:
 <id> (<name>)
 ```
 
-When anchors are included, each anchor uses the shared compact anchor format:
-```txt
-<anchor_id>
-<file> (<line>:<shift>) [<offset>]
-```
+When anchors are included, each anchor uses the shared compact anchor format.
 
-For context output, linked entities are rendered with explicit edge notation:
-```txt
-edge: (<from_entity_id>-><to_entity_id>)[<depth>] <relation>
-```
+For context output, linked entities are rendered with explicit edge notation.
 
-## Storage direction
+## Storage model
 
 Current storage model:
 - SQLite integer primary key for `entity_id`
@@ -188,3 +124,9 @@ Current storage model:
 - nullable `description` on entities
 - directional entity links with one link per ordered pair
 - schema version tracked via `PRAGMA user_version`
+
+## Historical note
+
+Older manual entity mutation commands are no longer part of the current model.
+
+The current model is file-driven and reconstructed through `tep auto`.

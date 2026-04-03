@@ -1,5 +1,7 @@
-// (#!#tep:workspace)
-// [#!#tep:workspace](workspace)
+// #!#tep:(workspace){description="Workspace lifecycle service for init and full reset/reindex flows"}
+// #!#tep:(workspace)->(entity.service){description="invokes during reindex"}
+// #!#tep:(workspace)->(anchor.sync){description="invokes during reindex"}
+// #!#tep:[workspace](workspace,entity.service,anchor.sync){description="Workspace service module entry"}
 use std::fs;
 
 use anyhow::{Context, Result};
@@ -27,7 +29,7 @@ pub struct ResetResult {
 pub struct WorkspaceService;
 
 impl WorkspaceService {
-    // [#!#tep:workspace.reset](workspace,anchor.sync,entity.service)
+    // #!#tep:[workspace.reset](workspace,anchor.sync,entity.service)
     pub fn reset() -> Result<ResetResult> {
         let cwd = std::env::current_dir().context("failed to determine current directory")?;
         let paths = db::workspace_paths_for(&cwd);

@@ -1,5 +1,6 @@
-// (#!#tep:entity.links)
-// [#!#tep:entity.links](entity.links)
+// #!#tep:(entity.links){description="Graph traversal helper for linked entity context expansion"}
+// #!#tep:(entity.links)->(repo.entity){description="uses directional entity links from"}
+// #!#tep:[entity.links](entity.links,repo.entity){description="Entity link context helper module entry"}
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use anyhow::{Context, Result};
@@ -111,6 +112,7 @@ fn record_link_context(
     }
 }
 
+// #tepignoreafter
 // #tepignoreafter
 #[cfg(test)]
 mod tests {

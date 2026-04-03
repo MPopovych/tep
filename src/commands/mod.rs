@@ -1,4 +1,5 @@
 mod anchor;
+mod auto;
 mod entity;
 mod health;
 mod init;
@@ -11,6 +12,7 @@ pub fn run(command: Commands, json: bool) -> anyhow::Result<()> {
     match command {
         Commands::Init => init::run(),
         Commands::Reset { yes } => reset::run(yes),
+        Commands::Auto(args) => auto::run(args, json),
         Commands::Version => {
             println!("{}", env!("CARGO_PKG_VERSION"));
             Ok(())

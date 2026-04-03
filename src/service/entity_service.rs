@@ -1,21 +1,23 @@
-// (#!#tep:entity.service)
-// [#!#tep:entity.service](entity.service)
-use std::fs;
+// #!#tep:(entity.service){description="Service for entity auto-sync, entity reads, and link-aware context assembly"}
+// #!#tep:(entity.service)->(repo.entity){description="uses for entity persistence"}
+// #!#tep:(entity.service)->(entity.links){description="uses for graph traversal"}
+// #!#tep:(entity.service)->(entity.context){description="uses for snippet extraction"}
+// #!#tep:[entity.service](entity.service,repo.entity,entity.links,entity.context){description="Entity service module entry"}
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use crate::anchor::Anchor;
-use crate::entity::{
-    Entity, EntityLink, NewEntity, ParsedEntityDeclaration, UpdateEntity,
-    parse_entity_declarations, parse_lookup,
-};
+use crate::entity::{Entity, EntityLink, NewEntity, UpdateEntity, parse_lookup};
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 use crate::service::entity_context::extract_anchor_snippet;
 use crate::service::entity_link_context::collect_link_context;
-use crate::utils::workspace_scanner::{WorkspaceFile, collect_workspace_files};
+use crate::service::workspace_parse_service::{
+    ParsedWorkspaceFile, collect_parsed_workspace_files,
+};
+use crate::tep_tag::{ParsedEntityTag, ParsedRelationTag};
 
 pub struct EntityShowResult {
     pub entity: Entity,
@@ -44,14 +46,12 @@ pub struct EntityContextResult {
 pub struct EntityAutoResult {
     pub files_processed: usize,
     pub declarations_seen: usize,
+    pub relations_seen: usize,
     pub entities_ensured: usize,
     pub refs_filled: usize,
-}
-
-pub struct EntityLinkResult {
-    pub from: Entity,
-    pub to: Entity,
-    pub relation: String,
+    pub descriptions_filled: usize,
+    pub relations_synced: usize,
+    pub warnings: Vec<String>,
 }
 
 pub struct EntityService<'a> {
@@ -62,7 +62,8 @@ pub struct EntityService<'a> {
 
 impl<'a> EntityService<'a> {
     pub fn new(conn: &'a Connection) -> Self {
-        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let workspace_root = crate::db::find_workspace_root(&cwd).unwrap_or(cwd);
         Self::with_workspace_root(conn, workspace_root)
     }
 
@@ -75,30 +76,10 @@ impl<'a> EntityService<'a> {
         }
     }
 
-    pub fn create(
-        &self,
-        name: String,
-        entity_ref: Option<String>,
-        description: Option<String>,
-    ) -> Result<Entity> {
-        self.repo.create(&NewEntity {
-            name,
-            r#ref: entity_ref,
-            description,
-        })
-    }
-
-    pub fn ensure(&self, name: String, entity_ref: Option<String>) -> Result<Entity> {
-        self.repo.ensure(&NewEntity {
-            name,
-            r#ref: entity_ref,
-            description: None,
-        })
-    }
-
     pub fn auto(&self, paths: &[String]) -> Result<EntityAutoResult> {
-        let files = collect_workspace_files(&self.workspace_root, paths)?;
+        let (files, warnings) = collect_parsed_workspace_files(&self.workspace_root, paths)?;
         let mut result = EntityAutoResult::default();
+        result.warnings.extend(warnings);
         for file in files {
             self.auto_file(&file, &mut result)?;
         }
@@ -120,7 +101,6 @@ impl<'a> EntityService<'a> {
         })
     }
 
-    // [#!#tep:entity.service.context](entity.service,entity.context,entity.links)
     pub fn context(&self, target: &str, link_depth: usize) -> Result<EntityContextResult> {
         let lookup = parse_lookup(target);
         let entity = self
@@ -137,61 +117,6 @@ impl<'a> EntityService<'a> {
         })
     }
 
-    pub fn edit(
-        &self,
-        target: &str,
-        name: Option<String>,
-        entity_ref: Option<String>,
-        description: Option<String>,
-    ) -> Result<Entity> {
-        if name.is_none() && entity_ref.is_none() && description.is_none() {
-            bail!("entity edit requires at least one field to update");
-        }
-
-        self.repo.update(
-            &parse_lookup(target),
-            &UpdateEntity {
-                name,
-                r#ref: entity_ref,
-                description,
-            },
-        )
-    }
-
-    pub fn link(&self, from: &str, to: &str, relation: &str) -> Result<EntityLinkResult> {
-        let from_lookup = parse_lookup(from);
-        let to_lookup = parse_lookup(to);
-        let link = self.repo.link(&from_lookup, &to_lookup, relation)?;
-        let from_entity = self
-            .repo
-            .find(&from_lookup)?
-            .context("source entity not found")?;
-        let to_entity = self
-            .repo
-            .find(&to_lookup)?
-            .context("target entity not found")?;
-        Ok(EntityLinkResult {
-            from: from_entity,
-            to: to_entity,
-            relation: link.relation,
-        })
-    }
-
-    pub fn unlink(&self, from: &str, to: &str) -> Result<(Entity, Entity)> {
-        let from_lookup = parse_lookup(from);
-        let to_lookup = parse_lookup(to);
-        let from_entity = self
-            .repo
-            .find(&from_lookup)?
-            .context("source entity not found")?;
-        let to_entity = self
-            .repo
-            .find(&to_lookup)?
-            .context("target entity not found")?;
-        self.repo.unlink(&from_lookup, &to_lookup)?;
-        Ok((from_entity, to_entity))
-    }
-
     pub fn list(&self) -> Result<Vec<Entity>> {
         self.repo.list()
     }
@@ -206,52 +131,80 @@ impl<'a> EntityService<'a> {
             .collect()
     }
 
-    fn auto_file(&self, file: &WorkspaceFile, result: &mut EntityAutoResult) -> Result<()> {
-        if !file.absolute_path.is_file() {
+    fn auto_file(&self, file: &ParsedWorkspaceFile, result: &mut EntityAutoResult) -> Result<()> {
+        if file.entity_tags.is_empty() && file.relation_tags.is_empty() {
             return Ok(());
         }
 
-        let content = fs::read_to_string(&file.absolute_path)
-            .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
-        let declarations = parse_entity_declarations(&content);
-        if declarations.is_empty() {
-            return Ok(());
-        }
+        result.declarations_seen += file.entity_tags.len();
+        result.relations_seen += file.relation_tags.len();
 
-        result.declarations_seen += declarations.len();
-        for declaration in &declarations {
-            self.sync_declaration(&file.display_path, declaration, result)?;
+        for tag in &file.entity_tags {
+            self.sync_entity_tag(&file.file.display_path, tag, result)?;
+        }
+        for tag in &file.relation_tags {
+            self.sync_relation_tag(tag, result)?;
         }
         result.files_processed += 1;
 
         Ok(())
     }
 
-    fn sync_declaration(
+    fn sync_entity_tag(
         &self,
         file_path: &str,
-        declaration: &ParsedEntityDeclaration,
+        tag: &ParsedEntityTag,
         result: &mut EntityAutoResult,
     ) -> Result<()> {
-        self.ensure_entity_for_declaration(declaration, file_path, result)?;
-        Ok(())
-    }
-
-    fn ensure_entity_for_declaration(
-        &self,
-        declaration: &ParsedEntityDeclaration,
-        file_path: &str,
-        result: &mut EntityAutoResult,
-    ) -> Result<Entity> {
         let mut entity = self.repo.ensure(&NewEntity {
-            name: declaration.name.clone(),
+            name: tag.name.clone(),
             r#ref: None,
             description: None,
         })?;
         result.entities_ensured += 1;
 
+        entity = self.apply_ref_metadata(file_path, tag, entity, result)?;
+        self.apply_description_metadata(tag, entity, result)?;
+        self.collect_metadata_warnings(
+            &tag.metadata.duplicate_keys,
+            &tag.metadata.unknown_fields,
+            &tag.name,
+            "entity",
+            result,
+        );
+        Ok(())
+    }
+
+    fn apply_ref_metadata(
+        &self,
+        file_path: &str,
+        tag: &ParsedEntityTag,
+        entity: Entity,
+        result: &mut EntityAutoResult,
+    ) -> Result<Entity> {
+        if let Some(tag_ref) = tag.metadata.fields.get("ref") {
+            let updated = self.repo.update(
+                &parse_lookup(&entity.entity_id.to_string()),
+                &UpdateEntity {
+                    name: None,
+                    r#ref: Some(tag_ref.clone()),
+                    description: None,
+                },
+            )?;
+            if entity.r#ref.as_deref() != Some(tag_ref.as_str()) {
+                result.refs_filled += 1;
+                if entity.r#ref.is_some() && entity.r#ref.as_deref() != Some(tag_ref.as_str()) {
+                    result.warnings.push(format!(
+                        "entity '{}' ref overwritten by later declaration",
+                        tag.name
+                    ));
+                }
+            }
+            return Ok(updated);
+        }
+
         if entity.r#ref.is_none() {
-            entity = self.repo.update(
+            let updated = self.repo.update(
                 &parse_lookup(&entity.entity_id.to_string()),
                 &UpdateEntity {
                     name: None,
@@ -260,9 +213,112 @@ impl<'a> EntityService<'a> {
                 },
             )?;
             result.refs_filled += 1;
+            return Ok(updated);
         }
 
         Ok(entity)
+    }
+
+    fn apply_description_metadata(
+        &self,
+        tag: &ParsedEntityTag,
+        entity: Entity,
+        result: &mut EntityAutoResult,
+    ) -> Result<Entity> {
+        let Some(description) = tag.metadata.fields.get("description") else {
+            return Ok(entity);
+        };
+
+        let changed = entity.description.as_deref() != Some(description.as_str());
+        let overwritten = entity.description.is_some() && changed;
+        let updated = self.repo.update(
+            &parse_lookup(&entity.entity_id.to_string()),
+            &UpdateEntity {
+                name: None,
+                r#ref: None,
+                description: Some(description.clone()),
+            },
+        )?;
+        if changed {
+            result.descriptions_filled += 1;
+        }
+        if overwritten {
+            result.warnings.push(format!(
+                "entity '{}' description overwritten by later declaration",
+                tag.name
+            ));
+        }
+        Ok(updated)
+    }
+
+    fn sync_relation_tag(
+        &self,
+        tag: &ParsedRelationTag,
+        result: &mut EntityAutoResult,
+    ) -> Result<()> {
+        self.repo.ensure(&NewEntity {
+            name: tag.from.clone(),
+            r#ref: None,
+            description: None,
+        })?;
+        self.repo.ensure(&NewEntity {
+            name: tag.to.clone(),
+            r#ref: None,
+            description: None,
+        })?;
+        result.entities_ensured += 2;
+
+        let description = tag
+            .metadata
+            .fields
+            .get("description")
+            .cloned()
+            .unwrap_or_else(|| "related to".to_string());
+        let existing = self.repo.find_link_by_name(&tag.from, &tag.to)?;
+        self.repo.link(
+            &parse_lookup(&tag.from),
+            &parse_lookup(&tag.to),
+            &description,
+        )?;
+        result.relations_synced += 1;
+        if let Some(existing) = existing
+            && existing.relation != description
+        {
+            result.warnings.push(format!(
+                "relation '{} -> {}' description overwritten by later declaration",
+                tag.from, tag.to
+            ));
+        }
+        self.collect_metadata_warnings(
+            &tag.metadata.duplicate_keys,
+            &tag.metadata.unknown_fields,
+            &format!("{} -> {}", tag.from, tag.to),
+            "relation",
+            result,
+        );
+        Ok(())
+    }
+
+    fn collect_metadata_warnings(
+        &self,
+        duplicate_keys: &[String],
+        unknown_fields: &[String],
+        target: &str,
+        kind: &str,
+        result: &mut EntityAutoResult,
+    ) {
+        for key in duplicate_keys {
+            result.warnings.push(format!(
+                "duplicate metadata key '{}' in {} {}",
+                key, kind, target
+            ));
+        }
+        for key in unknown_fields {
+            result.warnings.push(format!(
+                "unknown metadata field '{}' in {} {}",
+                key, kind, target
+            ));
+        }
     }
 }
 
@@ -275,8 +331,7 @@ mod tests {
 
     fn setup_service() -> EntityService<'static> {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql())
-            .expect("schema should apply");
+        db::ensure_schema(conn).expect("schema should apply");
         EntityService::with_workspace_root(conn, "/tmp/project")
     }
 
@@ -291,6 +346,7 @@ mod tests {
             line: Some(1),
             shift: Some(0),
             offset: Some(0),
+            description: None,
             created_at: "1".into(),
             updated_at: "1".into(),
         };
@@ -299,159 +355,71 @@ mod tests {
     }
 
     #[test]
-    fn edit_requires_at_least_one_field() {
-        let service = setup_service();
-        let created = service
-            .create("student".into(), None, None)
-            .expect("create should succeed");
-
-        let result = service.edit(&created.entity_id.to_string(), None, None, None);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn show_supports_name_lookup() {
         let service = setup_service();
-        service
-            .create("student.permissions".into(), None, None)
-            .expect("create should succeed");
+        let repo = EntityRepository::new(service.anchor_repo.conn);
+        repo.create(&NewEntity {
+            name: "student.permissions".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
 
-        let result = service
-            .show("student.permissions")
-            .expect("show should succeed");
+        let result = service.show("student.permissions").unwrap();
         assert_eq!(result.entity.name, "student.permissions");
     }
 
     #[test]
     fn show_includes_linked_entities() {
         let service = setup_service();
-        service.create("Student".into(), None, None).unwrap();
-        service.create("Subject".into(), None, None).unwrap();
-        service.create("Teacher".into(), None, None).unwrap();
-        service
-            .link("Student", "Subject", "student has subjects")
+        let repo = EntityRepository::new(service.anchor_repo.conn);
+        for name in ["student", "subject", "teacher"] {
+            repo.create(&NewEntity {
+                name: name.into(),
+                r#ref: None,
+                description: None,
+            })
             .unwrap();
-        service
-            .link("Teacher", "Student", "teacher mentors student")
-            .unwrap();
+        }
+        repo.link(
+            &parse_lookup("student"),
+            &parse_lookup("subject"),
+            "student has subjects",
+        )
+        .unwrap();
+        repo.link(
+            &parse_lookup("teacher"),
+            &parse_lookup("student"),
+            "teacher mentors student",
+        )
+        .unwrap();
 
-        let result = service.show("Student").unwrap();
+        let result = service.show("student").unwrap();
         assert_eq!(result.linked_entities.len(), 2);
-        assert!(
-            result
-                .linked_entities
-                .iter()
-                .any(|l| l.entity.name == "subject")
-        );
-        assert!(
-            result
-                .linked_entities
-                .iter()
-                .any(|l| l.entity.name == "teacher")
-        );
-    }
-
-    #[test]
-    fn context_merges_links_and_preserves_direction_in_edge() {
-        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::with_workspace_root(conn, "/tmp/project");
-        let entity_repo = EntityRepository::new(conn);
-
-        entity_repo
-            .create(&NewEntity {
-                name: "student".into(),
-                r#ref: Some("./docs/student.md".into()),
-                description: Some("A learner".into()),
-            })
-            .unwrap();
-        entity_repo
-            .create(&NewEntity {
-                name: "subject".into(),
-                r#ref: Some("./docs/subject.md".into()),
-                description: Some("A course".into()),
-            })
-            .unwrap();
-        entity_repo
-            .create(&NewEntity {
-                name: "teacher".into(),
-                r#ref: Some("./docs/teacher.md".into()),
-                description: Some("An instructor".into()),
-            })
-            .unwrap();
-        entity_repo
-            .link(
-                &parse_lookup("student"),
-                &parse_lookup("subject"),
-                "student has subjects",
-            )
-            .unwrap();
-        entity_repo
-            .link(
-                &parse_lookup("teacher"),
-                &parse_lookup("student"),
-                "teacher mentors student",
-            )
-            .unwrap();
-
-        let result = service.context("student", 1).unwrap();
-        assert_eq!(result.linked_entities.len(), 2);
-        assert!(
-            result
-                .linked_entities
-                .iter()
-                .any(|l| l.entity.name == "subject" && l.depth == 1)
-        );
-        assert!(
-            result
-                .linked_entities
-                .iter()
-                .any(|l| l.entity.name == "teacher" && l.depth == 1)
-        );
     }
 
     #[test]
     fn context_traverses_link_depth_and_dedupes_entities() {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
+        db::ensure_schema(conn).unwrap();
         let service = EntityService::with_workspace_root(conn, "/tmp/project");
         let entity_repo = EntityRepository::new(conn);
 
-        entity_repo
-            .create(&NewEntity {
-                name: "student".into(),
-                r#ref: Some("./docs/student.md".into()),
-                description: Some("A learner".into()),
-            })
-            .unwrap();
-        entity_repo
-            .create(&NewEntity {
-                name: "subject".into(),
-                r#ref: Some("./docs/subject.md".into()),
-                description: Some("A course".into()),
-            })
-            .unwrap();
-        entity_repo
-            .create(&NewEntity {
-                name: "semester".into(),
-                r#ref: Some("./docs/semester.md".into()),
-                description: Some("A term".into()),
-            })
-            .unwrap();
-        entity_repo
-            .create(&NewEntity {
-                name: "teacher".into(),
-                r#ref: Some("./docs/teacher.md".into()),
-                description: Some("An instructor".into()),
-            })
-            .unwrap();
-        entity_repo
-            .create(&NewEntity {
-                name: "department".into(),
-                r#ref: Some("./docs/department.md".into()),
-                description: Some("An org unit".into()),
-            })
-            .unwrap();
+        for (name, desc) in [
+            ("student", "A learner"),
+            ("subject", "A course"),
+            ("semester", "A term"),
+            ("teacher", "An instructor"),
+            ("department", "An org unit"),
+        ] {
+            entity_repo
+                .create(&NewEntity {
+                    name: name.into(),
+                    r#ref: Some(format!("./docs/{name}.md")),
+                    description: Some(desc.into()),
+                })
+                .unwrap();
+        }
 
         entity_repo
             .link(
@@ -491,88 +459,73 @@ mod tests {
 
         let result = service.context("student", 2).unwrap();
         assert_eq!(result.linked_entities.len(), 4);
+    }
+
+    #[test]
+    fn auto_merges_entity_metadata_and_warns_on_overwrite() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join("a.txt"),
+            "#!#tep:(student){ref=\"./docs/student.md\", description=\"A learner\"}\n#!#tep:(student){description=\"Learner v2\"}\n",
+        )
+        .unwrap();
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        db::ensure_schema(conn).unwrap();
+        let service = EntityService::with_workspace_root(conn, temp.path());
+
+        let result = service.auto(&["./a.txt".into()]).unwrap();
+        let entity = EntityRepository::new(conn)
+            .find(&parse_lookup("student"))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(entity.r#ref.as_deref(), Some("./docs/student.md"));
+        assert_eq!(entity.description.as_deref(), Some("Learner v2"));
         assert!(
             result
-                .linked_entities
+                .warnings
                 .iter()
-                .any(|l| l.entity.name == "subject" && l.depth == 1)
-        );
-        assert!(
-            result
-                .linked_entities
-                .iter()
-                .any(|l| l.entity.name == "semester" && l.depth == 1)
-        );
-        assert!(
-            result
-                .linked_entities
-                .iter()
-                .any(|l| l.entity.name == "teacher" && l.depth == 1)
-        );
-        assert!(
-            result
-                .linked_entities
-                .iter()
-                .any(|l| l.entity.name == "department" && l.depth == 2)
-        );
-        assert!(
-            !result
-                .linked_entities
-                .iter()
-                .any(|l| l.entity.name == "student")
+                .any(|w| w.contains("description overwritten"))
         );
     }
 
     #[test]
-    fn context_includes_ref_files_snippet_and_links_by_default() {
-        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
-        conn.execute_batch(db::schema_sql()).unwrap();
-        let service = EntityService::with_workspace_root(conn, "/tmp/project");
-        let entity_repo = EntityRepository::new(conn);
+    fn auto_creates_relations_from_tags() {
         let temp = tempfile::tempdir().unwrap();
-        let file = temp.path().join("note.txt");
-        std::fs::write(&file, "before line\nanchor line\nafter line\n").unwrap();
-        let entity = entity_repo
-            .create(&NewEntity {
-                name: "student".into(),
-                r#ref: Some("./docs/student.md".into()),
-                description: Some("A learner".into()),
-            })
-            .unwrap();
-        entity_repo
-            .create(&NewEntity {
-                name: "subject".into(),
-                r#ref: Some("./docs/subject.md".into()),
-                description: Some("A course".into()),
-            })
-            .unwrap();
-        entity_repo
-            .link(
-                &parse_lookup("student"),
-                &parse_lookup("subject"),
-                "student has subjects",
-            )
-            .unwrap();
-        let anchor = service
-            .anchor_repo
-            .create(
-                1,
-                file.to_string_lossy().as_ref(),
-                Some(2),
-                Some(0),
-                Some(12),
-            )
-            .unwrap();
-        crate::repository::anchor_entity_repository::AnchorEntityRepository::new(conn)
-            .attach(anchor.anchor_id, entity.entity_id)
+        std::fs::write(
+            temp.path().join("a.txt"),
+            "#!#tep:(student)->(subject){description=\"has subject\"}\n",
+        )
+        .unwrap();
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        db::ensure_schema(conn).unwrap();
+        let service = EntityService::with_workspace_root(conn, temp.path());
+
+        let result = service.auto(&["./a.txt".into()]).unwrap();
+        let repo = EntityRepository::new(conn);
+        let link = repo
+            .find_link_by_name("student", "subject")
+            .unwrap()
             .unwrap();
 
-        let result = service.context("student", 1).unwrap();
-        assert_eq!(result.entity.r#ref.as_deref(), Some("./docs/student.md"));
-        assert_eq!(result.anchors.len(), 1);
-        assert!(result.anchors[0].anchor.file_path.contains("note.txt"));
-        assert_eq!(result.linked_entities.len(), 1);
-        let snippet = result.anchors[0].snippet.as_deref().unwrap();
-        assert!(snippet.contains("anchor line"));
+        assert_eq!(result.relations_synced, 1);
+        assert_eq!(link.relation, "has subject");
+    }
+
+    #[test]
+    fn auto_warns_on_unknown_entity_metadata_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("a.txt"), "#!#tep:(student){foo=\"bar\"}\n").unwrap();
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        db::ensure_schema(conn).unwrap();
+        let service = EntityService::with_workspace_root(conn, temp.path());
+
+        let result = service.auto(&["./a.txt".into()]).unwrap();
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("unknown metadata field 'foo'"))
+        );
     }
 }

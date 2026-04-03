@@ -47,6 +47,7 @@ pub fn append_link_block(out: &mut String, links: &[LinkDto]) {
 }
 
 // #tepignoreafter
+// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
