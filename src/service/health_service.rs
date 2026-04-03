@@ -9,9 +9,9 @@ use rusqlite::Connection;
 
 use crate::anchor::{ParsedAnchor, parse_anchors};
 use crate::entity::parse_entity_declarations;
-use crate::tep_tag::{parse_anchor_tags, parse_entity_tags, parse_relation_tags};
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
+use crate::tep_tag::{parse_anchor_tags, parse_entity_tags, parse_relation_tags};
 use crate::utils::workspace_scanner::{WorkspaceFile, collect_workspace_files};
 
 #[derive(Debug, Clone, Default)]
@@ -47,7 +47,6 @@ pub struct HealthReport {
 
 #[derive(Debug, Default)]
 struct HealthTracker {
-    /// anchor name → file path where it was first seen
     seen_name_to_file: HashMap<String, String>,
     seen_anchor_ids: HashSet<i64>,
 }
@@ -73,7 +72,6 @@ impl<'a> HealthService<'a> {
         }
     }
 
-    // [#!#tep:anchor.health.audit](anchor.health,workspace.scanner)
     pub fn audit_paths(&self, paths: &[String]) -> Result<HealthReport> {
         let files = collect_workspace_files(&self.workspace_root, paths)?;
         let scoped_files = files
@@ -296,7 +294,6 @@ impl<'a> HealthService<'a> {
     }
 }
 
-// #tepignoreafter
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -339,14 +336,15 @@ mod tests {
                 Some(1),
                 Some(0),
                 Some(0),
+                None,
             )
             .unwrap();
         std::fs::create_dir_all("/tmp/project/docs").ok();
         std::fs::write(
             "/tmp/project/docs/student.md",
-            "[#!#tep:my_anchor](student)",
+            "#!#tep:[my_anchor](student)",
         )
-        .ok(); // #tepignore
+        .ok();
 
         let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.issue_counts.anchors_without_entities, 1);
@@ -372,6 +370,7 @@ mod tests {
                 Some(1),
                 Some(0),
                 Some(0),
+                None,
             )
             .unwrap();
         let rel = AnchorEntityRepository::new(service.anchor_repo.conn);
@@ -380,9 +379,9 @@ mod tests {
         std::fs::create_dir_all("/tmp/project/docs").ok();
         std::fs::write(
             "/tmp/project/docs/student.md",
-            "[#!#tep:my_anchor](student)",
+            "#!#tep:[my_anchor](student)",
         )
-        .ok(); // #tepignore
+        .ok();
 
         let report = service.audit_paths(&["./docs/student.md".into()]).unwrap();
         assert_eq!(report.anchors_healthy, 1);

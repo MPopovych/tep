@@ -404,6 +404,7 @@ mod tests {
             line: Some(1),
             shift: Some(0),
             offset: Some(0),
+            description: None,
             created_at: "1".into(),
             updated_at: "1".into(),
         };

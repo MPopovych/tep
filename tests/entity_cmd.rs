@@ -175,7 +175,7 @@ fn entity_show_includes_incoming_and_outgoing_links() {
 #[test]
 fn entity_context_includes_all_link_directions_by_default() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    std::fs::write(temp.path().join("note.txt"), "hello\n[#!#tep:](student)\n")
+    std::fs::write(temp.path().join("note.txt"), "hello\n#!#tep:[](student)\n")
         .expect("should write file");
 
     Command::cargo_bin("tep")
@@ -484,7 +484,7 @@ fn entity_context_files_only_omits_snippets() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(
         temp.path().join("note.txt"),
-        "hello world\n[#!#tep:my_anchor](student)\n",
+        "hello world\n#!#tep:[my_anchor](student)\n",
     )
     .expect("should write file");
 
@@ -691,7 +691,7 @@ fn entity_link_rejects_self_link() {
 #[test]
 fn entity_context_can_expand_link_depth() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    std::fs::write(temp.path().join("note.txt"), "hello\n[#!#tep:](student)\n")
+    std::fs::write(temp.path().join("note.txt"), "hello\n#!#tep:[](student)\n")
         .expect("should write file");
 
     Command::cargo_bin("tep")

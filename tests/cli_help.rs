@@ -114,7 +114,7 @@ fn prints_health_help_with_path_description() {
 #[test]
 fn anchor_shorthand_alias_works() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    std::fs::write(temp.path().join("note.txt"), "[#!#tep:my_anchor](student)")
+    std::fs::write(temp.path().join("note.txt"), "#!#tep:[my_anchor](student)")
         .expect("should write file");
 
     Command::cargo_bin("tep")

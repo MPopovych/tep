@@ -1,5 +1,5 @@
-// (#!#tep:anchor.parser)
-// [#!#tep:anchor.parser](anchor.parser)
+// #!#tep:(anchor.parser)
+// #!#tep:[anchor.parser](anchor.parser)
 use crate::tep_tag::parse_anchor_tags;
 
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
@@ -66,7 +66,7 @@ pub fn parse_anchor_target(input: &str) -> AnchorTarget {
     }
 }
 
-// [#!#tep:anchor.parser.scan](anchor.parser)
+// #!#tep:[anchor.parser.scan](anchor.parser)
 pub fn parse_anchors(input: &str) -> Vec<ParsedAnchor> {
     parse_anchor_tags(input)
         .into_iter()
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn parses_named_anchor_with_entity_refs() {
-        let parsed = parse_anchors("[#!#tep:foo](student,basic_user)");
+        let parsed = parse_anchors("#!#tep:[foo](student,basic_user)");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].anchor_name, "foo");
         assert_eq!(parsed[0].entity_refs, vec!["student", "basic_user"]);
@@ -96,13 +96,13 @@ mod tests {
 
     #[test]
     fn ignores_named_anchor_without_entity_refs() {
-        let parsed = parse_anchors("[#!#tep:foo]");
+        let parsed = parse_anchors("#!#tep:[foo]");
         assert!(parsed.is_empty());
     }
 
     #[test]
     fn ignores_incomplete_anchor_no_name() {
-        let parsed = parse_anchors("[#!#tep:](student)");
+        let parsed = parse_anchors("#!#tep:[](student)");
         assert!(parsed.is_empty());
     }
 
@@ -114,26 +114,26 @@ mod tests {
 
     #[test]
     fn ignores_anchor_with_numeric_name() {
-        let parsed = parse_anchors("[#!#tep:123](student)");
+        let parsed = parse_anchors("#!#tep:[123](student)");
         assert!(parsed.is_empty());
     }
 
     #[test]
     fn parses_named_anchor_normalizes_case() {
-        let parsed = parse_anchors("[#!#tep:Student_Processor](student)");
+        let parsed = parse_anchors("#!#tep:[Student_Processor](student)");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].anchor_name, "student_processor");
     }
 
     #[test]
     fn ignores_named_anchor_with_invalid_charset() {
-        let parsed = parse_anchors("[#!#tep:student-processor]");
+        let parsed = parse_anchors("#!#tep:[student-processor]");
         assert!(parsed.is_empty());
     }
 
     #[test]
     fn computes_line_shift_and_offset() {
-        let input = "hello\n  [#!#tep:foo](student)";
+        let input = "hello\n  #!#tep:[foo](student)";
         let parsed = parse_anchors(input);
         assert_eq!(parsed[0].line, 2);
         assert_eq!(parsed[0].shift, 2);
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn parses_anchor_after_unicode_text_without_panicking() {
-        let input = "żółw 🐢\n[#!#tep:foo](student)";
+        let input = "żółw 🐢\n#!#tep:[foo](student)";
         let parsed = parse_anchors(input);
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].anchor_name, "foo");
@@ -150,17 +150,17 @@ mod tests {
 
     #[test]
     fn computes_byte_offsets_after_unicode_prefix() {
-        let input = "żółw [#!#tep:foo](student)";
+        let input = "żółw #!#tep:[foo](student)";
         let parsed = parse_anchors(input);
         assert_eq!(parsed.len(), 1);
-        let expected = input.find("[#!#tep:foo]").expect("anchor should exist");
+        let expected = input.find("#!#tep:[foo]").expect("anchor should exist");
         assert_eq!(parsed[0].start_offset, expected);
         assert_eq!(parsed[0].shift as usize, expected);
     }
 
     #[test]
     fn ignores_anchor_with_unclosed_entity_instruction() {
-        let parsed = parse_anchors("[#!#tep:foo](student");
+        let parsed = parse_anchors("#!#tep:[foo](student");
         assert!(parsed.is_empty());
     }
 
@@ -172,13 +172,13 @@ mod tests {
 
     #[test]
     fn ignores_anchor_when_line_contains_tepignore() {
-        let parsed = parse_anchors("example [#!#tep:foo](student) #tepignore");
+        let parsed = parse_anchors("example #!#tep:[foo](student) #tepignore");
         assert!(parsed.is_empty());
     }
 
     #[test]
     fn ignores_anchors_after_tepignoreafter_marker() {
-        let parsed = parse_anchors("[#!#tep:foo](student)\n#tepignoreafter\n[#!#tep:bar](teacher)");
+        let parsed = parse_anchors("#!#tep:[foo](student)\n#tepignoreafter\n#!#tep:[bar](teacher)");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].anchor_name, "foo");
     }

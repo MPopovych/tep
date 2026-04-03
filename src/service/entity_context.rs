@@ -69,6 +69,7 @@ mod tests {
             line: Some(line),
             shift: Some(0),
             offset: Some(0),
+            description: None,
             created_at: "1".into(),
             updated_at: "1".into(),
         }

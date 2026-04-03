@@ -1,5 +1,5 @@
-// (#!#tep:entity.declaration)
-// [#!#tep:entity.declaration](entity.declaration)
+// #!#tep:(entity.declaration)
+// #!#tep:[entity.declaration](entity.declaration)
 use crate::tep_tag::parse_entity_tags;
 
 pub const TEPIGNORE_MARKER: &str = "#tepignore";
@@ -104,7 +104,7 @@ pub fn normalize_description(description: Option<String>) -> Result<Option<Strin
     }
 }
 
-// [#!#tep:entity.declaration.scan](entity.declaration)
+// #!#tep:[entity.declaration.scan](entity.declaration)
 pub fn parse_entity_declarations(input: &str) -> Vec<ParsedEntityDeclaration> {
     parse_entity_tags(input)
         .into_iter()
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn parses_entity_declaration() {
-        let parsed = parse_entity_declarations("abc (#!#tep:Student) xyz");
+        let parsed = parse_entity_declarations("abc #!#tep:(Student) xyz");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].name, "student");
     }
@@ -197,7 +197,7 @@ mod tests {
 
     #[test]
     fn ignores_numeric_entity_declaration_name() {
-        let parsed = parse_entity_declarations("(#!#tep:123)");
+        let parsed = parse_entity_declarations("#!#tep:(123)");
         assert!(parsed.is_empty());
     }
 
@@ -208,14 +208,14 @@ mod tests {
 
     #[test]
     fn ignores_entity_declaration_when_line_contains_tepignore() {
-        let parsed = parse_entity_declarations("example (#!#tep:Student) #tepignore");
+        let parsed = parse_entity_declarations("example #!#tep:(Student) #tepignore");
         assert!(parsed.is_empty());
     }
 
     #[test]
     fn ignores_entity_declarations_after_tepignoreafter_marker() {
         let parsed =
-            parse_entity_declarations("(#!#tep:Student)\n#tepignoreafter\n(#!#tep:Teacher)");
+            parse_entity_declarations("#!#tep:(Student)\n#tepignoreafter\n#!#tep:(Teacher)");
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].name, "student");
     }
