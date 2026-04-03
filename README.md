@@ -118,6 +118,31 @@ Meaning:
 - `tep auto` ensures the entity exists
 - if the entity has no `ref`, the declaring file is stored as its `ref`
 
+
+### Entity metadata tags
+
+Entity tags can carry metadata directly:
+
+```txt
+#!#tep:(auth.flow){ref="./src/auth.rs", description="Login workflow"}
+#!#tep:(pricing.model){description="Pricing rules and calculations"}
+```
+
+Supported entity metadata fields:
+- `ref`
+- `description`
+
+### Entity relation tags
+
+Relations are directional and declared in files:
+
+```txt
+#!#tep:(auth.flow)->(session){description="creates session"}
+#!#tep:(pricing.model)->(checkout.flow){description="used during checkout"}
+```
+
+Relations are reconstructed by `tep auto` and shown in entity graph views.
+
 ## Ignore controls
 
 ### `#tepignore`
@@ -208,6 +233,37 @@ tep entity context anchor.parser --link-depth 2
 ### Show compact graph shape
 ```bash
 tep entity show anchor.parser
+```
+
+
+## Sample outputs
+
+### `tep entity list`
+```txt
+1 anchor.parser (./src/anchor.rs)
+5 anchor.sync - "Service for synchronizing anchors and anchor-entity attachments from files" (./src/service/anchor_service.rs)
+13 entity.service - "Service for entity auto-sync, entity reads, and link-aware context assembly" (./src/service/entity_service.rs)
+```
+
+### `tep health`
+```txt
+workspace health report
+files_scanned: 14
+anchors_seen: 49
+anchors_healthy: 32
+anchors_moved: 0
+anchors_missing: 0
+duplicate_anchor_ids: 0
+unknown_anchor_ids: 0
+entities_without_anchors: 0
+anchors_without_entities: 0
+metadata_warnings: 0
+```
+
+### `tep anchor show anchor.parser`
+```txt
+anchor:1 anchor.parser ./src/anchor.rs (1:3) [3]
+2 (anchor.parser)
 ```
 
 ## Health and reset

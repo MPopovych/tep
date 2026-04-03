@@ -42,3 +42,9 @@ jobs:
 
       - name: Test
         run: cargo test --verbose
+
+      - name: Graph health check
+        run: |
+          ./target/debug/tep init
+          ./target/debug/tep auto .
+          ./target/debug/tep health --check

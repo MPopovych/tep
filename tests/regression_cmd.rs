@@ -156,3 +156,58 @@ fn reset_warns_and_continues_on_duplicate_anchor_names() {
         .success()
         .stdout(predicate::str::contains("qa.flow"));
 }
+
+#[test]
+fn health_check_exits_zero_when_clean() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(
+        temp.path().join("note.txt"),
+        "#!#tep:(student){description=\"A learner\"}\n#!#tep:[student_anchor](student)\n",
+    )
+    .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["auto", "./note.txt"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["health", "--check"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn health_check_exits_non_zero_when_issues_exist() {
+    let temp = assert_fs::TempDir::new().expect("temp dir should be created");
+    std::fs::write(
+        temp.path().join("bad.md"),
+        "#!#tep:[dup](student)\n#!#tep:[dup](student)\n",
+    )
+    .expect("should write file");
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["init"])
+        .assert()
+        .success();
+
+    Command::cargo_bin("tep")
+        .expect("binary should build")
+        .current_dir(temp.path())
+        .args(["health", "--check"])
+        .assert()
+        .failure();
+}

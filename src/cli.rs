@@ -66,6 +66,11 @@ pub struct HealthArgs {
         help = "File or directory to audit relative to the workspace"
     )]
     pub path: String,
+    #[arg(
+        long,
+        help = "Exit with status 1 when health issues or warnings are present"
+    )]
+    pub check: bool,
 }
 
 #[derive(Debug, Subcommand)]
