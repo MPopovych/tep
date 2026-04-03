@@ -2,7 +2,7 @@ use clap::{Args, Parser, Subcommand};
 
 const ABOUT: &str =
     "text entity pointers — connect concepts to locations in your codebase and docs";
-const ENTITY_ABOUT: &str = "Work with entities, descriptions, refs, and directional links";
+const ENTITY_ABOUT: &str = "Inspect entities, context, descriptions, refs, and links";
 const ANCHOR_ABOUT: &str = "Work with anchors, names, and anchor-entity attachments";
 
 #[derive(Debug, Parser)]
@@ -25,6 +25,8 @@ pub enum Commands {
         #[arg(long, help = "Skip confirmation prompt")]
         yes: bool,
     },
+    #[command(about = "Auto-sync entities, relations, and anchors from files")]
+    Auto(AutoArgs),
     #[command(about = "Print the tep version")]
     Version,
     #[command(about = "Audit workspace health and graph integrity")]
@@ -49,6 +51,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: AnchorCommands,
     },
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct AutoArgs {
+    #[arg(required = true, help = "Files or directories to scan")]
+    pub paths: Vec<String>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -81,10 +89,6 @@ pub struct AnchorAutoArgs {
 
 #[derive(Debug, Subcommand)]
 pub enum EntityCommands {
-    #[command(about = "Create a new entity")]
-    Create(UpsertEntityArgs),
-    #[command(about = "Ensure an entity exists")]
-    Ensure(UpsertEntityArgs),
     #[command(about = "Auto-declare entities from files")]
     Auto(EntityAutoArgs),
     #[command(about = "Show one entity and its related anchors and links")]
@@ -94,36 +98,8 @@ pub enum EntityCommands {
     },
     #[command(about = "Show one entity with snippets, files, and linked entities")]
     Context(EntityContextArgs),
-    #[command(about = "Edit an existing entity")]
-    Edit(EditEntityArgs),
-    #[command(about = "Create or update a directional entity link")]
-    Link {
-        #[arg(help = "Source entity name or id")]
-        from: String,
-        #[arg(help = "Target entity name or id")]
-        to: String,
-        #[arg(long, help = "Relation text stored on the directional link")]
-        relation: String,
-    },
-    #[command(about = "Remove a directional entity link")]
-    Unlink {
-        #[arg(help = "Source entity name or id")]
-        from: String,
-        #[arg(help = "Target entity name or id")]
-        to: String,
-    },
     #[command(about = "List entities")]
     List,
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct UpsertEntityArgs {
-    #[arg(help = "Entity name")]
-    pub name: String,
-    #[arg(long, help = "Reference file path for the entity")]
-    pub r#ref: Option<String>,
-    #[arg(long, help = "Human-readable description")]
-    pub description: Option<String>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -144,16 +120,4 @@ pub struct EntityContextArgs {
         help = "Traverse directional links up to this depth"
     )]
     pub link_depth: usize,
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct EditEntityArgs {
-    #[arg(help = "Entity name or id")]
-    pub target: String,
-    #[arg(long, help = "Replace the entity name")]
-    pub name: Option<String>,
-    #[arg(long, help = "Replace the entity reference path")]
-    pub r#ref: Option<String>,
-    #[arg(long, help = "Replace the entity description")]
-    pub description: Option<String>,
 }

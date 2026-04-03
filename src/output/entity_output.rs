@@ -2,15 +2,6 @@ use crate::dto::{EntityAutoDto, EntityContextDto, EntityDto, EntityShowDto};
 use crate::output::anchor_format::format_anchor_line;
 use crate::output::render::{append_entity_metadata, append_link_block, render_entity_header};
 
-pub fn format_entity_created(prefix: &str, entity: &EntityDto) -> String {
-    let mut out = format!("{prefix}\n");
-    out.push_str(&render_entity_header(entity));
-    if let Some(description) = &entity.description {
-        out.push_str(&format!("description: {}\n", description));
-    }
-    out
-}
-
 pub fn format_entity_auto_result(result: &EntityAutoDto) -> String {
     let mut out = format!(
         "entity auto complete\nfiles_processed: {}\ndeclarations_seen: {}\nrelations_seen: {}\nentities_ensured: {}\nrefs_filled: {}\ndescriptions_filled: {}\nrelations_synced: {}\n",
@@ -71,25 +62,6 @@ pub fn format_entity_context_files_only(result: &EntityContextDto) -> String {
     }
     append_link_block(&mut out, &result.links);
     out
-}
-
-pub fn format_entity_link_result(
-    prefix: &str,
-    from: &EntityDto,
-    to: &EntityDto,
-    relation: &str,
-) -> String {
-    format!(
-        "{}\nfrom: {} ({})\nto: {} ({})\nrelation: {}\n",
-        prefix, from.id, from.name, to.id, to.name, relation
-    )
-}
-
-pub fn format_entity_unlink_result(prefix: &str, from: &EntityDto, to: &EntityDto) -> String {
-    format!(
-        "{}\nfrom: {} ({})\nto: {} ({})\n",
-        prefix, from.id, from.name, to.id, to.name
-    )
 }
 
 pub fn format_entity_list(entities: &[EntityDto]) -> String {
