@@ -2,9 +2,6 @@
 // #!#tep:[entity.declaration](entity.declaration)
 use crate::tep_tag::parse_entity_tags;
 
-pub const TEPIGNORE_MARKER: &str = "#tepignore";
-pub const TEPIGNORE_AFTER_MARKER: &str = "#tepignoreafter";
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entity {
     pub entity_id: i64,

@@ -251,3 +251,73 @@ impl<'a> AnchorService<'a> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+
+    fn setup_service(workspace_root: &Path) -> AnchorService<'static> {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        db::ensure_schema(conn).expect("schema should apply");
+        AnchorService::with_workspace_root(conn, workspace_root)
+    }
+
+    #[test]
+    fn sync_file_tracks_named_anchor_with_entity_refs() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "hello #!#tep:[myanchor](student)").expect("should write file");
+
+        let result = service.sync_paths(&["./note.txt".into()]).unwrap();
+        assert_eq!(result.anchors_created, 1);
+        assert_eq!(result.relations_synced, 1);
+    }
+
+    #[test]
+    fn sync_persists_anchor_description_metadata() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
+        let file = temp.path().join("note.txt");
+        std::fs::write(
+            &file,
+            "#!#tep:[myanchor](student){description=\"Entry point\"}",
+        )
+        .unwrap();
+
+        let result = service.sync_paths(&["./note.txt".into()]).unwrap();
+        let anchor = service.anchor_repo.find_by_name("myanchor").unwrap().unwrap();
+        assert_eq!(result.metadata_updated, 1);
+        assert_eq!(anchor.description.as_deref(), Some("Entry point"));
+    }
+
+    #[test]
+    fn sync_warns_on_unknown_anchor_metadata() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
+        let file = temp.path().join("note.txt");
+        std::fs::write(&file, "#!#tep:[myanchor](student){foo=\"bar\"}").unwrap();
+
+        let result = service.sync_paths(&["./note.txt".into()]).unwrap();
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.contains("unknown metadata field 'foo'")));
+    }
+
+    #[test]
+    fn duplicate_anchor_names_in_same_file_fail() {
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let service = setup_service(temp.path());
+        let file = temp.path().join("bad.txt");
+        std::fs::write(
+            &file,
+            "#!#tep:[foo](student)\n#!#tep:[foo](teacher)\n",
+        )
+        .unwrap();
+
+        let result = service.sync_paths(&["./bad.txt".into()]);
+        assert!(result.is_err());
+    }
+}

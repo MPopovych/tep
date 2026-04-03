@@ -315,3 +315,191 @@ impl<'a> EntityService<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+    use crate::repository::entity_repository::EntityRepository;
+
+    fn setup_service() -> EntityService<'static> {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        db::ensure_schema(conn).expect("schema should apply");
+        EntityService::with_workspace_root(conn, "/tmp/project")
+    }
+
+    #[test]
+    fn build_anchor_context_collects_deduped_files() {
+        let service = setup_service();
+        let anchor = Anchor {
+            anchor_id: 1,
+            version: 1,
+            name: None,
+            file_path: "./docs/a.md".into(),
+            line: Some(1),
+            shift: Some(0),
+            offset: Some(0),
+            description: None,
+            created_at: "1".into(),
+            updated_at: "1".into(),
+        };
+        let anchors = service.build_anchor_context(&[anchor.clone(), anchor]);
+        assert_eq!(anchors.len(), 2);
+    }
+
+    #[test]
+    fn show_supports_name_lookup() {
+        let service = setup_service();
+        let repo = EntityRepository::new(service.anchor_repo.conn);
+        repo.create(&NewEntity {
+            name: "student.permissions".into(),
+            r#ref: None,
+            description: None,
+        })
+        .unwrap();
+
+        let result = service.show("student.permissions").unwrap();
+        assert_eq!(result.entity.name, "student.permissions");
+    }
+
+    #[test]
+    fn show_includes_linked_entities() {
+        let service = setup_service();
+        let repo = EntityRepository::new(service.anchor_repo.conn);
+        for name in ["student", "subject", "teacher"] {
+            repo.create(&NewEntity {
+                name: name.into(),
+                r#ref: None,
+                description: None,
+            })
+            .unwrap();
+        }
+        repo.link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects")
+            .unwrap();
+        repo.link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student")
+            .unwrap();
+
+        let result = service.show("student").unwrap();
+        assert_eq!(result.linked_entities.len(), 2);
+    }
+
+    #[test]
+    fn context_traverses_link_depth_and_dedupes_entities() {
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        db::ensure_schema(conn).unwrap();
+        let service = EntityService::with_workspace_root(conn, "/tmp/project");
+        let entity_repo = EntityRepository::new(conn);
+
+        for (name, desc) in [
+            ("student", "A learner"),
+            ("subject", "A course"),
+            ("semester", "A term"),
+            ("teacher", "An instructor"),
+            ("department", "An org unit"),
+        ] {
+            entity_repo
+                .create(&NewEntity {
+                    name: name.into(),
+                    r#ref: Some(format!("./docs/{name}.md")),
+                    description: Some(desc.into()),
+                })
+                .unwrap();
+        }
+
+        entity_repo
+            .link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects")
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("subject"),
+                &parse_lookup("semester"),
+                "subject is scheduled in semester",
+            )
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("semester"),
+                &parse_lookup("student"),
+                "semester contains student records",
+            )
+            .unwrap();
+        entity_repo
+            .link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student")
+            .unwrap();
+        entity_repo
+            .link(
+                &parse_lookup("department"),
+                &parse_lookup("teacher"),
+                "department employs teacher",
+            )
+            .unwrap();
+
+        let result = service.context("student", 2).unwrap();
+        assert_eq!(result.linked_entities.len(), 4);
+    }
+
+    #[test]
+    fn auto_merges_entity_metadata_and_warns_on_overwrite() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join("a.txt"),
+            "#!#tep:(student){ref=\"./docs/student.md\", description=\"A learner\"}\n#!#tep:(student){description=\"Learner v2\"}\n",
+        )
+        .unwrap();
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        db::ensure_schema(conn).unwrap();
+        let service = EntityService::with_workspace_root(conn, temp.path());
+
+        let result = service.auto(&["./a.txt".into()]).unwrap();
+        let entity = EntityRepository::new(conn)
+            .find(&parse_lookup("student"))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(entity.r#ref.as_deref(), Some("./docs/student.md"));
+        assert_eq!(entity.description.as_deref(), Some("Learner v2"));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.contains("description overwritten")));
+    }
+
+    #[test]
+    fn auto_creates_relations_from_tags() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join("a.txt"),
+            "#!#tep:(student)->(subject){description=\"has subject\"}\n",
+        )
+        .unwrap();
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        db::ensure_schema(conn).unwrap();
+        let service = EntityService::with_workspace_root(conn, temp.path());
+
+        let result = service.auto(&["./a.txt".into()]).unwrap();
+        let repo = EntityRepository::new(conn);
+        let link = repo.find_link_by_name("student", "subject").unwrap().unwrap();
+
+        assert_eq!(result.relations_synced, 1);
+        assert_eq!(link.relation, "has subject");
+    }
+
+    #[test]
+    fn auto_warns_on_unknown_entity_metadata_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            temp.path().join("a.txt"),
+            "#!#tep:(student){foo=\"bar\"}\n",
+        )
+        .unwrap();
+        let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
+        db::ensure_schema(conn).unwrap();
+        let service = EntityService::with_workspace_root(conn, temp.path());
+
+        let result = service.auto(&["./a.txt".into()]).unwrap();
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.contains("unknown metadata field 'foo'")));
+    }
+}

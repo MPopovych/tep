@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use crate::anchor::{normalize_anchor_name, validate_anchor_name, TEPIGNORE_AFTER_MARKER, TEPIGNORE_MARKER};
+use crate::anchor::{
+    TEPIGNORE_AFTER_MARKER, TEPIGNORE_MARKER, normalize_anchor_name, validate_anchor_name,
+};
 use crate::entity::{normalize_name, validate_name};
 use crate::utils::parse::{line_contains_marker, parse_scan_limit};
 
@@ -345,5 +347,52 @@ impl Default for ParsedMetadata {
             duplicate_keys: Vec::new(),
             unknown_fields: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_entity_metadata_and_overwrites_duplicate_keys() {
+        let tags = parse_entity_tags(
+            "#!#tep:(student){description=\"A\", description=\"B\", ref=\"./x\"}",
+        );
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].name, "student");
+        assert_eq!(tags[0].metadata.fields.get("description").map(String::as_str), Some("B"));
+        assert_eq!(tags[0].metadata.fields.get("ref").map(String::as_str), Some("./x"));
+        assert_eq!(tags[0].metadata.duplicate_keys, vec!["description"]);
+    }
+
+    #[test]
+    fn parses_relation_and_unknown_metadata_field() {
+        let tags = parse_relation_tags(
+            "#!#tep:(student)->(subject){description=\"has\", extra=\"x\"}",
+        );
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].from, "student");
+        assert_eq!(tags[0].to, "subject");
+        assert_eq!(tags[0].metadata.unknown_fields, vec!["extra"]);
+    }
+
+    #[test]
+    fn parses_anchor_metadata_and_refs() {
+        let tags = parse_anchor_tags(
+            "#!#tep:[student_anchor](student,subject){description=\"Entry\"}",
+        );
+        assert_eq!(tags.len(), 1);
+        assert_eq!(tags[0].anchor_name, "student_anchor");
+        assert_eq!(tags[0].entity_refs, vec!["student", "subject"]);
+        assert_eq!(tags[0].metadata.fields.get("description").map(String::as_str), Some("Entry"));
+    }
+
+    #[test]
+    fn ignores_tags_after_ignoreafter() {
+        let tags = parse_tags(
+            "#!#tep:(student)\n#tepignoreafter\n#!#tep:(teacher)",
+        );
+        assert_eq!(tags.len(), 1);
     }
 }
