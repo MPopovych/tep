@@ -7,7 +7,7 @@ This document describes the current anchor tag syntax and behavior.
 The canonical anchor tag format is:
 
 ```txt
-#!#tep:[anchor_name](entity1,entity2)
+#!#tep:[anchor_name](entity1,entity2) #tepignore
 ```
 
 Rules:
@@ -18,8 +18,8 @@ Rules:
 
 Examples:
 ```txt
-#!#tep:[student_processor](student)
-#!#tep:[auth_flow](auth,session)
+#!#tep:[student_processor](student) #tepignore
+#!#tep:[auth_flow](auth,session) #tepignore
 ```
 
 ## Anchor name rules
@@ -37,11 +37,11 @@ Invalid: `student-processor`, `123`, `AuthFlow`
 The following are silently ignored:
 
 ```txt
-#!#tep:[]                     ← no name
-#!#tep:[my_anchor]            ← no entity refs
-#!#tep:[my_anchor]()          ← empty entity refs
-#!#tep:[123](student)         ← purely numeric name
-#!#tep:[bad-name](student)    ← invalid charset
+#!#tep:[]                     ← no name #tepignore
+#!#tep:[my_anchor]            ← no entity refs #tepignore
+#!#tep:[my_anchor]()          ← empty entity refs #tepignore
+#!#tep:[123](student)         ← purely numeric name #tepignore
+#!#tep:[bad-name](student)    ← invalid charset #tepignore
 [#!#1#tep:name](student)      ← old version-prefixed format, not recognized
 ```
 
@@ -71,7 +71,7 @@ Use for docs, examples, test strings that show anchor syntax.
 Everything after the first occurrence of `#tepignoreafter` is ignored.
 
 ```txt
-// #tepignoreafter
+//after
 #[cfg(test)]
 mod tests { ... }
 ```

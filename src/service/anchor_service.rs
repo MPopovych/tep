@@ -5,13 +5,13 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use crate::anchor::{Anchor, AnchorTarget, parse_anchor_target};
 use crate::entity::{EntityLookup, NewEntity, parse_lookup};
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
-use crate::repository::anchor_repository::AnchorRepository;
+use crate::repository::anchor_repository::{AnchorRepository, NewAnchor};
 use crate::repository::entity_repository::EntityRepository;
 use crate::tep_tag::{ParsedAnchorTag, parse_anchor_tags};
 use crate::utils::path::display_path;
@@ -95,11 +95,27 @@ impl<'a> AnchorService<'a> {
             return Ok(());
         }
 
-        let content = std::fs::read_to_string(path)
-            .with_context(|| format!("failed to read {}", path.display()))?;
+        let content = match std::fs::read_to_string(path) {
+            Ok(content) => content,
+            Err(err) => {
+                result.warnings.push(format!(
+                    "skipping unreadable file {}: {}",
+                    path.display(),
+                    err
+                ));
+                return Ok(());
+            }
+        };
         let parsed = parse_anchor_tags(&content);
 
-        self.ensure_no_duplicate_names(&parsed)?;
+        if let Some(duplicate_name) = self.find_duplicate_name(&parsed) {
+            result.warnings.push(format!(
+                "duplicate anchor name '{}' found in the same file {}",
+                duplicate_name,
+                path.display()
+            ));
+            return Ok(());
+        }
         result.anchors_seen += parsed.len();
 
         let mut seen_ids = HashSet::new();
@@ -140,19 +156,19 @@ impl<'a> AnchorService<'a> {
                 self.sync_anchor_metadata(existing.anchor_id, anchor, result)?;
             }
             None => {
-                let created = self.anchor_repo.create_named(
-                    name,
-                    1,
-                    &file_path,
-                    Some(anchor.line),
-                    Some(anchor.shift),
-                    Some(anchor.start_offset as i64),
-                    anchor
+                let created = self.anchor_repo.create(&NewAnchor {
+                    name: Some(name),
+                    version: 1,
+                    file_path: &file_path,
+                    line: Some(anchor.line),
+                    shift: Some(anchor.shift),
+                    offset: Some(anchor.start_offset as i64),
+                    description: anchor
                         .metadata
                         .fields
                         .get("description")
                         .map(String::as_str),
-                )?;
+                })?;
                 seen_ids.insert(created.anchor_id);
                 self.sync_entity_relations(created.anchor_id, &anchor.entity_refs, result)?;
                 self.sync_anchor_metadata(created.anchor_id, anchor, result)?;
@@ -201,17 +217,14 @@ impl<'a> AnchorService<'a> {
         }
     }
 
-    fn ensure_no_duplicate_names(&self, parsed: &[ParsedAnchorTag]) -> Result<()> {
+    fn find_duplicate_name(&self, parsed: &[ParsedAnchorTag]) -> Option<String> {
         let mut seen_names: HashSet<String> = HashSet::new();
         for anchor in parsed {
             if !seen_names.insert(anchor.anchor_name.clone()) {
-                bail!(
-                    "duplicate anchor name '{}' found in the same file",
-                    anchor.anchor_name
-                );
+                return Some(anchor.anchor_name.clone());
             }
         }
-        Ok(())
+        None
     }
 
     fn sync_anchor_metadata(
@@ -325,13 +338,18 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_anchor_names_in_same_file_fail() {
+    fn duplicate_anchor_names_in_same_file_warn_and_continue() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
         let file = temp.path().join("bad.txt");
         std::fs::write(&file, "#!#tep:[foo](student)\n#!#tep:[foo](teacher)\n").unwrap();
 
-        let result = service.sync_paths(&["./bad.txt".into()]);
-        assert!(result.is_err());
+        let result = service.sync_paths(&["./bad.txt".into()]).unwrap();
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("duplicate anchor name 'foo'"))
+        );
     }
 }

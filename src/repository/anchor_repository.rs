@@ -1,6 +1,3 @@
-// #!#tep:(repo.anchor){description="Repository for anchor persistence, location tracking, and anchor metadata"}
-// #!#tep:(repo.anchor)->(sqlite.graph){description="reads and writes anchor records in"}
-// #!#tep:[repo.anchor](repo.anchor,sqlite.graph){description="Anchor repository module entry"}
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -15,6 +12,16 @@ pub struct AnchorRepository<'a> {
     workspace_root: PathBuf,
 }
 
+pub struct NewAnchor<'a> {
+    pub name: Option<&'a str>,
+    pub version: i64,
+    pub file_path: &'a str,
+    pub line: Option<i64>,
+    pub shift: Option<i64>,
+    pub offset: Option<i64>,
+    pub description: Option<&'a str>,
+}
+
 impl<'a> AnchorRepository<'a> {
     pub fn with_workspace_root(conn: &'a Connection, workspace_root: impl Into<PathBuf>) -> Self {
         Self {
@@ -24,15 +31,21 @@ impl<'a> AnchorRepository<'a> {
     }
 
     #[allow(dead_code)]
-    pub fn create(
-        &self,
-        version: i64,
-        file_path: &str,
-        line: Option<i64>,
-        shift: Option<i64>,
-        offset: Option<i64>,
-    ) -> Result<Anchor> {
-        self.create_with_name(None, version, file_path, line, shift, offset, None)
+    pub fn create(&self, new_anchor: &NewAnchor<'_>) -> Result<Anchor> {
+        let now = now_utc();
+        let normalized = self.normalize_path(new_anchor.file_path);
+        self.conn.execute(
+            "INSERT INTO anchors (version, name, file_path, line, shift, offset, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![new_anchor.version, new_anchor.name, normalized, new_anchor.line, new_anchor.shift, new_anchor.offset, new_anchor.description, now, now],
+        )
+        .with_context(|| match new_anchor.name {
+            Some(n) => format!("failed to create anchor '{}' for file {}", n, new_anchor.file_path),
+            None => format!("failed to create anchor for file {}", new_anchor.file_path),
+        })?;
+
+        let anchor_id = self.conn.last_insert_rowid();
+        self.find_by_id(anchor_id)?
+            .context("created anchor could not be reloaded")
     }
 
     pub fn update_location(
@@ -82,53 +95,6 @@ impl<'a> AnchorRepository<'a> {
         )?;
         self.find_by_id(existing.anchor_id)?
             .context("updated anchor could not be reloaded")
-    }
-
-    pub fn create_named(
-        &self,
-        name: &str,
-        version: i64,
-        file_path: &str,
-        line: Option<i64>,
-        shift: Option<i64>,
-        offset: Option<i64>,
-        description: Option<&str>,
-    ) -> Result<Anchor> {
-        self.create_with_name(
-            Some(name),
-            version,
-            file_path,
-            line,
-            shift,
-            offset,
-            description,
-        )
-    }
-
-    fn create_with_name(
-        &self,
-        name: Option<&str>,
-        version: i64,
-        file_path: &str,
-        line: Option<i64>,
-        shift: Option<i64>,
-        offset: Option<i64>,
-        description: Option<&str>,
-    ) -> Result<Anchor> {
-        let now = now_utc();
-        let normalized = self.normalize_path(file_path);
-        self.conn.execute(
-            "INSERT INTO anchors (version, name, file_path, line, shift, offset, description, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![version, name, normalized, line, shift, offset, description, now, now],
-        )
-        .with_context(|| match name {
-            Some(n) => format!("failed to create anchor '{}' for file {}", n, file_path),
-            None => format!("failed to create anchor for file {}", file_path),
-        })?;
-
-        let anchor_id = self.conn.last_insert_rowid();
-        self.find_by_id(anchor_id)?
-            .context("created anchor could not be reloaded")
     }
 
     pub fn find_by_id(&self, anchor_id: i64) -> Result<Option<Anchor>> {

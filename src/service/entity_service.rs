@@ -133,8 +133,17 @@ impl<'a> EntityService<'a> {
             return Ok(());
         }
 
-        let content = fs::read_to_string(&file.absolute_path)
-            .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
+        let content = match fs::read_to_string(&file.absolute_path) {
+            Ok(content) => content,
+            Err(err) => {
+                result.warnings.push(format!(
+                    "skipping unreadable file {}: {}",
+                    file.absolute_path.display(),
+                    err
+                ));
+                return Ok(());
+            }
+        };
         let entity_tags = parse_entity_tags(&content);
         let relation_tags = parse_relation_tags(&content);
         if entity_tags.is_empty() && relation_tags.is_empty() {

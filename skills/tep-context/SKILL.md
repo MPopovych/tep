@@ -64,7 +64,7 @@ tep health [path]               # audit anchor state
 ### Anchor tags — placed in source files and docs
 
 ```
-#!#tep:[anchor_name](entity1,entity2)
+#!#tep:[anchor_name](entity1,entity2) #tepignore
 ```
 
 Rules:
@@ -76,7 +76,7 @@ Rules:
 ### Entity declaration tags — placed where an entity is canonically defined
 
 ```
-#!#tep:(entity_name)
+#!#tep:(entity_name) #tepignore
 ```
 
 Rules:
@@ -95,7 +95,7 @@ Any line containing `#tepignore` is skipped entirely by both parsers.
 For large fixture or test tails, use:
 
 ```
-// #tepignoreafter
+//after
 ```
 
 Everything after the first occurrence is ignored for the rest of the file.
@@ -115,12 +115,12 @@ Creates `.tep/`, `.tep/tep.db`, `.tepignore`.
 Place entity declaration tags where a concept is primarily defined — top of a file, a key function, a doc section header:
 
 ```rust
-// #!#tep:(auth_flow)
+// #!#tep:(auth_flow) #tepignore
 pub fn authenticate(user: &User) -> Result<Token> { ... }
 ```
 
 ```markdown
-#!#tep:(student)
+#!#tep:(student) #tepignore
 # Student
 
 A learner enrolled in the system.
@@ -140,12 +140,12 @@ This creates each entity and records the file as its `ref`.
 Place anchor tags at locations that are worth pointing to — entry points, schema definitions, key algorithm sections, important doc paragraphs:
 
 ```rust
-// #!#tep:[auth.token_generation](auth_flow,token)
+// #!#tep:[auth.token_generation](auth_flow,token) #tepignore
 fn generate_token(claims: &Claims) -> String { ... }
 ```
 
 ```markdown
-#!#tep:[student.enrollment_rules](student,enrollment)
+#!#tep:[student.enrollment_rules](student,enrollment) #tepignore
 ## Enrollment rules
 
 Students may enroll in up to 6 subjects per semester.
@@ -223,7 +223,7 @@ tep entity show <name-or-id>
 tep entity context <name-or-id> [--files-only] [--link-depth <n>]
 tep entity list
 
-tep anchor auto <pathspec...>                     # scan for #!#tep:[name](entities) tags
+tep anchor auto <pathspec...>                     # scan for #!#tep:[name](entities) tags #tepignore
 tep anchor show <name>
 tep anchor list
 

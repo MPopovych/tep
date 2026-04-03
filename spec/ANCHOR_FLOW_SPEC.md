@@ -11,13 +11,13 @@ The tool never rewrites anchor tags — names are placed by the user and stay as
 ## Canonical tag format
 
 ```txt
-#!#tep:[anchor_name](entity1,entity2)
+#!#tep:[anchor_name](entity1,entity2) #tepignore
 ```
 
 Examples:
 ```txt
-#!#tep:[student_processor](student)
-#!#tep:[auth_flow](auth,session)
+#!#tep:[student_processor](student) #tepignore
+#!#tep:[auth_flow](auth,session) #tepignore
 ```
 
 Rules:

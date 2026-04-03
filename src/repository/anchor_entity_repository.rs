@@ -98,7 +98,7 @@ mod tests {
     use super::*;
     use crate::db;
     use crate::entity::NewEntity;
-    use crate::repository::anchor_repository::AnchorRepository;
+    use crate::repository::anchor_repository::{AnchorRepository, NewAnchor};
     use crate::repository::entity_repository::EntityRepository;
 
     fn setup() -> (
@@ -116,7 +116,15 @@ mod tests {
         let relation_repo = AnchorEntityRepository::new(conn);
 
         let anchor = anchor_repo
-            .create(1, "./file.txt", Some(1), Some(0), Some(0))
+            .create(&NewAnchor {
+                name: None,
+                version: 1,
+                file_path: "./file.txt",
+                line: Some(1),
+                shift: Some(0),
+                offset: Some(0),
+                description: None,
+            })
             .expect("anchor should be created");
         let entity = entity_repo
             .create(&NewEntity {

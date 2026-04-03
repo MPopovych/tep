@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rusqlite::Connection;
 
 use crate::anchor::{ParsedAnchor, parse_anchors};
@@ -100,8 +100,18 @@ impl<'a> HealthService<'a> {
         report: &mut HealthReport,
         tracker: &mut HealthTracker,
     ) -> Result<()> {
-        let content = fs::read_to_string(&file.absolute_path)
-            .with_context(|| format!("failed to read {}", file.absolute_path.display()))?;
+        let content = match fs::read_to_string(&file.absolute_path) {
+            Ok(content) => content,
+            Err(err) => {
+                report.issue_counts.metadata_warnings += 1;
+                report.groups.metadata_warnings.push(format!(
+                    "skipping unreadable file {}: {}",
+                    file.absolute_path.display(),
+                    err
+                ));
+                return Ok(());
+            }
+        };
         let parsed_anchors = parse_anchors(&content);
         let parsed_declarations = parse_entity_declarations(&content);
         let entity_tags = parse_entity_tags(&content);
@@ -328,6 +338,7 @@ mod tests {
     use crate::db;
     use crate::entity::NewEntity;
     use crate::repository::anchor_entity_repository::AnchorEntityRepository;
+    use crate::repository::anchor_repository::NewAnchor;
 
     fn setup_service() -> HealthService<'static> {
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
@@ -357,15 +368,15 @@ mod tests {
         let service = setup_service();
         service
             .anchor_repo
-            .create_named(
-                "my_anchor",
-                1,
-                "./docs/student.md",
-                Some(1),
-                Some(0),
-                Some(0),
-                None,
-            )
+            .create(&NewAnchor {
+                name: Some("my_anchor"),
+                version: 1,
+                file_path: "./docs/student.md",
+                line: Some(1),
+                shift: Some(0),
+                offset: Some(0),
+                description: None,
+            })
             .unwrap();
         std::fs::create_dir_all("/tmp/project/docs").ok();
         std::fs::write(
@@ -391,15 +402,15 @@ mod tests {
             .unwrap();
         let anchor = service
             .anchor_repo
-            .create_named(
-                "my_anchor",
-                1,
-                "./docs/student.md",
-                Some(1),
-                Some(0),
-                Some(0),
-                None,
-            )
+            .create(&NewAnchor {
+                name: Some("my_anchor"),
+                version: 1,
+                file_path: "./docs/student.md",
+                line: Some(1),
+                shift: Some(0),
+                offset: Some(0),
+                description: None,
+            })
             .unwrap();
         let rel = AnchorEntityRepository::new(service.anchor_repo.conn);
         rel.attach(anchor.anchor_id, entity.entity_id).unwrap();

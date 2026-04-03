@@ -6,7 +6,7 @@ use crate::anchor::{
 use crate::entity::{normalize_name, validate_name};
 use crate::utils::parse::{line_contains_marker, parse_scan_limit};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ParsedMetadata {
     pub fields: HashMap<String, String>,
     pub duplicate_keys: Vec<String>,
@@ -343,16 +343,6 @@ fn compute_position(input: &str, start: usize) -> (i64, i64) {
     let last_newline = prefix.rfind('\n').map(|idx| idx + 1).unwrap_or(0);
     let shift = (start - last_newline) as i64;
     (line, shift)
-}
-
-impl Default for ParsedMetadata {
-    fn default() -> Self {
-        Self {
-            fields: HashMap::new(),
-            duplicate_keys: Vec::new(),
-            unknown_fields: Vec::new(),
-        }
-    }
 }
 
 // #tepignoreafter

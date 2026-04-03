@@ -295,7 +295,7 @@ fn anchor_auto_drops_removed_anchor() {
 }
 
 #[test]
-fn anchor_auto_fails_for_duplicate_anchor_names_in_same_file() {
+fn anchor_auto_warns_for_duplicate_anchor_names_in_same_file() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
     std::fs::write(
         temp.path().join("dup.txt"),
@@ -315,8 +315,9 @@ fn anchor_auto_fails_for_duplicate_anchor_names_in_same_file() {
         .current_dir(temp.path())
         .args(["anchor", "auto", "./dup.txt"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains(
+        .success()
+        .stdout(predicate::str::contains("warnings:"))
+        .stdout(predicate::str::contains(
             "duplicate anchor name 'my_anchor'",
         ));
 }
