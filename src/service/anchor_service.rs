@@ -1,5 +1,5 @@
-// (#!#tep:anchor.sync)
-// [#!#tep:anchor.sync](anchor.sync)
+// #!#tep:(anchor.sync)
+// #!#tep:[anchor.sync](anchor.sync)
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 

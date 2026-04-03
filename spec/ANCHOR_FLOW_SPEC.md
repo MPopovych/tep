@@ -11,13 +11,13 @@ The tool never rewrites anchor tags — names are placed by the user and stay as
 ## Canonical tag format
 
 ```txt
-[#!#tep:anchor_name](entity1,entity2)
+#!#tep:[anchor_name](entity1,entity2)
 ```
 
 Examples:
 ```txt
-[#!#tep:student_processor](student)
-[#!#tep:auth_flow](auth,session)
+#!#tep:[student_processor](student)
+#!#tep:[auth_flow](auth,session)
 ```
 
 Rules:
@@ -50,7 +50,7 @@ Commands resolve the nearest ancestor workspace from cwd, so nested directories 
 
 For each targeted file, the command:
 
-1. Scans for valid anchor tags (`[#!#tep:name](entities)`)
+1. Scans for valid anchor tags (`#!#tep:[name](entities)`)
 2. For each anchor:
    - If the name exists in DB: update location metadata, sync entity relations
    - If the name is new: create an anchor record, sync entity relations

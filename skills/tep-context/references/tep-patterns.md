@@ -78,7 +78,7 @@ If the entity is missing or coverage is thin:
 ### Anchor tag (placed in source/docs)
 
 ```
-[#!#tep:anchor_name](entity1,entity2)
+#!#tep:[anchor_name](entity1,entity2)
 ```
 
 - `anchor_name`: unique across workspace, lowercase `[a-z0-9._]`, not purely numeric
@@ -88,7 +88,7 @@ If the entity is missing or coverage is thin:
 ### Entity declaration tag (placed at canonical definition point)
 
 ```
-(#!#tep:entity_name)
+#!#tep:(entity_name)
 ```
 
 - Marks where an entity is primarily defined
@@ -97,7 +97,7 @@ If the entity is missing or coverage is thin:
 ### Ignore controls
 
 ```
-example [#!#tep:foo](bar) #tepignore     ← this line is ignored entirely
+example #!#tep:[foo](bar) #tepignore     ← this line is ignored entirely
 ```
 
 ```
@@ -113,10 +113,10 @@ mod tests { ... }
 
 ### Declare entities from files
 ```bash
-tep entity auto <pathspec...>
+tep auto <pathspec...>
 ```
 
-Scans for `(#!#tep:name)` tags. Creates entities and fills `ref` when missing.
+Scans for `#!#tep:(name)` tags. Creates entities and fills `ref` when missing.
 Does **not** create anchors.
 
 ### Sync anchors from files
@@ -124,7 +124,7 @@ Does **not** create anchors.
 tep anchor auto <pathspec...>
 ```
 
-Scans for `[#!#tep:name](entities)` tags. Creates or updates anchor records. Syncs entity relations.
+Scans for `#!#tep:[name](entities)` tags. Creates or updates anchor records. Syncs entity relations.
 
 ### Reset and re-index
 ```bash
@@ -162,15 +162,15 @@ node_modules/
 
 ### Step 2 — Declare entities at their canonical locations
 
-Add `(#!#tep:entity_name)` tags where each concept is primarily defined:
+Add `#!#tep:(entity_name)` tags where each concept is primarily defined:
 
 ```rust
-// (#!#tep:payment_flow)
+// #!#tep:(payment_flow)
 pub fn process_payment(order: &Order) -> Result<Receipt> { ... }
 ```
 
 ```markdown
-(#!#tep:user)
+#!#tep:(user)
 # User
 
 A registered account holder.
@@ -178,21 +178,21 @@ A registered account holder.
 
 Then run:
 ```bash
-tep entity auto ./src
-tep entity auto ./docs
+tep auto ./src
+tep auto ./docs
 ```
 
 ### Step 3 — Place named anchor tags at important locations
 
-Add `[#!#tep:name](entities)` tags at meaningful entry points, key algorithms, schema definitions, important doc sections:
+Add `#!#tep:[name](entities)` tags at meaningful entry points, key algorithms, schema definitions, important doc sections:
 
 ```rust
-// [#!#tep:payment.validation](payment_flow,order)
+// #!#tep:[payment.validation](payment_flow,order)
 fn validate_payment_method(method: &PaymentMethod) -> bool { ... }
 ```
 
 ```markdown
-[#!#tep:user.permissions](user,permissions)
+#!#tep:[user.permissions](user,permissions)
 ## Permission model
 
 Users have a role assigned at signup...

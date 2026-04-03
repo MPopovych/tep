@@ -1,5 +1,5 @@
-// (#!#tep:workspace)
-// [#!#tep:workspace](workspace)
+// #!#tep:(workspace)
+// #!#tep:[workspace](workspace)
 use std::fs;
 
 use anyhow::{Context, Result};
@@ -27,7 +27,7 @@ pub struct ResetResult {
 pub struct WorkspaceService;
 
 impl WorkspaceService {
-    // [#!#tep:workspace.reset](workspace,anchor.sync,entity.service)
+    // #!#tep:[workspace.reset](workspace,anchor.sync,entity.service)
     pub fn reset() -> Result<ResetResult> {
         let cwd = std::env::current_dir().context("failed to determine current directory")?;
         let paths = db::workspace_paths_for(&cwd);

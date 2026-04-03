@@ -1,5 +1,5 @@
-// (#!#tep:entity.context)
-// [#!#tep:entity.context](entity.context)
+// #!#tep:(entity.context)
+// #!#tep:[entity.context](entity.context)
 use std::fs;
 
 use anyhow::{Context, Result};

@@ -1,6 +1,6 @@
 ---
 name: tep-context
-description: Use the local `tep` CLI as a context-routing and graph-maintenance layer only when working in a repository or document set that already has a `tep` workspace or when the user explicitly asks to add or maintain `tep` coverage. Trigger for tasks that involve `tep entity context`, `tep entity show`, `tep anchor show`, `tep entity auto`, `tep anchor auto`, doc seeding with `tep`, or handling `#tepignore` example lines. Do not use for generic repo exploration in projects that are not using `tep`.
+description: Use the local `tep` CLI as a context-routing and graph-maintenance layer only when working in a repository or document set that already has a `tep` workspace or when the user explicitly asks to add or maintain `tep` coverage. Trigger for tasks that involve `tep entity context`, `tep entity show`, `tep anchor show`, `tep auto`, `tep anchor auto`, doc seeding with `tep`, or handling `#tepignore` example lines. Do not use for generic repo exploration in projects that are not using `tep`.
 ---
 
 Use `tep` to reduce blind repo reading and to keep the graph useful over time. Prefer the smallest grounded retrieval pass first, and update graph coverage intentionally when the task calls for it.
@@ -53,7 +53,7 @@ Use to browse available entity names when the right entity is not obvious.
 Use these only when intentionally updating graph coverage.
 
 ```bash
-tep entity auto <pathspec...>   # scan for entity declarations
+tep auto <pathspec...>   # scan for entity declarations
 tep anchor auto <pathspec...>   # scan for anchor tags and sync relations
 tep reset --yes                 # nuke DB and re-index workspace from scratch
 tep health [path]               # audit anchor state
@@ -64,7 +64,7 @@ tep health [path]               # audit anchor state
 ### Anchor tags — placed in source files and docs
 
 ```
-[#!#tep:anchor_name](entity1,entity2)
+#!#tep:[anchor_name](entity1,entity2)
 ```
 
 Rules:
@@ -76,7 +76,7 @@ Rules:
 ### Entity declaration tags — placed where an entity is canonically defined
 
 ```
-(#!#tep:entity_name)
+#!#tep:(entity_name)
 ```
 
 Rules:
@@ -87,7 +87,7 @@ Rules:
 ### Ignoring lines
 
 ```
-some text [#!#tep:example](student) #tepignore
+some text #!#tep:[example](student) #tepignore
 ```
 
 Any line containing `#tepignore` is skipped entirely by both parsers.
@@ -115,12 +115,12 @@ Creates `.tep/`, `.tep/tep.db`, `.tepignore`.
 Place entity declaration tags where a concept is primarily defined — top of a file, a key function, a doc section header:
 
 ```rust
-// (#!#tep:auth_flow)
+// #!#tep:(auth_flow)
 pub fn authenticate(user: &User) -> Result<Token> { ... }
 ```
 
 ```markdown
-(#!#tep:student)
+#!#tep:(student)
 # Student
 
 A learner enrolled in the system.
@@ -129,8 +129,8 @@ A learner enrolled in the system.
 Then run:
 
 ```bash
-tep entity auto ./src
-tep entity auto ./docs
+tep auto ./src
+tep auto ./docs
 ```
 
 This creates each entity and records the file as its `ref`.
@@ -140,12 +140,12 @@ This creates each entity and records the file as its `ref`.
 Place anchor tags at locations that are worth pointing to — entry points, schema definitions, key algorithm sections, important doc paragraphs:
 
 ```rust
-// [#!#tep:auth.token_generation](auth_flow,token)
+// #!#tep:[auth.token_generation](auth_flow,token)
 fn generate_token(claims: &Claims) -> String { ... }
 ```
 
 ```markdown
-[#!#tep:student.enrollment_rules](student,enrollment)
+#!#tep:[student.enrollment_rules](student,enrollment)
 ## Enrollment rules
 
 Students may enroll in up to 6 subjects per semester.
@@ -215,19 +215,15 @@ tep entity context student --link-depth 2
 ```bash
 tep init                                          # create workspace
 tep reset [--yes]                                 # wipe DB and re-index
+tep auto <pathspec...>                               # run entity + anchor sync from tags
 tep health [path]                                 # audit workspace
 
-tep entity create <name> [--ref <path>] [--description <text>]
-tep entity ensure <name> [--ref <path>]
-tep entity auto <pathspec...>                     # scan for (#!#tep:name) declarations
+tep auto <pathspec...>                               # run entity + anchor sync from tags
 tep entity show <name-or-id>
 tep entity context <name-or-id> [--files-only] [--link-depth <n>]
-tep entity edit <name-or-id> [--name ...] [--ref ...] [--description ...]
-tep entity link <from> <to> --relation <text>
-tep entity unlink <from> <to>
 tep entity list
 
-tep anchor auto <pathspec...>                     # scan for [#!#tep:name](entities) tags
+tep anchor auto <pathspec...>                     # scan for #!#tep:[name](entities) tags
 tep anchor show <name>
 tep anchor list
 

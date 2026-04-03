@@ -1,5 +1,5 @@
-// (#!#tep:path.normalization)
-// [#!#tep:path.normalization](path.normalization)
+// #!#tep:(path.normalization)
+// #!#tep:[path.normalization](path.normalization)
 use std::path::{Component, Path, PathBuf};
 
 pub fn normalize_lexically(path: &Path) -> PathBuf {

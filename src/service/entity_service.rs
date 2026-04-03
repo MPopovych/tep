@@ -1,5 +1,5 @@
-// (#!#tep:entity.service)
-// [#!#tep:entity.service](entity.service)
+// #!#tep:(entity.service)
+// #!#tep:[entity.service](entity.service)
 use std::fs;
 use std::path::PathBuf;
 
@@ -231,6 +231,8 @@ impl<'a> EntityService<'a> {
             return Ok(entity);
         };
 
+        let changed = entity.description.as_deref() != Some(description.as_str());
+        let overwritten = entity.description.is_some() && changed;
         let updated = self.repo.update(
             &parse_lookup(&entity.entity_id.to_string()),
             &UpdateEntity {
@@ -239,16 +241,14 @@ impl<'a> EntityService<'a> {
                 description: Some(description.clone()),
             },
         )?;
-        if entity.description.as_deref() != Some(description.as_str()) {
+        if changed {
             result.descriptions_filled += 1;
-            if entity.description.is_some()
-                && entity.description.as_deref() != Some(description.as_str())
-            {
-                result.warnings.push(format!(
-                    "entity '{}' description overwritten by later declaration",
-                    tag.name
-                ));
-            }
+        }
+        if overwritten {
+            result.warnings.push(format!(
+                "entity '{}' description overwritten by later declaration",
+                tag.name
+            ));
         }
         Ok(updated)
     }

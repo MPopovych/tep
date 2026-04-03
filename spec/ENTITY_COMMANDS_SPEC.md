@@ -65,16 +65,16 @@ Behavior:
 
 ### Auto
 ```bash
-tep entity auto ./file.md
-tep entity auto ./docs
-tep entity auto .
+tep auto ./file.md
+tep auto ./docs
+tep auto .
 ```
 
 Behavior:
 - scan targeted files for entity declaration tags
 - declaration syntax:
   ```txt
-  (#!#tep:student)
+  #!#tep:(student)
   ```
 - ensure the declared entity exists
 - if the entity has no `ref`, fill it with the declaring file path

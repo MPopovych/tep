@@ -65,12 +65,12 @@ cd your-project/
 tep init
 
 # Declare entities in source files by adding:
-#   (#!#tep:entity_name)
+#   #!#tep:(entity_name)
 # Then run:
-tep entity auto ./src ./docs
+tep auto ./src ./docs
 
 # Add anchor tags in source files:
-#   [#!#tep:anchor_name](entity1,entity2)
+#   #!#tep:[anchor_name](entity1,entity2)
 # Then run:
 tep anchor auto ./src ./docs
 

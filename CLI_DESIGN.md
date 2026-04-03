@@ -1,4 +1,4 @@
-<!--- (#!#tep:cli.design) -->
+<!--- #!#tep:(cli.design) -->
 # CLI Design
 
 ## Design goals
@@ -26,7 +26,7 @@ The similarity to git is mostly ergonomic:
 
 `tep` is not a version-control system.
 
-<!--- [#!#tep:cli.workspace](cli.design,workspace) -->
+<!--- #!#tep:[cli.workspace](cli.design,workspace) -->
 ## Workspace behavior
 
 ### Initialize a workspace
@@ -103,12 +103,12 @@ Shorthand:
 tep a ...
 ```
 
-<!--- [#!#tep:cli.syntax](cli.design,anchor.parser,entity.declaration) -->
+<!--- #!#tep:[cli.syntax](cli.design,anchor.parser,entity.declaration) -->
 ## Marker syntax
 
 ### Anchor tag
 ```txt
-[#!#tep:anchor_name](entity1,entity2) #tepignore
+#!#tep:[anchor_name](entity1,entity2) #tepignore
 ```
 
 - name is required: lowercase, `[a-z0-9._]`, not purely numeric
@@ -117,7 +117,7 @@ tep a ...
 
 ### Entity declaration tag
 ```txt
-(#!#tep:student) #tepignore
+#!#tep:(student) #tepignore
 ```
 
 Bracket type decides the role:

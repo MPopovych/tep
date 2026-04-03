@@ -25,7 +25,7 @@ The anchor name in the tag is the durable anchor identity.
 
 Example:
 ```txt
-[#!#tep:student_processor](student) #tepignore
+#!#tep:[student_processor](student) #tepignore
 ```
 
 The name `student_processor` is the identity. Numeric IDs are internal and shown in list/show output.
@@ -69,12 +69,10 @@ tep health [path]
 ```bash
 tep entity create <name> [--ref <value>] [--description <value>]
 tep entity ensure <name> [--ref <value>]
-tep entity auto <pathspec...>
+tep auto <pathspec...>
 tep entity show <name-or-id>
 tep entity context <name-or-id> [--files-only] [--link-depth <n>]
 tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]
-tep entity link <from> <to> --relation <text>
-tep entity unlink <from> <to>
 tep entity list
 tep e ...  (shorthand)
 ```

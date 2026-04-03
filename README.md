@@ -21,8 +21,8 @@ Codebases grow. Concepts scatter across files. Documentation drifts from impleme
 Instead of grepping for "student" and hoping you find the right places, you:
 
 1. **Tag locations** — drop anchor markers in code, docs, configs
-2. **Name concepts** — create entities like `auth_flow`, `pricing_model`
-3. **Connect them** — attach entities to anchors, link entities to each other
+2. **Name concepts** — declare entities like `auth_flow`, `pricing_model` in files
+3. **Connect them** — attach entities to anchors and declare entity links in files
 4. **Query the graph** — ask "where does `auth_flow` appear?" or "what's related to `pricing_model`?"
 
 **Use cases:**
@@ -40,11 +40,11 @@ The graph lives in your repo (`.tep/`), works offline, and stays under your cont
 ## Current capabilities
 
 - Initialize and auto-migrate local workspaces
-- Create, edit, list, and query entities with names, descriptions, and refs
+- Auto-declare, list, and query entities with names, descriptions, and refs
 - Enforce entity name normalization (lowercase, `[a-z0-9._]`)
-- Named anchor tags — place `[#!#tep:name](entity)` in any file; `anchor auto` registers and syncs them
-- Auto-declare entities from declaration markers `(#!#tep:entity_name)`
-- Directional entity-to-entity links with free-text relations
+- Named anchor tags — place `#!#tep:[name](entity)` in any file; `anchor auto` registers and syncs them
+- Auto-declare entities from declaration markers `#!#tep:(entity_name)`
+- Directional entity-to-entity links reconstructed from file tags
 - Assemble retrieval-oriented context bundles for entities (`entity context`)
 - Bounded link traversal (`--link-depth`)
 - Audit anchor health with `tep health`
@@ -95,7 +95,7 @@ Current behavior:
 Anchor tags use square brackets:
 
 ```txt
-[#!#tep:anchor_name](entity1,entity2)
+#!#tep:[anchor_name](entity1,entity2)
 ```
 
 Rules:
@@ -110,12 +110,12 @@ Rules:
 Entity declaration tags use parentheses:
 
 ```txt
-(#!#tep:entity_name)
+#!#tep:(entity_name)
 ```
 
 Meaning:
 - parentheses identify an entity declaration marker
-- `tep entity auto` ensures the entity exists
+- `tep auto` ensures the entity exists
 - if the entity has no `ref`, the declaring file is stored as its `ref`
 
 ## Ignore controls
@@ -159,12 +159,10 @@ tep health [path]
 ```bash
 tep entity create <name> [--ref <value>] [--description <value>]
 tep entity ensure <name> [--ref <value>]
-tep entity auto <pathspec...>
+tep auto <pathspec...>
 tep entity show <name-or-id>
 tep entity context <name-or-id> [--files-only] [--link-depth <n>]
 tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]
-tep entity link <from> <to> --relation <text>
-tep entity unlink <from> <to>
 tep entity list
 tep e ...  (shorthand)
 ```
@@ -191,7 +189,7 @@ Output:
 ref: ./src/anchor.rs
 
 anchor:1 anchor.parser ./src/anchor.rs (1:3) [3]
-  // [#!#tep:anchor.parser](anchor.parser)
+  // #!#tep:[anchor.parser](anchor.parser)
   use crate::utils::parse::{line_contains_marker, parse_scan_limit};
   ...
 
