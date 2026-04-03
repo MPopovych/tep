@@ -109,7 +109,7 @@ tep a ...
 
 ### Anchor tag
 ```txt
-<!--- #!#tep:[anchor_name](entity1,entity2) --> #tepignore
+#!#tep:[anchor_name](entity1,entity2) #tepignore
 ```
 
 - name is required: lowercase, `[a-z0-9._]`, not purely numeric
@@ -118,7 +118,7 @@ tep a ...
 
 ### Entity declaration tag
 ```txt
-<!--- #!#tep:(student) --> #tepignore
+#!#tep:(student) #tepignore
 ```
 
 Bracket type decides the role:

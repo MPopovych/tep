@@ -1,9 +1,3 @@
-<!--- #!#tep:(tep){description="Local-first CLI for text entity pointers over code and docs"} -->
-<!--- #!#tep:(sqlite.graph){description="SQLite-backed local graph storage for entities, anchors, and links"} -->
-<!--- #!#tep:(ai.context){description="Retrieval-oriented use of tep for AI context assembly"} -->
-<!--- #!#tep:(tep)->(sqlite.graph){description="stores graph state in"} -->
-<!--- #!#tep:(tep)->(ai.context){description="supports"} -->
-
 # tep
 
 > ⚠️ **Fully agent-coded.** This project was built entirely by an AI coding agent (Makki) with human direction. The code, tests, docs, and this README were written by the agent.
@@ -101,7 +95,7 @@ Current behavior:
 Anchor tags use square brackets:
 
 ```txt
-<!--- #!#tep:[anchor_name](entity1,entity2) --> #tepignore
+#!#tep:[anchor_name](entity1,entity2) #tepignore
 ```
 
 Rules:
@@ -116,7 +110,7 @@ Rules:
 Entity declaration tags use parentheses:
 
 ```txt
-<!--- #!#tep:(entity_name) --> #tepignore
+#!#tep:(entity_name) #tepignore
 ```
 
 Meaning:
