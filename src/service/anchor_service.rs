@@ -147,7 +147,11 @@ impl<'a> AnchorService<'a> {
                     Some(anchor.line),
                     Some(anchor.shift),
                     Some(anchor.start_offset as i64),
-                    anchor.metadata.fields.get("description").map(String::as_str),
+                    anchor
+                        .metadata
+                        .fields
+                        .get("description")
+                        .map(String::as_str),
                 )?;
                 seen_ids.insert(created.anchor_id);
                 self.sync_entity_relations(created.anchor_id, &anchor.entity_refs, result)?;
@@ -216,9 +220,14 @@ impl<'a> AnchorService<'a> {
         anchor: &ParsedAnchorTag,
         result: &mut AnchorSyncResult,
     ) -> Result<()> {
-        let description = anchor.metadata.fields.get("description").map(String::as_str);
+        let description = anchor
+            .metadata
+            .fields
+            .get("description")
+            .map(String::as_str);
         if description.is_some() {
-            self.anchor_repo.update_description(anchor_id, description)?;
+            self.anchor_repo
+                .update_description(anchor_id, description)?;
             result.metadata_updated += 1;
         }
         for key in &anchor.metadata.duplicate_keys {
@@ -290,7 +299,11 @@ mod tests {
         .unwrap();
 
         let result = service.sync_paths(&["./note.txt".into()]).unwrap();
-        let anchor = service.anchor_repo.find_by_name("myanchor").unwrap().unwrap();
+        let anchor = service
+            .anchor_repo
+            .find_by_name("myanchor")
+            .unwrap()
+            .unwrap();
         assert_eq!(result.metadata_updated, 1);
         assert_eq!(anchor.description.as_deref(), Some("Entry point"));
     }
@@ -303,10 +316,12 @@ mod tests {
         std::fs::write(&file, "#!#tep:[myanchor](student){foo=\"bar\"}").unwrap();
 
         let result = service.sync_paths(&["./note.txt".into()]).unwrap();
-        assert!(result
-            .warnings
-            .iter()
-            .any(|w| w.contains("unknown metadata field 'foo'")));
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("unknown metadata field 'foo'"))
+        );
     }
 
     #[test]
@@ -314,11 +329,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("temp dir should be created");
         let service = setup_service(temp.path());
         let file = temp.path().join("bad.txt");
-        std::fs::write(
-            &file,
-            "#!#tep:[foo](student)\n#!#tep:[foo](teacher)\n",
-        )
-        .unwrap();
+        std::fs::write(&file, "#!#tep:[foo](student)\n#!#tep:[foo](teacher)\n").unwrap();
 
         let result = service.sync_paths(&["./bad.txt".into()]);
         assert!(result.is_err());

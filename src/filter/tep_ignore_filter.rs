@@ -179,8 +179,7 @@ mod tests {
     #[test]
     fn explicit_file_input_still_respects_tepignore() {
         let temp = tempfile::tempdir().expect("temp dir should be created");
-        fs::write(temp.path().join(".tepignore"), "README.md\n")
-            .expect("should write ignore file");
+        fs::write(temp.path().join(".tepignore"), "README.md\n").expect("should write ignore file");
         fs::write(temp.path().join("README.md"), "x").expect("should write file");
 
         let filter = TepIgnoreFilter::for_workspace_root(temp.path());

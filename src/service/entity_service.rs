@@ -256,7 +256,11 @@ impl<'a> EntityService<'a> {
         Ok(updated)
     }
 
-    fn sync_relation_tag(&self, tag: &ParsedRelationTag, result: &mut EntityAutoResult) -> Result<()> {
+    fn sync_relation_tag(
+        &self,
+        tag: &ParsedRelationTag,
+        result: &mut EntityAutoResult,
+    ) -> Result<()> {
         self.repo.ensure(&NewEntity {
             name: tag.from.clone(),
             r#ref: None,
@@ -276,7 +280,11 @@ impl<'a> EntityService<'a> {
             .cloned()
             .unwrap_or_else(|| "related to".to_string());
         let existing = self.repo.find_link_by_name(&tag.from, &tag.to)?;
-        self.repo.link(&parse_lookup(&tag.from), &parse_lookup(&tag.to), &description)?;
+        self.repo.link(
+            &parse_lookup(&tag.from),
+            &parse_lookup(&tag.to),
+            &description,
+        )?;
         result.relations_synced += 1;
         if let Some(existing) = existing
             && existing.relation != description
@@ -378,10 +386,18 @@ mod tests {
             })
             .unwrap();
         }
-        repo.link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects")
-            .unwrap();
-        repo.link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student")
-            .unwrap();
+        repo.link(
+            &parse_lookup("student"),
+            &parse_lookup("subject"),
+            "student has subjects",
+        )
+        .unwrap();
+        repo.link(
+            &parse_lookup("teacher"),
+            &parse_lookup("student"),
+            "teacher mentors student",
+        )
+        .unwrap();
 
         let result = service.show("student").unwrap();
         assert_eq!(result.linked_entities.len(), 2);
@@ -411,7 +427,11 @@ mod tests {
         }
 
         entity_repo
-            .link(&parse_lookup("student"), &parse_lookup("subject"), "student has subjects")
+            .link(
+                &parse_lookup("student"),
+                &parse_lookup("subject"),
+                "student has subjects",
+            )
             .unwrap();
         entity_repo
             .link(
@@ -428,7 +448,11 @@ mod tests {
             )
             .unwrap();
         entity_repo
-            .link(&parse_lookup("teacher"), &parse_lookup("student"), "teacher mentors student")
+            .link(
+                &parse_lookup("teacher"),
+                &parse_lookup("student"),
+                "teacher mentors student",
+            )
             .unwrap();
         entity_repo
             .link(
@@ -462,10 +486,12 @@ mod tests {
 
         assert_eq!(entity.r#ref.as_deref(), Some("./docs/student.md"));
         assert_eq!(entity.description.as_deref(), Some("Learner v2"));
-        assert!(result
-            .warnings
-            .iter()
-            .any(|w| w.contains("description overwritten")));
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("description overwritten"))
+        );
     }
 
     #[test]
@@ -482,7 +508,10 @@ mod tests {
 
         let result = service.auto(&["./a.txt".into()]).unwrap();
         let repo = EntityRepository::new(conn);
-        let link = repo.find_link_by_name("student", "subject").unwrap().unwrap();
+        let link = repo
+            .find_link_by_name("student", "subject")
+            .unwrap()
+            .unwrap();
 
         assert_eq!(result.relations_synced, 1);
         assert_eq!(link.relation, "has subject");
@@ -491,19 +520,17 @@ mod tests {
     #[test]
     fn auto_warns_on_unknown_entity_metadata_fields() {
         let temp = tempfile::tempdir().unwrap();
-        std::fs::write(
-            temp.path().join("a.txt"),
-            "#!#tep:(student){foo=\"bar\"}\n",
-        )
-        .unwrap();
+        std::fs::write(temp.path().join("a.txt"), "#!#tep:(student){foo=\"bar\"}\n").unwrap();
         let conn = Box::leak(Box::new(db::open_in_memory().expect("db should open")));
         db::ensure_schema(conn).unwrap();
         let service = EntityService::with_workspace_root(conn, temp.path());
 
         let result = service.auto(&["./a.txt".into()]).unwrap();
-        assert!(result
-            .warnings
-            .iter()
-            .any(|w| w.contains("unknown metadata field 'foo'")));
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|w| w.contains("unknown metadata field 'foo'"))
+        );
     }
 }

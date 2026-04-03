@@ -4,8 +4,7 @@ use predicates::prelude::*;
 #[test]
 fn entity_command_fails_cleanly_outside_workspace() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    std::fs::write(temp.path().join("note.txt"), "#!#tep:(student)")
-        .expect("should write file");
+    std::fs::write(temp.path().join("note.txt"), "#!#tep:(student)").expect("should write file");
 
     Command::cargo_bin("tep")
         .expect("binary should build")
@@ -142,15 +141,16 @@ fn entity_list_shows_one_line_intro_format() {
         .args(["entity", "list"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("student - \"A learner\" (./docs/student.md)"))
+        .stdout(predicate::str::contains(
+            "student - \"A learner\" (./docs/student.md)",
+        ))
         .stdout(predicate::str::contains("teacher - \"An instructor\""));
 }
 
 #[test]
 fn entity_shorthand_alias_works() {
     let temp = assert_fs::TempDir::new().expect("temp dir should be created");
-    std::fs::write(temp.path().join("note.txt"), "#!#tep:(student)")
-        .expect("should write file");
+    std::fs::write(temp.path().join("note.txt"), "#!#tep:(student)").expect("should write file");
 
     Command::cargo_bin("tep")
         .expect("binary should build")

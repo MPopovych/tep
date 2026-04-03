@@ -113,7 +113,8 @@ impl<'a> HealthService<'a> {
         }
 
         report.files_scanned += 1;
-        report.anchors_seen += parsed_anchors.len() + parsed_declarations.len() + relation_tags.len();
+        report.anchors_seen +=
+            parsed_anchors.len() + parsed_declarations.len() + relation_tags.len();
 
         let mut local_names = HashSet::new();
         for anchor in &parsed_anchors {
@@ -227,13 +228,31 @@ impl<'a> HealthService<'a> {
         report: &mut HealthReport,
     ) {
         for tag in entity_tags {
-            self.push_metadata_warnings("entity", &tag.name, &tag.metadata.duplicate_keys, &tag.metadata.unknown_fields, report);
+            self.push_metadata_warnings(
+                "entity",
+                &tag.name,
+                &tag.metadata.duplicate_keys,
+                &tag.metadata.unknown_fields,
+                report,
+            );
         }
         for tag in relation_tags {
-            self.push_metadata_warnings("relation", &format!("{} -> {}", tag.from, tag.to), &tag.metadata.duplicate_keys, &tag.metadata.unknown_fields, report);
+            self.push_metadata_warnings(
+                "relation",
+                &format!("{} -> {}", tag.from, tag.to),
+                &tag.metadata.duplicate_keys,
+                &tag.metadata.unknown_fields,
+                report,
+            );
         }
         for tag in anchor_tags {
-            self.push_metadata_warnings("anchor", &tag.anchor_name, &tag.metadata.duplicate_keys, &tag.metadata.unknown_fields, report);
+            self.push_metadata_warnings(
+                "anchor",
+                &tag.anchor_name,
+                &tag.metadata.duplicate_keys,
+                &tag.metadata.unknown_fields,
+                report,
+            );
         }
     }
 
@@ -247,11 +266,17 @@ impl<'a> HealthService<'a> {
     ) {
         for key in duplicate_keys {
             report.issue_counts.metadata_warnings += 1;
-            report.groups.metadata_warnings.push(format!("duplicate metadata key '{}' in {} {}", key, kind, target));
+            report.groups.metadata_warnings.push(format!(
+                "duplicate metadata key '{}' in {} {}",
+                key, kind, target
+            ));
         }
         for key in unknown_fields {
             report.issue_counts.metadata_warnings += 1;
-            report.groups.metadata_warnings.push(format!("unknown metadata field '{}' in {} {}", key, kind, target));
+            report.groups.metadata_warnings.push(format!(
+                "unknown metadata field '{}' in {} {}",
+                key, kind, target
+            ));
         }
     }
 

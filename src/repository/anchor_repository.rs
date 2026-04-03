@@ -94,7 +94,15 @@ impl<'a> AnchorRepository<'a> {
         offset: Option<i64>,
         description: Option<&str>,
     ) -> Result<Anchor> {
-        self.create_with_name(Some(name), version, file_path, line, shift, offset, description)
+        self.create_with_name(
+            Some(name),
+            version,
+            file_path,
+            line,
+            shift,
+            offset,
+            description,
+        )
     }
 
     fn create_with_name(

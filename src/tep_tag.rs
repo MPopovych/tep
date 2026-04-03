@@ -196,7 +196,12 @@ fn try_parse_anchor_tag(rest: &str, start: usize, input: &str) -> Option<ParsedA
     }
     let after = &refs_body[refs_close + 1..];
     let (metadata, consumed) = parse_metadata_block(after, &["description"])?;
-    let raw = format!("#!#tep:[{}]({}){}", anchor_raw, refs_raw, &after[..consumed]);
+    let raw = format!(
+        "#!#tep:[{}]({}){}",
+        anchor_raw,
+        refs_raw,
+        &after[..consumed]
+    );
     let (line, shift) = compute_position(input, start);
 
     Some(ParsedAnchorTag {
@@ -362,16 +367,25 @@ mod tests {
         );
         assert_eq!(tags.len(), 1);
         assert_eq!(tags[0].name, "student");
-        assert_eq!(tags[0].metadata.fields.get("description").map(String::as_str), Some("B"));
-        assert_eq!(tags[0].metadata.fields.get("ref").map(String::as_str), Some("./x"));
+        assert_eq!(
+            tags[0]
+                .metadata
+                .fields
+                .get("description")
+                .map(String::as_str),
+            Some("B")
+        );
+        assert_eq!(
+            tags[0].metadata.fields.get("ref").map(String::as_str),
+            Some("./x")
+        );
         assert_eq!(tags[0].metadata.duplicate_keys, vec!["description"]);
     }
 
     #[test]
     fn parses_relation_and_unknown_metadata_field() {
-        let tags = parse_relation_tags(
-            "#!#tep:(student)->(subject){description=\"has\", extra=\"x\"}",
-        );
+        let tags =
+            parse_relation_tags("#!#tep:(student)->(subject){description=\"has\", extra=\"x\"}");
         assert_eq!(tags.len(), 1);
         assert_eq!(tags[0].from, "student");
         assert_eq!(tags[0].to, "subject");
@@ -380,20 +394,24 @@ mod tests {
 
     #[test]
     fn parses_anchor_metadata_and_refs() {
-        let tags = parse_anchor_tags(
-            "#!#tep:[student_anchor](student,subject){description=\"Entry\"}",
-        );
+        let tags =
+            parse_anchor_tags("#!#tep:[student_anchor](student,subject){description=\"Entry\"}");
         assert_eq!(tags.len(), 1);
         assert_eq!(tags[0].anchor_name, "student_anchor");
         assert_eq!(tags[0].entity_refs, vec!["student", "subject"]);
-        assert_eq!(tags[0].metadata.fields.get("description").map(String::as_str), Some("Entry"));
+        assert_eq!(
+            tags[0]
+                .metadata
+                .fields
+                .get("description")
+                .map(String::as_str),
+            Some("Entry")
+        );
     }
 
     #[test]
     fn ignores_tags_after_ignoreafter() {
-        let tags = parse_tags(
-            "#!#tep:(student)\n#tepignoreafter\n#!#tep:(teacher)",
-        );
+        let tags = parse_tags("#!#tep:(student)\n#tepignoreafter\n#!#tep:(teacher)");
         assert_eq!(tags.len(), 1);
     }
 }
