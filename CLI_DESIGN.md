@@ -76,14 +76,10 @@ tep health [path]
 
 ### Entities
 ```bash
-tep entity create <name> [--ref <value>] [--description <value>]
-tep entity ensure <name> [--ref <value>]
+tep auto <pathspec...>
 tep entity auto <pathspec...>
 tep entity show <name-or-id>
 tep entity context <name-or-id> [--files-only] [--link-depth <n>]
-tep entity edit <name-or-id> [--name <value>] [--ref <value>] [--description <value>]
-tep entity link <from> <to> --relation <text>
-tep entity unlink <from> <to>
 tep entity list
 ```
 
@@ -156,7 +152,7 @@ Anchor block:
 ```
 
 Location metadata is useful, but not identity.
-The durable anchor identity is the anchor ID.
+The durable anchor identity is the anchor name in source; numeric anchor IDs are internal/materialized storage details.
 
 `entity context` is intentionally more retrieval-oriented.
 It may include:

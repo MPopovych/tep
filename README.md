@@ -16,7 +16,7 @@ It maintains a local SQLite graph of **entities** (things you care about), **anc
 
 Codebases grow. Concepts scatter across files. Documentation drifts from implementation.
 
-**tep solves this by giving concepts a durable identity.**
+**tep solves this by giving concepts a durable identity and making retrieval more precise.**
 
 Instead of grepping for "student" and hoping you find the right places, you:
 
@@ -27,10 +27,10 @@ Instead of grepping for "student" and hoping you find the right places, you:
 
 **Use cases:**
 
-- **Onboarding** — new devs can trace concepts across the codebase
+- **AI context** — feed precise, relevant code and doc slices to LLMs instead of dumping entire files
+- **Onboarding** — trace concepts across the codebase quickly
 - **Refactoring** — see everywhere a concept touches before changing it
-- **Documentation** — keep docs linked to the actual code locations
-- **AI context** — feed precise, relevant code slices to LLMs instead of dumping entire files
+- **Documentation** — keep docs linked to actual code locations
 - **Architecture** — map how logical concepts relate to each other
 
 The graph lives in your repo (`.tep/`), works offline, and stays under your control.

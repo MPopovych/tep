@@ -31,13 +31,14 @@ A physical tagged occurrence in project material.
 
 Current meaning:
 - may start incomplete in the file
-- becomes materialized with its own durable anchor ID
+- becomes materialized in the database while keeping its source anchor name as the durable identity
 - is associated with current file path and location metadata
 
 Important:
-- anchor identity is durable once materialized
+- the source anchor name is the durable identity
+- numeric anchor IDs are internal/materialized storage details
 - `line`, `shift`, and `offset` are untrusted or last-known metadata only
-- repeated incomplete entity reference instructions in different positions become separate anchors
+- repeated source locations with distinct anchor names become distinct anchors
 
 ### Anchor-entity relation
 The many-to-many association layer between anchors and entities.
