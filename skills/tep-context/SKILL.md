@@ -137,6 +137,38 @@ mod tests { ... }
 ```
 
 
+
+## Working on the `tep` repository itself
+
+Repository path:
+
+```txt
+/Users/agent/Desktop/projects/tep
+```
+
+When working on the `tep` repo specifically:
+- treat selected root docs and selected `src/` files as canonical graph material
+- keep `tests/` and `skills/` excluded from graph participation unless intentionally curated
+- prefer fixing graph pollution at the source over tolerating junk entities
+- after graph-affecting edits, run:
+
+```bash
+cd /Users/agent/Desktop/projects/tep
+tep entity list
+tep reset --yes
+tep health
+```
+
+When behavior changes, update the relevant current docs:
+- `README.md`
+- `CLI_DESIGN.md`
+- `DATA_MODEL.md`
+- current `doc/*`
+- current `spec/*`
+- relevant skills
+
+Do not leave old command specs pretending to describe current behavior.
+
 ## Agent graph-maintenance playbook
 
 When acting as an agent maintaining a repo graph:
