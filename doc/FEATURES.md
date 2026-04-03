@@ -7,7 +7,7 @@ This document tracks current `tep` feature areas.
 ### 1. File-driven entity management
 Users can:
 - declare entities in files
-- attach descriptions and refs through metadata
+- define descriptions and refs through metadata
 - read entities by name or id
 - list entities
 - inspect retrieval-oriented entity context
@@ -20,7 +20,7 @@ Minimal entity data stays simple:
 ### 2. Anchor synchronization and tracking
 Users can:
 - place named anchor tags in files: `#!#tep:[name](entity1,entity2)` #tepignore
-- attach optional anchor metadata
+- define optional anchor metadata
 - register and sync anchors through `tep auto`
 - inspect known anchors
 - understand where anchors currently appear

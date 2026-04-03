@@ -125,13 +125,8 @@ Current storage model:
 - directional entity links with one link per ordered pair
 - schema version tracked via `PRAGMA user_version`
 
-## Removed command surface
+## Historical note
 
-The following older manual commands are no longer the current model:
-- `tep entity create`
-- `tep entity ensure`
-- `tep entity edit`
-- `tep entity link`
-- `tep entity unlink`
+Older manual entity mutation commands are no longer part of the current model.
 
 The current model is file-driven and reconstructed through `tep auto`.

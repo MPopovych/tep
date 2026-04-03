@@ -22,7 +22,7 @@ Instead of grepping for "student" and hoping you find the right places, you:
 
 1. **Tag locations** — drop anchor markers in code, docs, configs
 2. **Name concepts** — declare entities like `auth_flow`, `pricing_model` in files
-3. **Connect them** — attach entities to anchors and declare entity links in files
+3. **Connect them** — connect entities to anchors and declare entity links in files
 4. **Query the graph** — ask "where does `auth_flow` appear?" or "what's related to `pricing_model`?"
 
 **Use cases:**
