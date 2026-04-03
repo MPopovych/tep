@@ -62,7 +62,8 @@ pub struct EntityService<'a> {
 
 impl<'a> EntityService<'a> {
     pub fn new(conn: &'a Connection) -> Self {
-        let workspace_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let workspace_root = crate::db::find_workspace_root(&cwd).unwrap_or(cwd);
         Self::with_workspace_root(conn, workspace_root)
     }
 

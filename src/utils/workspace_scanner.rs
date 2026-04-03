@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 use crate::filter::tep_ignore_filter::TepIgnoreFilter;
-use crate::utils::path::{display_path, resolve_from_workspace};
+use crate::utils::path::{display_path, normalize_to_workspace, resolve_from_workspace};
 
 #[derive(Debug, Clone)]
 pub struct WorkspaceFile {
@@ -22,9 +22,12 @@ pub fn collect_workspace_files(
     let files = filter.collect_paths(paths)?;
     Ok(files
         .into_iter()
-        .map(|path| WorkspaceFile {
-            absolute_path: resolve_from_workspace(&path, workspace_root),
-            display_path: display_path(&path),
+        .map(|path| {
+            let normalized = normalize_to_workspace(&path, workspace_root);
+            WorkspaceFile {
+                absolute_path: resolve_from_workspace(&normalized, workspace_root),
+                display_path: display_path(&normalized),
+            }
         })
         .collect())
 }
