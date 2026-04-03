@@ -95,7 +95,7 @@ Current behavior:
 Anchor tags use square brackets:
 
 ```txt
-#!#tep:[anchor_name](entity1,entity2) #tepignore
+#!#tep:[anchor_name](entity1,entity2)
 ```
 
 Rules:
@@ -110,7 +110,7 @@ Rules:
 Entity declaration tags use parentheses:
 
 ```txt
-#!#tep:(entity_name) #tepignore
+#!#tep:(entity_name)
 ```
 
 Meaning:
@@ -187,7 +187,7 @@ Output:
 ref: ./src/anchor.rs
 
 anchor:1 anchor.parser ./src/anchor.rs (1:3) [3]
-  // #!#tep:[anchor.parser](anchor.parser) #tepignore
+  // #!#tep:[anchor.parser](anchor.parser)
   use crate::utils::parse::{line_contains_marker, parse_scan_limit};
   ...
 

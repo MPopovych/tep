@@ -11,7 +11,7 @@ Repository path:
 This skill is for:
 - implementing `tep` features
 - refactoring `tep`
-- maintaining the repo’s anchor/entity graph
+- maintaining the repo’s graph
 - debugging health/indexing/migration behavior
 - keeping docs/specs aligned with actual behavior
 
@@ -23,92 +23,86 @@ This skill is for:
 - anchor-entity relations
 - directional entity links
 
-The repo itself treats **docs + selected source code** as canonical graph material.
+The repo itself treats selected docs + selected source files as canonical graph material.
 
 ## Canonical graph policy
 
 ### Included by intent
-- root docs
-- selected `spec/` files
+- root docs that carry real product meaning
 - selected `doc/` files
-- selected `src/` implementation files with hidden markers
+- selected `src/` implementation files with real hidden markers
 
 ### Excluded / controlled
 - `tests/`
-- playgrounds
-- noisy fixture/example-heavy files via `.tepignore`
+- `skills/`
+- example-heavy spec files unless intentionally curated
 - source-file tails after `#tepignoreafter`
 - one-off fake marker lines via `#tepignore`
 
-Do **not** revert to ignoring all of `src/` unless explicitly asked.
-The intended direction is to link code and docs.
+## Preferred maintenance workflow
 
-## Health workflow
-
-Before and after graph-affecting changes, prefer this sequence:
+Before and after graph-affecting changes:
 
 ```bash
 cd /Users/agent/Desktop/projects/tep
-tep health
-tep anchor auto .
-tep entity auto src
+tep entity list
+tep reset --yes
 tep health
 ```
 
-If health is noisy, inspect whether the cause is:
-- intentional fixtures/examples
-- missing ignore markers
-- stale metadata
-- duplicate materialized anchors
-
-Prefer tightening canonical scope over polluting the graph.
+If the graph is noisy, fix the source of pollution rather than accepting junk entities.
 
 ## Ignore controls
 
 ### `#tepignore`
 Use for a single noisy line:
 - regex/test/example literals
-- fake marker strings embedded in docs or source
+- visible syntax examples in docs
+- fake marker strings embedded in source/docs
 
 ### `#tepignoreafter`
 Use for the rest of a file tail:
 - `#[cfg(test)]` modules
 - large fixture sections
-- intentionally broken example tails
+- intentionally noisy parser examples
 
 Rule of thumb:
 - few noisy lines → `#tepignore`
 - whole noisy tail → `#tepignoreafter`
 
+## Markdown rule
+
+For markdown files:
+- real tags: hide in HTML comments
+- sample tags: keep visible and ignored
+
+Examples:
+
+Real hidden tag:
+```markdown
+<!--- #!#tep:(real.entity){description="..."} -->
+```
+
+Visible ignored sample:
+```txt
+#!#tep:(example.entity) #tepignore
+```
+
 ## Source anchoring guidance
 
 When adding hidden markers to code comments, prefer stable semantic nodes such as:
-- `module.anchor`
-- `module.entity`
-- `service.anchor.health`
-- `service.anchor.sync`
-- `service.entity.context`
-- `service.entity.auto`
-- `repo.anchor`
 - `repo.entity`
+- `repo.anchor`
+- `entity.service`
+- `entity.context`
+- `entity.links`
+- `anchor.sync`
+- `anchor.health`
+- `workspace`
 - `path.normalization`
+- `workspace.scanner`
 
-Avoid over-anchoring tiny helpers unless they matter to docs or navigation.
-
-## Backup rule
-
-Before large indexing changes, back up:
-
-```bash
-.tep/tep.db
-```
-
-Example:
-
-```bash
-mkdir -p .tep/backups
-cp .tep/tep.db .tep/backups/tep.db.backup-$(date +%Y%m%d-%H%M%S)
-```
+Avoid over-anchoring tiny helpers unless they materially improve retrieval.
 
 ## Docs/spec rule
 
@@ -116,34 +110,21 @@ When behavior changes, update the relevant docs in the repo:
 - `README.md`
 - `CLI_DESIGN.md`
 - `DATA_MODEL.md`
-- `spec/*`
-- this skill
+- `doc/*`
+- `spec/*` that are still current
+- relevant skills
 
-Keep docs practical and current.
-
-## Refactor rule
-
-Prefer:
-- extracting small helpers/utils
-- strengthening unit tests near new seams
-- avoiding speculative abstractions
-
-Good recent patterns in this repo:
-- shared path utils
-- shared time utils
-- shared output rendering helpers
-- smaller service helpers
-- lighter command support helpers
+Do not leave old command specs pretending to be current behavior.
 
 ## Validation
 
 Before finishing:
 - run targeted tests for touched areas
 - run full `cargo test`
-- run repo `tep health`
-- if graph-affecting, run `tep anchor auto .` / `tep entity auto src` as appropriate
+- run `cargo clippy -- -D warnings`
+- run `tep reset --yes`
+- run `tep health`
 
 ## Repo note
 
-This skill replaces scattered local notes as the canonical workflow guidance.
-If local tooling needs a skill path, prefer linking/symlinking back to this repo copy so there is only one source of truth.
+This skill should stay aligned with the repo’s actual workflow and graph-hygiene practices.

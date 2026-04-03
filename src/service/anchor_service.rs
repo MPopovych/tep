@@ -13,9 +13,11 @@ use crate::entity::{EntityLookup, NewEntity, parse_lookup};
 use crate::repository::anchor_entity_repository::AnchorEntityRepository;
 use crate::repository::anchor_repository::{AnchorRepository, NewAnchor};
 use crate::repository::entity_repository::EntityRepository;
-use crate::tep_tag::{ParsedAnchorTag, parse_anchor_tags};
+use crate::service::workspace_parse_service::{
+    ParsedWorkspaceFile, collect_parsed_workspace_files,
+};
+use crate::tep_tag::ParsedAnchorTag;
 use crate::utils::path::display_path;
-use crate::utils::workspace_scanner::collect_workspace_files;
 
 #[derive(Debug, Clone, Default)]
 pub struct AnchorSyncResult {
@@ -57,10 +59,11 @@ impl<'a> AnchorService<'a> {
     }
 
     pub fn sync_paths(&self, paths: &[String]) -> Result<AnchorSyncResult> {
-        let files = collect_workspace_files(&self.workspace_root, paths)?;
+        let (files, warnings) = collect_parsed_workspace_files(&self.workspace_root, paths)?;
         let mut result = AnchorSyncResult::default();
+        result.warnings.extend(warnings);
         for file in files {
-            self.sync_file(&file.absolute_path, &mut result)?;
+            self.sync_file(&file, &mut result)?;
         }
         Ok(result)
     }
@@ -90,42 +93,24 @@ impl<'a> AnchorService<'a> {
         }
     }
 
-    fn sync_file(&self, path: &Path, result: &mut AnchorSyncResult) -> Result<()> {
-        if !path.is_file() {
-            return Ok(());
-        }
-
-        let content = match std::fs::read_to_string(path) {
-            Ok(content) => content,
-            Err(err) => {
-                result.warnings.push(format!(
-                    "skipping unreadable file {}: {}",
-                    path.display(),
-                    err
-                ));
-                return Ok(());
-            }
-        };
-        let parsed = parse_anchor_tags(&content);
-
-        if let Some(duplicate_name) = self.find_duplicate_name(&parsed) {
+    fn sync_file(&self, file: &ParsedWorkspaceFile, result: &mut AnchorSyncResult) -> Result<()> {
+        if let Some(duplicate_name) = self.find_duplicate_name(&file.anchor_tags) {
             result.warnings.push(format!(
                 "duplicate anchor name '{}' found in the same file {}",
                 duplicate_name,
-                path.display()
+                file.file.absolute_path.display()
             ));
             return Ok(());
         }
-        result.anchors_seen += parsed.len();
+        result.anchors_seen += file.anchor_tags.len();
 
         let mut seen_ids = HashSet::new();
-        for anchor in &parsed {
-            self.sync_anchor(path, anchor, result, &mut seen_ids)?;
+        for anchor in &file.anchor_tags {
+            self.sync_anchor(&file.file.absolute_path, anchor, result, &mut seen_ids)?;
         }
 
-        self.drop_missing_anchors(path, &seen_ids, result)?;
-
-        if !parsed.is_empty() {
+        self.drop_missing_anchors(&file.file.absolute_path, &seen_ids, result)?;
+        if !file.anchor_tags.is_empty() {
             result.files_processed += 1;
         }
 

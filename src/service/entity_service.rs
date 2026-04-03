@@ -3,7 +3,6 @@
 // #!#tep:(entity.service)->(entity.links){description="uses for graph traversal"}
 // #!#tep:(entity.service)->(entity.context){description="uses for snippet extraction"}
 // #!#tep:[entity.service](entity.service,repo.entity,entity.links,entity.context){description="Entity service module entry"}
-use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -15,8 +14,10 @@ use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
 use crate::service::entity_context::extract_anchor_snippet;
 use crate::service::entity_link_context::collect_link_context;
-use crate::tep_tag::{ParsedEntityTag, ParsedRelationTag, parse_entity_tags, parse_relation_tags};
-use crate::utils::workspace_scanner::{WorkspaceFile, collect_workspace_files};
+use crate::service::workspace_parse_service::{
+    ParsedWorkspaceFile, collect_parsed_workspace_files,
+};
+use crate::tep_tag::{ParsedEntityTag, ParsedRelationTag};
 
 pub struct EntityShowResult {
     pub entity: Entity,
@@ -75,8 +76,9 @@ impl<'a> EntityService<'a> {
     }
 
     pub fn auto(&self, paths: &[String]) -> Result<EntityAutoResult> {
-        let files = collect_workspace_files(&self.workspace_root, paths)?;
+        let (files, warnings) = collect_parsed_workspace_files(&self.workspace_root, paths)?;
         let mut result = EntityAutoResult::default();
+        result.warnings.extend(warnings);
         for file in files {
             self.auto_file(&file, &mut result)?;
         }
@@ -128,35 +130,18 @@ impl<'a> EntityService<'a> {
             .collect()
     }
 
-    fn auto_file(&self, file: &WorkspaceFile, result: &mut EntityAutoResult) -> Result<()> {
-        if !file.absolute_path.is_file() {
+    fn auto_file(&self, file: &ParsedWorkspaceFile, result: &mut EntityAutoResult) -> Result<()> {
+        if file.entity_tags.is_empty() && file.relation_tags.is_empty() {
             return Ok(());
         }
 
-        let content = match fs::read_to_string(&file.absolute_path) {
-            Ok(content) => content,
-            Err(err) => {
-                result.warnings.push(format!(
-                    "skipping unreadable file {}: {}",
-                    file.absolute_path.display(),
-                    err
-                ));
-                return Ok(());
-            }
-        };
-        let entity_tags = parse_entity_tags(&content);
-        let relation_tags = parse_relation_tags(&content);
-        if entity_tags.is_empty() && relation_tags.is_empty() {
-            return Ok(());
-        }
+        result.declarations_seen += file.entity_tags.len();
+        result.relations_seen += file.relation_tags.len();
 
-        result.declarations_seen += entity_tags.len();
-        result.relations_seen += relation_tags.len();
-
-        for tag in &entity_tags {
-            self.sync_entity_tag(&file.display_path, tag, result)?;
+        for tag in &file.entity_tags {
+            self.sync_entity_tag(&file.file.display_path, tag, result)?;
         }
-        for tag in &relation_tags {
+        for tag in &file.relation_tags {
             self.sync_relation_tag(tag, result)?;
         }
         result.files_processed += 1;

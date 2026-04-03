@@ -1,24 +1,24 @@
 # Entity Links Spec
 
-This document captures the planned first implementation of directional entity-to-entity links.
+This document captures the current directional entity-link model in `tep`.
 
 ## Goal
 
-Entity links should let `tep` describe semantic relationships between entities directly.
+Entity links describe semantic relationships between entities directly from file tags.
 
 Example intent:
 - `student -> subject`
-- relation: `student has subjects assigned to him each semester`
+- relation: `has subject`
 
-The link should be:
+The link is:
 - directional
 - human-readable
 - free-text
-- simple
+- reconstructed from files
 
 ## Data model
 
-Proposed table:
+Stored fields:
 - `from_entity_id`
 - `to_entity_id`
 - `relation TEXT NOT NULL`
@@ -26,87 +26,47 @@ Proposed table:
 - `updated_at`
 
 ### Direction
-n`from_entity_id -> to_entity_id` is directional.
+`from_entity_id -> to_entity_id` is directional.
 
 That means:
 - `student -> subject` is not the same as `subject -> student`
 
 ## Relation field
 
-The `relation` field should:
-- be free text
-- allow long descriptions
-- not be artificially limited to a small enum or label list
+The `relation` field is:
+- free text
+- allowed to be descriptive
+- not restricted to a small enum
 
-This makes it useful for both humans and agents.
+## Current syntax
 
-## Simplicity rule for first version
+Relation tags are declared in files:
 
-For the first version, keep exactly one link per ordered pair:
-- unique `(from_entity_id, to_entity_id)`
-
-That means:
-- one directional edge
-- one current relation string
-
-If multiple relations between the same pair become necessary later, the schema can evolve then.
-
-## Command design
-
-### Create or upsert link
-```bash
-tep entity link student subject --relation "student has subjects assigned to him each semester"
+```txt
+#!#tep:(student)->(subject) #tepignore
+#!#tep:(student)->(subject){description="has subject"} #tepignore
 ```
 
 Behavior:
-- resolve both entities by id or name
-- create the directional link if missing
-- update the relation text if the link already exists
+- both entities are ensured if missing
+- the directional link is created or updated
+- later declarations overwrite the prior relation text
+- overwrite cases surface as warnings
 
-### Remove link
-```bash
-tep entity unlink student subject
-```
+## Interaction with entity show/context
 
-Behavior:
-- remove the directional link from source to target
-- do not remove the reverse edge unless explicitly requested separately
-
-## Output direction
-
-### Link creation
-Example:
-```txt
-linked
-from: student
-to: subject
-relation: student has subjects assigned to him each semester
-```
-
-### Link removal
-Example:
-```txt
-unlinked
-from: student
-to: subject
-```
-
-## Interaction with entity show
-
-A later enhancement should let `tep entity show <target>` include:
-- entity description if present
+`tep entity show <target>` and `tep entity context <target>` include:
 - outgoing links
-- maybe incoming links later
+- incoming links
+- directional rendering
+- optional traversal depth in context mode
 
-But the first slice can ship link commands before richer show output if needed.
+## Non-goals
 
-## Non-goals for first version
-
-Not included yet:
+Not included:
 - link priorities
 - typed enums for relation names
 - multiple relations per ordered pair
-- link traversal depth controls
-- incoming/outgoing filtering flags
+- separate manual link commands as the primary workflow
 
-Those can be added later if real usage justifies them.
+The current model is tag-driven rather than manual CLI mutation.

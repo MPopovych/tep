@@ -66,7 +66,7 @@ Notes:
 - `tep reset --yes` should be treated as a rebuild + validation pass
 - `tep health` is the audit view for drift, duplicates, and graph hygiene
 
-## TEP-2 syntax
+## Tag syntax
 
 ### Real tags
 Use real tags only where you genuinely want the repo graph to persist a concept.
@@ -135,6 +135,48 @@ Typical pattern:
 #[cfg(test)]
 mod tests { ... }
 ```
+
+
+## Agent graph-maintenance playbook
+
+When acting as an agent maintaining a repo graph:
+
+1. Run `tep entity list` first.
+2. Identify junk entities caused by:
+   - docs examples
+   - parser fixtures
+   - test modules
+   - rendered markdown samples
+3. Fix pollution with the smallest safe mechanism:
+   - visible example in docs -> add `#tepignore`
+   - long example/test tail -> add `#tepignoreafter`
+   - real markdown tag that should not render -> wrap in HTML comment
+   - whole folder that should never participate -> add to `.tepignore`
+4. Run `tep reset --yes`.
+5. Run `tep health`.
+6. Re-check `tep entity list`.
+
+Prefer cleaning the graph at the source over compensating with more retrieval logic.
+
+## Decision rules for agents
+
+### When to use a real entity tag
+Use a real entity tag only if the file is a canonical place an agent should revisit later.
+
+### When to use a real anchor tag
+Use a real anchor only if it points to a stable, meaningful location worth retrieving again.
+
+### When not to tag
+Do not tag:
+- temporary notes
+- repetitive examples
+- test fixtures unless the test behavior itself is important context
+- syntax reference snippets that only teach formatting
+
+### When to ignore
+Use `.tepignore` for whole-file or whole-folder exclusion.
+Use `#tepignore` for one-line examples.
+Use `#tepignoreafter` for noisy tails.
 
 ## LLM-oriented graph design guidelines
 

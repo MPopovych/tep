@@ -3,18 +3,17 @@
 // #!#tep:(anchor.health)->(repo.entity){description="uses for entity orphan checks"}
 // #!#tep:[anchor.health](anchor.health,repo.anchor,repo.entity){description="Health service module entry"}
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::anchor::{ParsedAnchor, parse_anchors};
-use crate::entity::parse_entity_declarations;
+use crate::anchor::ParsedAnchor;
 use crate::repository::anchor_repository::AnchorRepository;
 use crate::repository::entity_repository::EntityRepository;
-use crate::tep_tag::{parse_anchor_tags, parse_entity_tags, parse_relation_tags};
-use crate::utils::workspace_scanner::{WorkspaceFile, collect_workspace_files};
+use crate::service::workspace_parse_service::{
+    ParsedWorkspaceFile, collect_parsed_workspace_files,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct HealthIssueCounts {
@@ -75,14 +74,18 @@ impl<'a> HealthService<'a> {
     }
 
     pub fn audit_paths(&self, paths: &[String]) -> Result<HealthReport> {
-        let files = collect_workspace_files(&self.workspace_root, paths)?;
+        let (files, warnings) = collect_parsed_workspace_files(&self.workspace_root, paths)?;
         let scoped_files = files
             .iter()
-            .map(|f| self.anchor_repo.normalized_path_for(&f.display_path))
+            .map(|f| self.anchor_repo.normalized_path_for(&f.file.display_path))
             .collect::<HashSet<_>>();
 
         let mut report = HealthReport::default();
         let mut tracker = HealthTracker::default();
+        for warning in warnings {
+            report.issue_counts.metadata_warnings += 1;
+            report.groups.metadata_warnings.push(warning);
+        }
 
         for file in files {
             self.inspect_file(&file, &mut report, &mut tracker)?;
@@ -96,54 +99,39 @@ impl<'a> HealthService<'a> {
 
     fn inspect_file(
         &self,
-        file: &WorkspaceFile,
+        file: &ParsedWorkspaceFile,
         report: &mut HealthReport,
         tracker: &mut HealthTracker,
     ) -> Result<()> {
-        let content = match fs::read_to_string(&file.absolute_path) {
-            Ok(content) => content,
-            Err(err) => {
-                report.issue_counts.metadata_warnings += 1;
-                report.groups.metadata_warnings.push(format!(
-                    "skipping unreadable file {}: {}",
-                    file.absolute_path.display(),
-                    err
-                ));
-                return Ok(());
-            }
-        };
-        let parsed_anchors = parse_anchors(&content);
-        let parsed_declarations = parse_entity_declarations(&content);
-        let entity_tags = parse_entity_tags(&content);
-        let relation_tags = parse_relation_tags(&content);
-        let anchor_tags = parse_anchor_tags(&content);
-
-        if parsed_anchors.is_empty() && parsed_declarations.is_empty() && relation_tags.is_empty() {
+        if file.parsed_anchors.is_empty()
+            && file.parsed_declarations.is_empty()
+            && file.relation_tags.is_empty()
+        {
             return Ok(());
         }
 
         report.files_scanned += 1;
         report.anchors_seen +=
-            parsed_anchors.len() + parsed_declarations.len() + relation_tags.len();
+            file.parsed_anchors.len() + file.parsed_declarations.len() + file.relation_tags.len();
 
         let mut local_names = HashSet::new();
-        for anchor in &parsed_anchors {
+        for anchor in &file.parsed_anchors {
             self.inspect_named_anchor(
                 anchor,
-                &file.display_path,
+                &file.file.display_path,
                 report,
                 tracker,
                 &mut local_names,
             )?;
         }
 
-        for declaration in &parsed_declarations {
+        for declaration in &file.parsed_declarations {
             if let Some(existing) = self
                 .entity_repo
                 .find(&crate::entity::EntityLookup::Name(declaration.name.clone()))?
                 .and_then(|entity| {
                     self.anchor_repo
-                        .find_latest_for_entity_in_file(entity.entity_id, &file.display_path)
+                        .find_latest_for_entity_in_file(entity.entity_id, &file.file.display_path)
                         .ok()
                         .flatten()
                 })
@@ -153,7 +141,12 @@ impl<'a> HealthService<'a> {
             }
         }
 
-        self.inspect_metadata_warnings(&entity_tags, &relation_tags, &anchor_tags, report);
+        self.inspect_metadata_warnings(
+            &file.entity_tags,
+            &file.relation_tags,
+            &file.anchor_tags,
+            report,
+        );
         Ok(())
     }
 
